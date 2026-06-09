@@ -58,7 +58,7 @@ Never commit `.env`. The service role key bypasses RLS — fine for a backend se
 Run these two files **in order** in the Supabase SQL Editor:
 
 1. `backend/supabase/migrations/001_initial_schema.sql` — creates tables and indexes
-2. `backend/supabase/seed.sql` — inserts 5 topics and 10 sample questions
+2. `backend/supabase/seed.sql` — inserts 5 topics and 8 sample questions
 
 Tables:
 - `topics` — name, level (H1/H2), optional parent_topic_id for sub-topics
@@ -100,19 +100,17 @@ The core practice loop is:
 - Services contain all business logic and DB calls. Never call `supabase` directly from a route.
 
 ### Answer Types
-Three answer types are supported:
+Two answer types are supported:
 
 | Type | How checking works |
 |---|---|
 | `exact` | Case-insensitive string match after `.trim()` |
-| `mcq` | Same as exact — store `correct_answer` as the option letter (e.g. `"B"`) |
 | `range` | `|parseFloat(given) - parseFloat(correct)| <= tolerance` |
 
-Proof-type questions ("show that", "sketch") are not yet supported — add them as view-only later.
+MCQ is **not used** — do not add MCQ questions. Proof-type questions ("show that", "sketch") are not yet supported — add them as view-only later.
 
 ### Questions
 - `prompt_latex` and `solution_latex` are LaTeX strings. The frontend renders them with KaTeX.
-- `mcq_options` is a JSONB array of strings like `["A: ...", "B: ...", "C: ...", "D: ..."]`.
 - The solution is **never** sent to the client until after an attempt is submitted. `questionService.ts` strips it via `stripSolution()`.
 
 ### Sessions
