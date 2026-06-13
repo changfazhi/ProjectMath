@@ -1,10 +1,21 @@
+import { useState } from 'react'
+import type { Topic } from '../types/api'
 import { useTopics } from '../hooks/useTopics'
+import { useVisitedTopics } from '../hooks/useVisitedTopics'
 import { RoadmapGraph } from '../components/topic/RoadmapGraph'
+import { TopicDrawer } from '../components/topic/TopicDrawer'
 import { Spinner } from '../components/ui/Spinner'
 import { ErrorMessage } from '../components/ui/ErrorMessage'
 
 export function HomePage() {
   const { topics, loading, error } = useTopics()
+  const { visited, markVisited } = useVisitedTopics()
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
+
+  function handleTopicClick(topic: Topic) {
+    markVisited(topic.id)
+    setSelectedTopic(topic)
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10 flex flex-col gap-8">
@@ -23,7 +34,18 @@ export function HomePage() {
         </div>
       )}
       {error && <ErrorMessage message={error} />}
-      {!loading && !error && <RoadmapGraph topics={topics} />}
+      {!loading && !error && (
+        <RoadmapGraph
+          topics={topics}
+          visited={visited}
+          onTopicClick={handleTopicClick}
+        />
+      )}
+
+      <TopicDrawer
+        topic={selectedTopic}
+        onClose={() => setSelectedTopic(null)}
+      />
     </div>
   )
 }

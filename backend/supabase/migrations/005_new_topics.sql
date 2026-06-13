@@ -1,9 +1,7 @@
--- Seed data — run after all migrations (001 through 005) on a fresh database.
--- WARNING: This truncates all data. Do not run on a database with real user data.
+-- Migration 005: Replace 5 placeholder topics with the full 24-topic syllabus.
+-- Run AFTER migrations 001–004.
 
-TRUNCATE TABLE topics CASCADE;   -- cascades to questions, attempts, topic_concepts, starred_questions
-
--- ─── Topics ───────────────────────────────────────────────────────────────────
+-- ─── Step 1: Insert the 24 new topics ────────────────────────────────────────
 INSERT INTO topics (id, name, level) VALUES
   -- Pure Math — Column A
   ('aaaa0001-0000-0000-0000-000000000000', 'Graphing Techniques',            'H2'),
@@ -34,113 +32,28 @@ INSERT INTO topics (id, name, level) VALUES
   ('bbbb0005-0000-0000-0000-000000000000', 'Hypothesis Testing',             'H2'),
   ('bbbb0006-0000-0000-0000-000000000000', 'Correlation and Linear Regression', 'H2');
 
--- ─── Differentiation Technique questions ─────────────────────────────────────
-INSERT INTO questions
-  (id, topic_id, difficulty, name, prompt_latex, answer_type, correct_answer, tolerance, mcq_options, solution_latex, marks)
-VALUES
-  (
-    '22222222-0000-0000-0000-000000000001',
-    'aaaa0012-0000-0000-0000-000000000000',
-    1,
-    'Polynomial differentiation',
-    'Find \(\dfrac{dy}{dx}\) when \(y = 3x^2 - 4x + 7\).',
-    'exact',
-    '6x - 4',
-    NULL, NULL,
-    'Differentiating term by term: \(\dfrac{d}{dx}(3x^2) = 6x\), \(\dfrac{d}{dx}(-4x) = -4\), \(\dfrac{d}{dx}(7) = 0\). Therefore \(\dfrac{dy}{dx} = 6x - 4\).',
-    1
-  ),
-  (
-    '22222222-0000-0000-0000-000000000002',
-    'aaaa0012-0000-0000-0000-000000000000',
-    1,
-    'Exponential chain rule',
-    'Given \(f(x) = e^{2x}\), find \(f''(x)\).',
-    'exact',
-    '2e^{2x}',
-    NULL, NULL,
-    'Using the chain rule: \(f''(x) = e^{2x} \cdot \dfrac{d}{dx}(2x) = 2e^{2x}\).',
-    1
-  ),
-  (
-    '22222222-0000-0000-0000-000000000003',
-    'aaaa0012-0000-0000-0000-000000000000',
-    2,
-    'Product rule with logarithm',
-    'Find \(\dfrac{dy}{dx}\) when \(y = x^2 \ln x\).',
-    'exact',
-    '2x\ln x + x',
-    NULL, NULL,
-    'Apply the product rule with \(u = x^2\) and \(v = \ln x\):\n\[\dfrac{dy}{dx} = 2x \cdot \ln x + x^2 \cdot \dfrac{1}{x} = 2x\ln x + x\]',
-    2
-  ),
-  (
-    '22222222-0000-0000-0000-000000000005',
-    'aaaa0012-0000-0000-0000-000000000000',
-    3,
-    'Stationary points via quotient rule',
-    'A curve has equation \(y = \dfrac{x^2 - 1}{x + 2}\). Find the x-coordinates of the stationary points.',
-    'exact',
-    'x = -2 + \sqrt{3}, x = -2 - \sqrt{3}',
-    NULL, NULL,
-    'Using the quotient rule with \(u = x^2 - 1\), \(v = x + 2\):\[\dfrac{dy}{dx} = \dfrac{2x(x+2) - (x^2-1)}{(x+2)^2} = \dfrac{x^2 + 4x + 1}{(x+2)^2}\]Setting the numerator to zero: \(x^2 + 4x + 1 = 0\)\[\Rightarrow x = \dfrac{-4 \pm \sqrt{12}}{2} = -2 \pm \sqrt{3}\]',
-    4
-  );
+-- ─── Step 2: Remap existing questions to new topic UUIDs ─────────────────────
+UPDATE questions
+  SET topic_id = 'aaaa0012-0000-0000-0000-000000000000'
+  WHERE topic_id = '11111111-0000-0000-0000-000000000001'; -- Differentiation → Differentiation Technique
 
--- ─── Integration Technique questions ─────────────────────────────────────────
-INSERT INTO questions
-  (id, topic_id, difficulty, name, prompt_latex, answer_type, correct_answer, tolerance, mcq_options, solution_latex, marks)
-VALUES
-  (
-    '33333333-0000-0000-0000-000000000001',
-    'aaaa0015-0000-0000-0000-000000000000',
-    1,
-    'Indefinite integral of polynomial',
-    'Evaluate \(\displaystyle\int (4x^3 - 2x + 5)\,dx\).',
-    'exact',
-    'x^4 - x^2 + 5x + C',
-    NULL, NULL,
-    'Integrate term by term: \(\int 4x^3\,dx = x^4\), \(\int -2x\,dx = -x^2\), \(\int 5\,dx = 5x\). Result: \(x^4 - x^2 + 5x + C\).',
-    2
-  ),
-  (
-    '33333333-0000-0000-0000-000000000002',
-    'aaaa0015-0000-0000-0000-000000000000',
-    1,
-    'Definite integral of polynomial',
-    'Evaluate \(\displaystyle\int_0^2 (3x^2 + 1)\,dx\).',
-    'range',
-    '10',
-    0.01, NULL,
-    '\[\int_0^2 (3x^2 + 1)\,dx = \Big[x^3 + x\Big]_0^2 = (8 + 2) - 0 = 10\]',
-    2
-  ),
-  (
-    '33333333-0000-0000-0000-000000000003',
-    'aaaa0015-0000-0000-0000-000000000000',
-    2,
-    'Integration by substitution',
-    'Evaluate \(\displaystyle\int e^{3x}\,dx\).',
-    'exact',
-    '\frac{1}{3}e^{3x} + C',
-    NULL, NULL,
-    'Let \(u = 3x\), \(du = 3\,dx\). Then \(\int e^{3x}\,dx = \dfrac{1}{3}\int e^u\,du = \dfrac{1}{3}e^{3x} + C\).',
-    1
-  ),
-  (
-    '33333333-0000-0000-0000-000000000005',
-    'aaaa0015-0000-0000-0000-000000000000',
-    3,
-    'Integration by parts (definite)',
-    'Use integration by parts to evaluate \(\displaystyle\int_1^e x\ln x\,dx\). Give your answer to 3 significant figures.',
-    'range',
-    '2.10',
-    0.005, NULL,
-    'Let \(u = \ln x\), \(dv = x\,dx\). Then \(du = \frac{1}{x}dx\), \(v = \frac{x^2}{2}\).\n\[\int x\ln x\,dx = \frac{x^2}{2}\ln x - \int \frac{x}{2}\,dx = \frac{x^2}{2}\ln x - \frac{x^2}{4} + C\]\n\[\Bigg[\frac{x^2}{2}\ln x - \frac{x^2}{4}\Bigg]_1^e = \left(\frac{e^2}{2} - \frac{e^2}{4}\right) - \left(0 - \frac{1}{4}\right) = \frac{e^2}{4} + \frac{1}{4} = \frac{e^2+1}{4} \approx 2.10\]',
-    3
-  );
+UPDATE questions
+  SET topic_id = 'aaaa0015-0000-0000-0000-000000000000'
+  WHERE topic_id = '11111111-0000-0000-0000-000000000002'; -- Integration → Integration Technique
 
--- ─── Topic concepts ───────────────────────────────────────────────────────────
+-- ─── Step 3: Delete old topics (CASCADE removes their concept rows only) ─────
+DELETE FROM topics WHERE id IN (
+  '11111111-0000-0000-0000-000000000001',
+  '11111111-0000-0000-0000-000000000002',
+  '11111111-0000-0000-0000-000000000003',
+  '11111111-0000-0000-0000-000000000004',
+  '11111111-0000-0000-0000-000000000005'
+);
+
+-- ─── Step 4: Grant permissions on topics (already granted in 001, repeated for safety) ─
+GRANT ALL ON TABLE public.topics TO anon, authenticated, service_role;
+
+-- ─── Step 5: Insert topic concepts for all 24 new topics ─────────────────────
 
 -- Graphing Techniques
 INSERT INTO topic_concepts (topic_id, concept, sort_order) VALUES

@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import type { MathLevel, Topic } from '../types/api'
+import type { TopicConcept } from '../types/api'
 
-export function useTopics(level?: MathLevel) {
-  const [topics, setTopics] = useState<Topic[]>([])
-  const [loading, setLoading] = useState(true)
+export function useConcepts(topicId: string | null) {
+  const [concepts, setConcepts] = useState<TopicConcept[]>([])
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!topicId) {
+      setConcepts([])
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
     api.topics
-      .list(level)
+      .concepts(topicId)
       .then((data) => {
         if (!cancelled) {
-          setTopics(data)
+          setConcepts(data)
           setLoading(false)
         }
       })
@@ -28,7 +32,7 @@ export function useTopics(level?: MathLevel) {
     return () => {
       cancelled = true
     }
-  }, [level])
+  }, [topicId])
 
-  return { topics, loading, error }
+  return { concepts, loading, error }
 }
