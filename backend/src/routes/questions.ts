@@ -1,12 +1,27 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getNextQuestion, getQuestionById } from '../services/questionService.js';
+import { getNextQuestion, getQuestionById, getQuestionsByTopicWithStatus } from '../services/questionService.js';
 
 const router = Router();
 
 const difficultySchema = z.coerce.number().int().min(1).max(3).optional();
 
-// GET /api/topics/:topicId/questions/next?session_id=xxx&difficulty=2
+// GET /api/topics/:topicId/questions?session_id=UUID
+router.get('/:topicId/questions', async (req, res) => {
+  try {
+    const sessionId = z.string().uuid().parse(req.query.session_id);
+    const questions = await getQuestionsByTopicWithStatus(req.params.topicId, sessionId);
+    res.json(questions);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'session_id must be a valid UUID' });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/topics/:topicId/next?session_id=xxx&difficulty=2
 router.get('/:topicId/next', async (req, res) => {
   try {
     const sessionId = z.string().uuid().parse(req.query.session_id);

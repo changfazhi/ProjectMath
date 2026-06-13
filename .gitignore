@@ -1,4 +1,14 @@
 node_modules/
 dist/
+
+# Environment variables — never commit these
 .env
-*.log
+.env.local
+.env.*.local
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Claude Code local config
+.claude/

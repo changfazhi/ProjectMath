@@ -1,154 +1,93 @@
 # Math Trainer — Project Guide
 
-A LeetCode-style practice platform for Singapore H1/H2 A-Level Mathematics students.
+LeetCode-style math practice for Singapore H2 A-Level students. Express + TypeScript backend, React 19 + Vite + Tailwind + KaTeX frontend.
 
-## Project Structure
-
-```
-ProjectMath/
-├── backend/                  ← Express + TypeScript REST API (this session built this)
-│   ├── src/
-│   │   ├── types/index.ts    ← All shared types (Topic, Question, Attempt, etc.)
-│   │   ├── db/supabase.ts    ← Supabase client (uses service role key)
-│   │   ├── services/         ← Business logic; routes call services, not DB directly
-│   │   │   ├── topicService.ts
-│   │   │   ├── questionService.ts
-│   │   │   └── attemptService.ts
-│   │   ├── routes/           ← Express routers (thin — validation + call service)
-│   │   │   ├── topics.ts
-│   │   │   ├── questions.ts
-│   │   │   └── attempts.ts
-│   │   └── index.ts          ← Server entrypoint
-│   └── supabase/
-│       ├── migrations/001_initial_schema.sql   ← Run first in Supabase SQL editor
-│       └── seed.sql                            ← Run second; adds 10 sample questions
-└── CLAUDE.md
-```
-
-Frontend lives in a separate folder (not yet created). Backend is the only thing built so far.
-
----
-
-## Running the Backend
+## Running
 
 ```bash
-cd backend
-cp .env.example .env        # fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
-npm install
-npm run dev                 # tsx watch — hot reload on save
+cd backend && npm run dev      # port 3001, tsx watch
+cd frontend && npm run dev     # port 5173, Vite — proxies /api/* → 3001
 ```
 
-Server starts on `http://localhost:3001`.
-
----
-
-## Environment Variables
-
-| Variable | Where to find it |
-|---|---|
-| `SUPABASE_URL` | Supabase dashboard → Settings → API → Project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase dashboard → Settings → API → service_role (secret) |
-
-Never commit `.env`. The service role key bypasses RLS — fine for a backend server, never expose it to a browser.
-
----
+`backend/.env` (copy from `.env.example`): set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (Supabase dashboard → Settings → API). Never commit; never expose to the browser.
 
 ## Database Setup
 
-Run these two files **in order** in the Supabase SQL Editor:
+Run in order in the Supabase SQL Editor:
 
-1. `backend/supabase/migrations/001_initial_schema.sql` — creates tables and indexes
-2. `backend/supabase/seed.sql` — inserts 5 topics and 8 sample questions
+1. `001_initial_schema.sql` — core tables + indexes
+2. `002_question_names.sql` — adds `name` column to questions
+3. `003_topic_concepts.sql` — creates `topic_concepts` table
+4. `004_starred_questions.sql` — creates `starred_questions` table
+5. `005_new_topics.sql` — inserts 24 topics, 120 concepts, grants permissions
 
-Tables:
-- `topics` — name, level (H1/H2), optional parent_topic_id for sub-topics
-- `questions` — prompt_latex, answer_type, correct_answer, solution_latex, etc.
-- `attempts` — keyed by session_id (client UUID), not user auth for MVP
+`seed.sql` — **dev only**: TRUNCATEs everything and re-inserts from scratch.
 
----
+**Permission gotcha:** Tables created via raw SQL need explicit grants, otherwise Supabase returns "permission denied" even with the service_role key. After any `CREATE TABLE`:
+```sql
+GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
+```
+
+## Topic UUIDs (all H2)
+
+UUID pattern: `aaaa000N-0000-0000-0000-000000000000` (Pure Math), `bbbb000N-0000-0000-0000-000000000000` (Stats).
+
+| UUID | Topic | | UUID | Topic |
+|---|---|---|---|---|
+| aaaa0001 | Graphing Techniques | | aaaa0010 | Vector (Plane) |
+| aaaa0002 | Functions | | aaaa0011 | Complex Number |
+| aaaa0003 | Transformation | | aaaa0012 | Differentiation Technique ✱ |
+| aaaa0004 | Conics | | aaaa0013 | Application of Differentiation |
+| aaaa0005 | Inequalities | | aaaa0014 | Maclaurin Series |
+| aaaa0006 | Systems of Linear Equations | | aaaa0015 | Integration Technique ✱ |
+| aaaa0007 | Sequences & Series | | aaaa0016 | Definite Integral |
+| aaaa0008 | Vector (Basic) | | aaaa0017 | Parametric Equations |
+| aaaa0009 | Vector (Lines) | | aaaa0018 | Differential Equations |
+
+✱ = has existing sample questions (4 each). Stats: bbbb0001 Permutation and Combination → bbbb0002 Probability → bbbb0003 Discrete Random Variable → bbbb0004 Sampling and Estimation Theory → bbbb0005 Hypothesis Testing → bbbb0006 Correlation and Linear Regression.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/topics?level=H2` | List all topics, optionally filtered by level |
-| GET | `/api/topics/:id` | Get a single topic |
-| GET | `/api/topics/:topicId/next?session_id=UUID&difficulty=2` | Next question for topic (skips already-correct) |
-| GET | `/api/questions/:id` | Get question by ID (no solution, no answer) |
-| POST | `/api/attempts` | Submit answer → returns `{ is_correct, correct_answer, solution_latex }` |
-| GET | `/api/attempts?session_id=UUID` | List session's attempt history |
+| GET | `/api/topics?level=H2` | List topics |
+| GET | `/api/topics/:topicId/questions?session_id=UUID` | Questions with per-session attempt status |
+| GET | `/api/topics/:topicId/next?session_id=UUID&difficulty=N` | Next unanswered question |
+| GET | `/api/topics/:topicId/concepts` | Prerequisite concepts |
+| GET | `/api/questions/:id` | Single question (no answer/solution) |
+| POST | `/api/attempts` | Submit answer → `{ is_correct, correct_answer, solution_latex }` |
+| GET | `/api/attempts?session_id=UUID` | Session history |
+| POST | `/api/stars` | Toggle star `{ session_id, question_id }` → `{ starred: bool }` |
+| GET | `/api/stars?session_id=UUID&topic_id=UUID` | Starred question IDs for a topic |
 
-The core practice loop is:
-1. `GET /api/topics` → user picks a topic
-2. `GET /api/topics/:topicId/next?session_id=...` → receive a question (no solution)
-3. User submits answer → `POST /api/attempts`
-4. Response includes `is_correct`, `correct_answer`, and `solution_latex` — display solution
-5. Repeat from step 2
+## Frontend Architecture
 
----
+- **Routes:** `/` (roadmap + TopicDrawer), `/practice/:topicId`, `/history`
+- **Session:** UUID v4 in `localStorage` as `session_id` (`lib/session.ts`). No auth in MVP.
+- **TopicDrawer:** Clicking a roadmap node slides in a right panel with prerequisite concepts and a question list (Status / Star / Name / Difficulty). Clicking a row navigates to `/practice/:topicId?question_id=<uuid>`.
+- **PracticePage:** If `?question_id=` is present, calls `loadSpecific(id)` instead of `loadNext()`. Both are idempotent — safe under React StrictMode's double effect invocation. Never use a `firstLoad` ref to skip the second call.
+- **Practice state machine:** `loading → answering → submitted → revealed → complete | error`
+- **Stars:** Optimistic UI — flip locally, sync to server, revert on failure (`useTopicQuestions.ts`).
+- **Roadmap canvas:** `CANVAS_W=1020, CANVAS_H=700, NODE_W=176, NODE_H=72`. Cols at cx=100/340/580/870, rows at cy=60/170/280/390/500/610. Colors: violet (ColA), indigo (ColB), sky (ColC), emerald (ColD stats).
 
 ## Key Conventions
 
-### TypeScript
-- Strict mode on. No `any`. Use `unknown` + narrowing when the shape is uncertain.
-- All DB types defined in `src/types/index.ts`. Keep them in sync with the Supabase schema.
-- Module system: `NodeNext` — imports must include `.js` extension even for `.ts` source files.
-- Zod validates all incoming request bodies and query params. Never trust raw `req.body` or `req.query`.
+- **Backend:** Strict TS, no `any`. Zod validates all `req.body`/`req.query`. Routes are thin — all logic lives in services. Never call `supabase` from a route. `NodeNext` module system — use `.js` extension on imports even for `.ts` files.
+- **Frontend:** All fetch calls go through `lib/api.ts`. Use `cn()` from `lib/utils.ts` for Tailwind classes. Frontend types mirror backend in `src/types/api.ts`.
+- **Answer types:** `exact` (trim + case-insensitive) or `range` (`|given − correct| ≤ tolerance`). No MCQ.
+- **Solution hiding:** `correct_answer` and `solution_latex` are never sent to the client until after an attempt is submitted (`stripSolution()` in `questionService.ts`).
 
-### Services vs Routes
-- Routes handle HTTP concerns only: parse/validate input, call service, return response + status code.
-- Services contain all business logic and DB calls. Never call `supabase` directly from a route.
+## Status
 
-### Answer Types
-Two answer types are supported:
+**Built:** Backend (schema, services, routes, answer checking), full frontend (roadmap, drawer, practice session, history, star system), 24-topic syllabus with 5 prerequisite concepts each, 8 sample questions.
 
-| Type | How checking works |
+**Not built yet:** Auth (Supabase Auth), progress analytics, timed mock paper mode, admin question editor. Only 2 of 24 topics have questions — adding more questions is the most useful next step.
+
+## Common Pitfalls
+
+| Problem | Fix |
 |---|---|
-| `exact` | Case-insensitive string match after `.trim()` |
-| `range` | `|parseFloat(given) - parseFloat(correct)| <= tolerance` |
-
-MCQ is **not used** — do not add MCQ questions. Proof-type questions ("show that", "sketch") are not yet supported — add them as view-only later.
-
-### Questions
-- `prompt_latex` and `solution_latex` are LaTeX strings. The frontend renders them with KaTeX.
-- The solution is **never** sent to the client until after an attempt is submitted. `questionService.ts` strips it via `stripSolution()`.
-
-### Sessions
-- No auth in MVP. The client generates a UUID v4 on first load and stores it in `localStorage` as `session_id`.
-- `session_id` is passed as a query param or in the request body. The backend trusts it as-is.
-- When auth is added later, `session_id` becomes `user_id` from Supabase Auth.
-
----
-
-## Adding New Questions
-
-Insert directly via Supabase SQL Editor or add to `seed.sql`:
-
-```sql
-INSERT INTO questions (topic_id, difficulty, prompt_latex, answer_type, correct_answer, tolerance, mcq_options, solution_latex, marks)
-VALUES (
-  '<topic-uuid>',
-  2,                          -- 1=easy, 2=medium, 3=hard
-  'Find \(\int \sin x \, dx\)',
-  'exact',
-  '-\cos x + C',
-  NULL,
-  NULL,
-  '\[\int \sin x \, dx = -\cos x + C\]',
-  1
-);
-```
-
----
-
-## What's Built vs What's Next
-
-**Built (this session):**
-- Full backend: schema, services, routes, answer checking, session-based progress
-
-**Not yet built:**
-- Frontend (React + Vite + KaTeX)
-- User auth (Supabase Auth)
-- Progress dashboard / analytics
-- Timed mock paper mode
-- Admin UI for authoring questions
+| "permission denied for table X" | Run the GRANT statement above after creating the table |
+| Drawer click loads wrong question | Use `loadSpecific()` not `loadNext()` — StrictMode fires effects twice |
+| Backend crashes on start | `.env` is missing — copy from `.env.example` and fill in credentials |
+| `tsx`/`vite: command not found` | `npm run setup` from the project root to install all deps |

@@ -72,7 +72,6 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
   const difficultyRef = useRef(difficulty)
   difficultyRef.current = difficulty
 
-  // diff param lets callers pass a freshly-selected difficulty before React re-renders
   const loadNext = useCallback(async (diff?: Difficulty) => {
     dispatch({ type: 'LOAD_START' })
     try {
@@ -91,6 +90,17 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
       }
     }
   }, [topicId, sessionId])
+
+  // Loads a specific question by ID — used when navigating from the question list
+  const loadSpecific = useCallback(async (questionId: string) => {
+    dispatch({ type: 'LOAD_START' })
+    try {
+      const question = await api.questions.get(questionId)
+      dispatch({ type: 'LOAD_SUCCESS', question })
+    } catch (err) {
+      dispatch({ type: 'ERROR', message: (err as Error).message })
+    }
+  }, [])
 
   const submitAnswer = useCallback(
     async (answerGiven: string) => {
@@ -127,6 +137,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     ...state,
     sessionId,
     loadNext,
+    loadSpecific,
     submitAnswer,
     nextQuestion,
     reset,

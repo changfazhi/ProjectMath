@@ -1,5 +1,5 @@
 import { supabase } from '../db/supabase.js';
-import type { Difficulty, Question, QuestionPublic } from '../types/index.js';
+import type { AttemptStatus, Difficulty, Question, QuestionPublic, QuestionWithStatus } from '../types/index.js';
 
 function stripSolution(q: Question): QuestionPublic {
   const { correct_answer: _ca, solution_latex: _sl, ...pub } = q;
@@ -11,7 +11,6 @@ export async function getNextQuestion(
   sessionId: string,
   difficulty?: Difficulty,
 ): Promise<QuestionPublic | null> {
-  // Fetch all questions for this topic (optionally filtered by difficulty)
   let query = supabase
     .from('questions')
     .select('*')
@@ -25,7 +24,6 @@ export async function getNextQuestion(
   if (error) throw new Error(error.message);
   if (!questions || questions.length === 0) return null;
 
-  // Get IDs already answered correctly by this session
   const { data: correctAttempts } = await supabase
     .from('attempts')
     .select('question_id')
@@ -35,7 +33,6 @@ export async function getNextQuestion(
 
   const answeredCorrectly = new Set((correctAttempts ?? []).map((a) => a.question_id));
 
-  // Prefer unanswered questions; fall back to all if every question is done
   const pool = questions.filter((q) => !answeredCorrectly.has(q.id));
   const candidates = pool.length > 0 ? pool : questions;
 
@@ -70,4 +67,43 @@ export async function getQuestionWithSolution(id: string): Promise<Question | nu
     throw new Error(error.message);
   }
   return data as Question;
+}
+
+export async function getQuestionsByTopicWithStatus(
+  topicId: string,
+  sessionId: string,
+): Promise<QuestionWithStatus[]> {
+  const { data: questions, error } = await supabase
+    .from('questions')
+    .select('*')
+    .eq('topic_id', topicId)
+    .order('difficulty')
+    .order('created_at');
+
+  if (error) throw new Error(error.message);
+  if (!questions || questions.length === 0) return [];
+
+  const questionIds = questions.map((q) => q.id);
+
+  const { data: attempts } = await supabase
+    .from('attempts')
+    .select('question_id, is_correct')
+    .eq('session_id', sessionId)
+    .in('question_id', questionIds);
+
+  // Per question: track if any attempt exists and if any is correct
+  const anyAttempt = new Set<string>();
+  const anyCorrect = new Set<string>();
+  for (const a of attempts ?? []) {
+    anyAttempt.add(a.question_id);
+    if (a.is_correct) anyCorrect.add(a.question_id);
+  }
+
+  return questions.map((q) => {
+    const pub = stripSolution(q as Question);
+    let status: AttemptStatus = 'not_attempted';
+    if (anyCorrect.has(q.id)) status = 'correct';
+    else if (anyAttempt.has(q.id)) status = 'attempted';
+    return { ...pub, status };
+  });
 }

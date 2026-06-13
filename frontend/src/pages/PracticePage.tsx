@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { Difficulty } from '../types/api'
 import { usePracticeSession } from '../hooks/usePracticeSession'
 import { QuestionCard } from '../components/question/QuestionCard'
@@ -20,18 +20,25 @@ const DIFFICULTIES: { label: string; value: Difficulty | undefined }[] = [
 
 export function PracticePage() {
   const { topicId } = useParams<{ topicId: string }>()
+  const [searchParams] = useSearchParams()
+  const initialQuestionId = searchParams.get('question_id') ?? undefined
+
   const [difficulty, setDifficulty] = useState<Difficulty | undefined>(undefined)
 
   const session = usePracticeSession(topicId ?? '', difficulty)
 
   useEffect(() => {
-    session.loadNext()
+    if (initialQuestionId) {
+      session.loadSpecific(initialQuestionId)
+    } else {
+      session.loadNext()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topicId])
 
   function handleDifficultyChange(d: Difficulty | undefined) {
     setDifficulty(d)
-    session.reset(d) // pass new difficulty directly — avoids stale ref on first load
+    session.reset(d)
   }
 
   return (
@@ -103,7 +110,7 @@ export function PracticePage() {
             You answered {session.sessionCorrect} out of {session.sessionTotal} correctly.
           </p>
           <div className="flex gap-3 flex-wrap justify-center">
-            <Button onClick={session.reset}>Practice Again</Button>
+            <Button onClick={() => session.reset()}>Practice Again</Button>
             <Button variant="secondary" onClick={() => (window.location.href = '/')}>
               Back to Topics
             </Button>

@@ -3,8 +3,11 @@ import type {
   Difficulty,
   MathLevel,
   QuestionPublic,
+  QuestionWithStatus,
+  StarToggleResponse,
   SubmitAttemptResponse,
   Topic,
+  TopicConcept,
 } from '../types/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -25,6 +28,14 @@ export const api = {
       request<Topic[]>(`/api/topics${level ? `?level=${level}` : ''}`),
 
     get: (id: string) => request<Topic>(`/api/topics/${id}`),
+
+    questions: (topicId: string, sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<QuestionWithStatus[]>(`/api/topics/${topicId}/questions?${params}`)
+    },
+
+    concepts: (topicId: string) =>
+      request<TopicConcept[]>(`/api/topics/${topicId}/concepts`),
   },
 
   questions: {
@@ -53,6 +64,19 @@ export const api = {
       const params = new URLSearchParams({ session_id: sessionId })
       if (questionId) params.set('question_id', questionId)
       return request<Attempt[]>(`/api/attempts?${params}`)
+    },
+  },
+
+  stars: {
+    toggle: (sessionId: string, questionId: string) =>
+      request<StarToggleResponse>('/api/stars', {
+        method: 'POST',
+        body: JSON.stringify({ session_id: sessionId, question_id: questionId }),
+      }),
+
+    list: (sessionId: string, topicId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId, topic_id: topicId })
+      return request<string[]>(`/api/stars?${params}`)
     },
   },
 }
