@@ -73,3 +73,9 @@ export interface SubmitAttemptResponse {
   correct_answer: string;
   solution_latex: string;
 }
+
+export interface TopicProgress {
+  topic_id: string;
+  correct: number;
+  total: number;
+}

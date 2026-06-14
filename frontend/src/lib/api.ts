@@ -8,6 +8,7 @@ import type {
   SubmitAttemptResponse,
   Topic,
   TopicConcept,
+  TopicProgress,
 } from '../types/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -36,6 +37,11 @@ export const api = {
 
     concepts: (topicId: string) =>
       request<TopicConcept[]>(`/api/topics/${topicId}/concepts`),
+
+    progress: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<TopicProgress[]>(`/api/topics/progress?${params}`)
+    },
   },
 
   questions: {

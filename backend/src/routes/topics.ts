@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getAllTopics, getTopicById } from '../services/topicService.js';
+import { getAllTopics, getTopicById, getTopicsProgress } from '../services/topicService.js';
 
 const router = Router();
 
@@ -15,6 +15,21 @@ router.get('/', async (req, res) => {
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'level must be H1 or H2' });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/topics/progress?session_id=UUID
+router.get('/progress', async (req, res) => {
+  try {
+    const sessionId = z.string().uuid().parse(req.query.session_id);
+    const progress = await getTopicsProgress(sessionId);
+    res.json(progress);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'session_id must be a valid UUID' });
       return;
     }
     res.status(500).json({ error: (err as Error).message });
