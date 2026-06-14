@@ -1,5 +1,8 @@
-import { useRef, type KeyboardEvent } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '../ui/Button'
+import { MathField, type MathFieldHandle } from '../math/MathField'
+import { MathKeyboard } from '../math/MathKeyboard'
+import { cn } from '../../lib/utils'
 
 interface Props {
   onSubmit: (answer: string) => void
@@ -8,33 +11,61 @@ interface Props {
 }
 
 export function ExactInput({ onSubmit, disabled, loading }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') submit()
-  }
+  const mathRef = useRef<MathFieldHandle>(null)
+  const [showKeyboard, setShowKeyboard] = useState(false)
 
   function submit() {
-    const value = inputRef.current?.value.trim() ?? ''
+    const value = mathRef.current?.getValue().trim() ?? ''
     if (value) onSubmit(value)
+  }
+
+  function insertSymbol(latex: string) {
+    mathRef.current?.insert(latex)
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <input
-        ref={inputRef}
-        type="text"
+      <MathField
+        ref={mathRef}
+        onChange={() => {}}
         disabled={disabled}
-        onKeyDown={handleKeyDown}
-        placeholder="Type your answer…"
-        className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        className={cn(
+          'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100',
+          'focus-within:ring-2 focus-within:ring-blue-500',
+        )}
       />
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        Tip: use ^ for powers (e.g. <code className="font-mono">2x^2 + C</code>). Press Enter or click Submit.
-      </p>
-      <Button onClick={submit} disabled={disabled} loading={loading} size="lg">
-        Submit Answer
-      </Button>
+
+      {/* Math keyboard toggle + submit row */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => {
+            setShowKeyboard((v) => !v)
+            if (!showKeyboard) {
+              // Delay focus so the keyboard has rendered
+              setTimeout(() => mathRef.current?.focus(), 50)
+            }
+          }}
+          disabled={disabled}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed',
+            showKeyboard
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+              : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-blue-400',
+          )}
+        >
+          <span>⌨</span>
+          Math Input
+        </button>
+
+        <Button onClick={submit} disabled={disabled} loading={loading} size="lg" className="flex-1">
+          Submit Answer
+        </Button>
+      </div>
+
+      {showKeyboard && !disabled && (
+        <MathKeyboard onInsert={insertSymbol} />
+      )}
     </div>
   )
 }

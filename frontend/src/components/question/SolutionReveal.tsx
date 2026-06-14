@@ -1,5 +1,6 @@
 import type { SubmitAttemptResponse } from '../../types/api'
 import { Button } from '../ui/Button'
+import { Latex } from '../math/Latex'
 import { renderLatex } from '../../lib/renderLatex'
 
 interface Props {
@@ -23,7 +24,7 @@ export function SolutionReveal({ result, onNext }: Props) {
         {!result.is_correct && (
           <p className="text-sm mt-1 text-slate-700 dark:text-slate-300">
             Correct answer:{' '}
-            <span className="font-mono">{renderLatex(result.correct_answer)}</span>
+            <Latex className="text-sm">{result.correct_answer}</Latex>
           </p>
         )}
       </div>
