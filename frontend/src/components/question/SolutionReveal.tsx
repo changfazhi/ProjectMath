@@ -21,7 +21,7 @@ export function SolutionReveal({ result, onNext }: Props) {
         <p className={`font-semibold text-base ${result.is_correct ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
           {result.is_correct ? '✓ Correct!' : '✗ Incorrect'}
         </p>
-        {!result.is_correct && (
+        {!result.is_correct && result.correct_answer && (
           <p className="text-sm mt-1 text-slate-700 dark:text-slate-300">
             Correct answer:{' '}
             <Latex className="text-sm">{result.correct_answer}</Latex>
@@ -29,14 +29,16 @@ export function SolutionReveal({ result, onNext }: Props) {
         )}
       </div>
 
-      <div className="rounded-xl p-5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
-          Solution
-        </p>
-        <div className="text-base leading-relaxed text-slate-800 dark:text-slate-100">
-          {renderLatex(result.solution_latex)}
+      {result.solution_latex && (
+        <div className="rounded-xl p-5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+            Solution
+          </p>
+          <div className="text-base leading-relaxed text-slate-800 dark:text-slate-100">
+            {renderLatex(result.solution_latex)}
+          </div>
         </div>
-      </div>
+      )}
 
       <Button onClick={onNext} size="lg" className="self-start">
         Next Question →

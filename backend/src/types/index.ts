@@ -3,6 +3,16 @@ export type Difficulty = 1 | 2 | 3;
 export type AnswerType = 'exact' | 'mcq' | 'range';
 export type AttemptStatus = 'not_attempted' | 'attempted' | 'correct';
 
+export interface QuestionPart {
+  label: string;
+  prompt_latex: string;
+  correct_answer: string | null;
+  answer_type: AnswerType | null;
+  tolerance: number | null;
+}
+
+export type QuestionPartPublic = Omit<QuestionPart, 'correct_answer'>;
+
 export interface Topic {
   id: string;
   name: string;
@@ -21,14 +31,17 @@ export interface Question {
   correct_answer: string;
   tolerance: number | null;
   mcq_options: string[] | null;
+  parts: QuestionPart[] | null;
   solution_latex: string;
   marks: number;
   source: string | null;
   created_at: string;
 }
 
-// Question shape returned to client — solution is omitted until after attempt
-export type QuestionPublic = Omit<Question, 'correct_answer' | 'solution_latex'>;
+// Question shape returned to client — solution and answers omitted until after attempt
+export type QuestionPublic = Omit<Question, 'correct_answer' | 'solution_latex' | 'parts'> & {
+  parts: QuestionPartPublic[] | null;
+};
 
 // Question with per-session attempt status, returned from the topic question list endpoint
 export interface QuestionWithStatus extends QuestionPublic {
@@ -63,6 +76,7 @@ export interface Attempt {
 export interface SubmitAttemptBody {
   session_id: string;
   question_id: string;
+  part_label?: string;
   answer_given: string;
   time_taken_s?: number;
 }
@@ -71,7 +85,7 @@ export interface SubmitAttemptResponse {
   attempt_id: string;
   is_correct: boolean;
   correct_answer: string;
-  solution_latex: string;
+  solution_latex: string | null;
 }
 
 export interface TopicProgress {
