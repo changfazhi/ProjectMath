@@ -1,5 +1,6 @@
 import type { Topic } from '../../types/api'
 import { cn } from '../../lib/utils'
+import { ProgressBar } from '../ui/ProgressBar'
 
 // ---------- layout config ----------
 
@@ -76,12 +77,12 @@ const EDGES: [string, string][] = [
 
 type Color = 'violet' | 'blue' | 'sky' | 'indigo' | 'emerald'
 
-const colorMap: Record<Color, { border: string; bg: string; text: string; badge: string; visited: string }> = {
-  violet:  { border: 'border-violet-400 dark:border-violet-600',  bg: 'bg-violet-50 dark:bg-violet-950/60',  text: 'text-violet-900 dark:text-violet-100',  badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300',  visited: 'ring-violet-400' },
-  blue:    { border: 'border-blue-400 dark:border-blue-600',      bg: 'bg-blue-50 dark:bg-blue-950/60',      text: 'text-blue-900 dark:text-blue-100',      badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300',      visited: 'ring-blue-400' },
-  sky:     { border: 'border-sky-400 dark:border-sky-600',        bg: 'bg-sky-50 dark:bg-sky-950/60',        text: 'text-sky-900 dark:text-sky-100',        badge: 'bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300',        visited: 'ring-sky-400' },
-  indigo:  { border: 'border-indigo-400 dark:border-indigo-600',  bg: 'bg-indigo-50 dark:bg-indigo-950/60',  text: 'text-indigo-900 dark:text-indigo-100',  badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300',  visited: 'ring-indigo-400' },
-  emerald: { border: 'border-emerald-400 dark:border-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/60', text: 'text-emerald-900 dark:text-emerald-100', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300', visited: 'ring-emerald-400' },
+const colorMap: Record<Color, { border: string; bg: string; text: string; badge: string; visited: string; fill: string }> = {
+  violet:  { border: 'border-violet-400 dark:border-violet-600',  bg: 'bg-violet-50 dark:bg-violet-950/60',  text: 'text-violet-900 dark:text-violet-100',  badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300',  visited: 'ring-violet-400',  fill: 'bg-violet-500' },
+  blue:    { border: 'border-blue-400 dark:border-blue-600',      bg: 'bg-blue-50 dark:bg-blue-950/60',      text: 'text-blue-900 dark:text-blue-100',      badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300',      visited: 'ring-blue-400',    fill: 'bg-blue-500' },
+  sky:     { border: 'border-sky-400 dark:border-sky-600',        bg: 'bg-sky-50 dark:bg-sky-950/60',        text: 'text-sky-900 dark:text-sky-100',        badge: 'bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300',        visited: 'ring-sky-400',     fill: 'bg-sky-500' },
+  indigo:  { border: 'border-indigo-400 dark:border-indigo-600',  bg: 'bg-indigo-50 dark:bg-indigo-950/60',  text: 'text-indigo-900 dark:text-indigo-100',  badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300',  visited: 'ring-indigo-400',  fill: 'bg-indigo-500' },
+  emerald: { border: 'border-emerald-400 dark:border-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/60', text: 'text-emerald-900 dark:text-emerald-100', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300', visited: 'ring-emerald-400', fill: 'bg-emerald-500' },
 }
 
 // ---------- edge path helper ----------
@@ -100,10 +101,11 @@ function edgePath(sx: number, sy: number, tx: number, ty: number): string {
 interface Props {
   topics: Topic[]
   visited: Set<string>
+  progress: Map<string, { correct: number; total: number }>
   onTopicClick: (topic: Topic) => void
 }
 
-export function RoadmapGraph({ topics, visited, onTopicClick }: Props) {
+export function RoadmapGraph({ topics, visited, progress, onTopicClick }: Props) {
   const topicMap = new Map(topics.map((t) => [t.name, t]))
 
   const nodes = Object.entries(POSITIONS).map(([name, pos]) => ({
@@ -179,6 +181,7 @@ export function RoadmapGraph({ topics, visited, onTopicClick }: Props) {
           const color = pos.color as Color
           const c = colorMap[color]
           const isVisited = topic ? visited.has(topic.id) : false
+          const p = topic ? (progress.get(topic.id) ?? { correct: 0, total: 0 }) : { correct: 0, total: 0 }
 
           return (
             <button
@@ -206,19 +209,19 @@ export function RoadmapGraph({ topics, visited, onTopicClick }: Props) {
               </span>
               <div className="flex items-center gap-1.5 mt-1.5">
                 {topic && (
-                  <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-md', c.badge)}>
+                  <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-md shrink-0', c.badge)}>
                     {topic.level}
                   </span>
                 )}
-                {isVisited && (
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                    visited ✓
-                  </span>
-                )}
-                {!isVisited && topic && (
-                  <span className={cn('text-[10px] opacity-0 group-hover:opacity-100 transition-opacity', c.text)}>
-                    View →
-                  </span>
+                {topic && (
+                  <>
+                    <div className="flex-1 min-w-0">
+                      <ProgressBar correct={p.correct} total={p.total} fillClass={c.fill} size="sm" />
+                    </div>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0 tabular-nums">
+                      {p.correct}/{p.total}
+                    </span>
+                  </>
                 )}
               </div>
             </button>

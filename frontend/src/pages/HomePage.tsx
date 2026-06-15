@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Topic } from '../types/api'
 import { useTopics } from '../hooks/useTopics'
 import { useVisitedTopics } from '../hooks/useVisitedTopics'
+import { useTopicsProgress } from '../hooks/useTopicsProgress'
 import { RoadmapGraph } from '../components/topic/RoadmapGraph'
 import { TopicDrawer } from '../components/topic/TopicDrawer'
 import { Spinner } from '../components/ui/Spinner'
@@ -10,6 +11,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage'
 export function HomePage() {
   const { topics, loading, error } = useTopics()
   const { visited, markVisited } = useVisitedTopics()
+  const progress = useTopicsProgress()
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
 
   function handleTopicClick(topic: Topic) {
@@ -38,6 +40,7 @@ export function HomePage() {
         <RoadmapGraph
           topics={topics}
           visited={visited}
+          progress={progress}
           onTopicClick={handleTopicClick}
         />
       )}

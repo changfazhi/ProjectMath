@@ -58,6 +58,12 @@ export interface StarToggleResponse {
   starred: boolean
 }
 
+export interface TopicProgress {
+  topic_id: string
+  correct: number
+  total: number
+}
+
 export interface ApiError {
   error: string
   details?: unknown

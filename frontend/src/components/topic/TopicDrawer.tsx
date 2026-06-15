@@ -9,6 +9,7 @@ import { QuestionTable } from './QuestionTable'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Spinner } from '../ui/Spinner'
+import { ProgressBar } from '../ui/ProgressBar'
 
 interface Props {
   topic: Topic | null
@@ -111,14 +112,26 @@ export function TopicDrawer({ topic, onClose }: Props) {
             {questionsError && (
               <p className="text-sm text-red-500">{questionsError}</p>
             )}
-            {!questionsLoading && !questionsError && (
-              <QuestionTable
-                questions={questions}
-                starredIds={starredIds}
-                onToggleStar={toggleStar}
-                onSelectQuestion={handleSelectQuestion}
-              />
-            )}
+            {!questionsLoading && !questionsError && (() => {
+              const correct = questions.filter(q => q.status === 'correct').length
+              const total = questions.length
+              return (
+                <>
+                  <div className="flex flex-col items-center gap-2 mb-4">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      {correct} / {total} solved
+                    </span>
+                    <ProgressBar correct={correct} total={total} fillClass="bg-emerald-500" size="md" />
+                  </div>
+                  <QuestionTable
+                    questions={questions}
+                    starredIds={starredIds}
+                    onToggleStar={toggleStar}
+                    onSelectQuestion={handleSelectQuestion}
+                  />
+                </>
+              )
+            })()}
           </div>
         </div>
 
