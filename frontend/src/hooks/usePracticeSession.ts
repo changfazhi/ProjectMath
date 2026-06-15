@@ -5,10 +5,17 @@ import type { Difficulty, QuestionPublic, SubmitAttemptResponse } from '../types
 
 type PracticePhase = 'loading' | 'answering' | 'submitted' | 'revealed' | 'complete' | 'error'
 
+export interface PartState {
+  phase: 'idle' | 'submitting' | 'done'
+  isCorrect?: boolean
+  correctAnswer?: string
+}
+
 interface PracticeState {
   phase: PracticePhase
   question: QuestionPublic | null
   result: SubmitAttemptResponse | null
+  partStates: Record<string, PartState>
   error: string | null
   sessionCorrect: number
   sessionTotal: number
@@ -22,19 +29,32 @@ type Action =
   | { type: 'COMPLETE' }
   | { type: 'SUBMIT_START' }
   | { type: 'SUBMIT_SUCCESS'; result: SubmitAttemptResponse }
+  | { type: 'PART_SUBMIT_START'; partLabel: string }
+  | { type: 'PART_SUBMIT_DONE'; partLabel: string; isCorrect: boolean; correctAnswer: string; solutionLatex: string | null }
   | { type: 'ERROR'; message: string }
   | { type: 'RESET' }
 
 function reducer(state: PracticeState, action: Action): PracticeState {
   switch (action.type) {
     case 'LOAD_START':
-      return { ...state, phase: 'loading', question: null, result: null, error: null }
-    case 'LOAD_SUCCESS':
-      return { ...state, phase: 'answering', question: action.question, questionStartTime: Date.now() }
+      return { ...state, phase: 'loading', question: null, result: null, partStates: {}, error: null }
+
+    case 'LOAD_SUCCESS': {
+      const partStates: Record<string, PartState> = {}
+      if (action.question.parts) {
+        for (const p of action.question.parts) {
+          partStates[p.label] = { phase: 'idle' }
+        }
+      }
+      return { ...state, phase: 'answering', question: action.question, partStates, questionStartTime: Date.now() }
+    }
+
     case 'COMPLETE':
       return { ...state, phase: 'complete', question: null }
+
     case 'SUBMIT_START':
       return { ...state, phase: 'submitted' }
+
     case 'SUBMIT_SUCCESS': {
       const correct = action.result.is_correct
       return {
@@ -46,10 +66,58 @@ function reducer(state: PracticeState, action: Action): PracticeState {
         streak: correct ? state.streak + 1 : 0,
       }
     }
+
+    case 'PART_SUBMIT_START':
+      return {
+        ...state,
+        partStates: {
+          ...state.partStates,
+          [action.partLabel]: { phase: 'submitting' },
+        },
+      }
+
+    case 'PART_SUBMIT_DONE': {
+      const updatedPartStates = {
+        ...state.partStates,
+        [action.partLabel]: {
+          phase: 'done' as const,
+          isCorrect: action.isCorrect,
+          correctAnswer: action.correctAnswer,
+        },
+      }
+
+      if (action.solutionLatex !== null) {
+        // All graded parts submitted — transition to revealed
+        const gradedParts = state.question?.parts?.filter((p) => p.answer_type !== null) ?? []
+        const allCorrect = gradedParts.every((p) => {
+          if (p.label === action.partLabel) return action.isCorrect
+          return updatedPartStates[p.label]?.isCorrect === true
+        })
+        return {
+          ...state,
+          phase: 'revealed',
+          partStates: updatedPartStates,
+          result: {
+            attempt_id: '',
+            is_correct: allCorrect,
+            correct_answer: '',
+            solution_latex: action.solutionLatex,
+          },
+          sessionCorrect: state.sessionCorrect + (allCorrect ? 1 : 0),
+          sessionTotal: state.sessionTotal + 1,
+          streak: allCorrect ? state.streak + 1 : 0,
+        }
+      }
+
+      return { ...state, partStates: updatedPartStates }
+    }
+
     case 'ERROR':
       return { ...state, phase: 'error', error: action.message }
+
     case 'RESET':
       return { ...initialState }
+
     default:
       return state
   }
@@ -59,6 +127,7 @@ const initialState: PracticeState = {
   phase: 'loading',
   question: null,
   result: null,
+  partStates: {},
   error: null,
   sessionCorrect: 0,
   sessionTotal: 0,
@@ -91,7 +160,6 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     }
   }, [topicId, sessionId])
 
-  // Loads a specific question by ID — used when navigating from the question list
   const loadSpecific = useCallback(async (questionId: string) => {
     dispatch({ type: 'LOAD_START' })
     try {
@@ -124,6 +192,35 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     [state.question, state.questionStartTime, sessionId],
   )
 
+  const submitPart = useCallback(
+    async (partLabel: string, answerGiven: string) => {
+      if (!state.question) return
+      dispatch({ type: 'PART_SUBMIT_START', partLabel })
+      const timeTaken = state.questionStartTime
+        ? Math.max(1, Math.round((Date.now() - state.questionStartTime) / 1000))
+        : undefined
+      try {
+        const result = await api.attempts.submit({
+          session_id: sessionId,
+          question_id: state.question.id,
+          part_label: partLabel,
+          answer_given: answerGiven,
+          time_taken_s: timeTaken,
+        })
+        dispatch({
+          type: 'PART_SUBMIT_DONE',
+          partLabel,
+          isCorrect: result.is_correct,
+          correctAnswer: result.correct_answer,
+          solutionLatex: result.solution_latex,
+        })
+      } catch (err) {
+        dispatch({ type: 'ERROR', message: (err as Error).message })
+      }
+    },
+    [state.question, state.questionStartTime, sessionId],
+  )
+
   const nextQuestion = useCallback(() => {
     loadNext()
   }, [loadNext])
@@ -139,6 +236,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     loadNext,
     loadSpecific,
     submitAnswer,
+    submitPart,
     nextQuestion,
     reset,
   }

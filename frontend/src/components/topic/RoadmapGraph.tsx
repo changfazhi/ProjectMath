@@ -6,7 +6,7 @@ import { ProgressBar } from '../ui/ProgressBar'
 const NODE_W = 190
 const NODE_H = 72
 const CANVAS_W = 2200
-const CANVAS_H = 1580
+const CANVAS_H = 1700
 
 // cx/cy = centre of each node
 const POSITIONS: Record<string, { cx: number; cy: number; color: string }> = {
@@ -37,9 +37,11 @@ const POSITIONS: Record<string, { cx: number; cy: number; color: string }> = {
   'Permutation and Combination':       { cx: 2000, cy:   90, color: 'emerald' },
   'Probability':                       { cx: 2000, cy:  210, color: 'emerald' },
   'Discrete Random Variable':          { cx: 2000, cy:  330, color: 'emerald' },
-  'Sampling and Estimation Theory':    { cx: 2000, cy:  450, color: 'emerald' },
-  'Hypothesis Testing':                { cx: 2000, cy:  570, color: 'emerald' },
-  'Correlation and Linear Regression': { cx: 2000, cy:  690, color: 'emerald' },
+  'Binomial Distribution':             { cx: 2000, cy:  450, color: 'emerald' },
+  'Normal Distribution':               { cx: 2000, cy:  570, color: 'emerald' },
+  'Sampling and Estimation Theory':    { cx: 2000, cy:  690, color: 'emerald' },
+  'Hypothesis Testing':                { cx: 2000, cy:  810, color: 'emerald' },
+  'Correlation and Linear Regression': { cx: 2000, cy:  930, color: 'emerald' },
 }
 
 const EDGES: [string, string][] = [
@@ -75,7 +77,9 @@ const EDGES: [string, string][] = [
   // Statistics chain
   ['Permutation and Combination',    'Probability'],
   ['Probability',                    'Discrete Random Variable'],
-  ['Discrete Random Variable',       'Sampling and Estimation Theory'],
+  ['Discrete Random Variable',       'Binomial Distribution'],
+  ['Binomial Distribution',          'Normal Distribution'],
+  ['Normal Distribution',            'Sampling and Estimation Theory'],
   ['Sampling and Estimation Theory', 'Hypothesis Testing'],
   ['Hypothesis Testing',             'Correlation and Linear Regression'],
 ]

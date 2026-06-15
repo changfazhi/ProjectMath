@@ -3,6 +3,13 @@ export type Difficulty = 1 | 2 | 3
 export type AnswerType = 'exact' | 'mcq' | 'range'
 export type AttemptStatus = 'not_attempted' | 'attempted' | 'correct'
 
+export interface QuestionPart {
+  label: string
+  prompt_latex: string
+  answer_type: AnswerType | null
+  tolerance: number | null
+}
+
 export interface Topic {
   id: string
   name: string
@@ -20,6 +27,7 @@ export interface QuestionPublic {
   answer_type: AnswerType
   tolerance: number | null
   mcq_options: string[] | null
+  parts: QuestionPart[] | null
   marks: number
   source: string | null
   created_at: string
@@ -51,7 +59,7 @@ export interface SubmitAttemptResponse {
   attempt_id: string
   is_correct: boolean
   correct_answer: string
-  solution_latex: string
+  solution_latex: string | null
 }
 
 export interface StarToggleResponse {

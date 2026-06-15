@@ -7,6 +7,7 @@ const router = Router();
 const submitSchema = z.object({
   session_id: z.string().uuid(),
   question_id: z.string().uuid(),
+  part_label: z.string().min(1).optional(),
   answer_given: z.string().min(1),
   time_taken_s: z.number().int().positive().optional(),
 });
