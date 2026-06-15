@@ -9,7 +9,7 @@ cd backend && npm run dev      # port 3001, tsx watch
 cd frontend && npm run dev     # port 5173, Vite — proxies /api/* → 3001
 ```
 
-`backend/.env` (copy from `.env.example`): set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (Supabase dashboard → Settings → API). Never commit; never expose to the browser.
+`backend/.env` (copy from `.env.example`): set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Never commit; never expose to the browser.
 
 ## Database Setup
 
@@ -23,7 +23,7 @@ Run in order in the Supabase SQL Editor:
 
 `seed.sql` — **dev only**: TRUNCATEs everything and re-inserts from scratch.
 
-**Permission gotcha:** Tables created via raw SQL need explicit grants, otherwise Supabase returns "permission denied" even with the service_role key. After any `CREATE TABLE`:
+**Permission gotcha:** After any `CREATE TABLE`, run:
 ```sql
 GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
 ```
@@ -44,42 +44,53 @@ UUID pattern: `aaaa000N-0000-0000-0000-000000000000` (Pure Math), `bbbb000N-0000
 | aaaa0008 | Vector (Basic) | | aaaa0017 | Parametric Equations |
 | aaaa0009 | Vector (Lines) | | aaaa0018 | Differential Equations |
 
-✱ = has existing sample questions (4 each). Stats: bbbb0001 Permutation and Combination → bbbb0002 Probability → bbbb0003 Discrete Random Variable → bbbb0004 Sampling and Estimation Theory → bbbb0005 Hypothesis Testing → bbbb0006 Correlation and Linear Regression.
+✱ = has sample questions (4 each). Stats: bbbb0001–bbbb0006 (Permutation → Regression).
 
 ## API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/topics?level=H2` | List topics |
-| GET | `/api/topics/:topicId/questions?session_id=UUID` | Questions with per-session attempt status |
+| GET | `/api/topics/:topicId/questions?session_id=UUID` | Questions with attempt status |
 | GET | `/api/topics/:topicId/next?session_id=UUID&difficulty=N` | Next unanswered question |
 | GET | `/api/topics/:topicId/concepts` | Prerequisite concepts |
 | GET | `/api/questions/:id` | Single question (no answer/solution) |
 | POST | `/api/attempts` | Submit answer → `{ is_correct, correct_answer, solution_latex }` |
 | GET | `/api/attempts?session_id=UUID` | Session history |
-| POST | `/api/stars` | Toggle star `{ session_id, question_id }` → `{ starred: bool }` |
-| GET | `/api/stars?session_id=UUID&topic_id=UUID` | Starred question IDs for a topic |
+| POST | `/api/stars` | Toggle star → `{ starred: bool }` |
+| GET | `/api/stars?session_id=UUID&topic_id=UUID` | Starred question IDs |
 
 ## Frontend Architecture
 
 - **Routes:** `/` (roadmap + TopicDrawer), `/practice/:topicId`, `/history`
 - **Session:** UUID v4 in `localStorage` as `session_id` (`lib/session.ts`). No auth in MVP.
-- **TopicDrawer:** Clicking a roadmap node slides in a right panel with prerequisite concepts and a question list (Status / Star / Name / Difficulty). Clicking a row navigates to `/practice/:topicId?question_id=<uuid>`.
-- **PracticePage:** If `?question_id=` is present, calls `loadSpecific(id)` instead of `loadNext()`. Both are idempotent — safe under React StrictMode's double effect invocation. Never use a `firstLoad` ref to skip the second call.
+- **TopicDrawer:** Roadmap node click → right panel with concepts + question list. Row click → `/practice/:topicId?question_id=<uuid>`.
+- **PracticePage:** `?question_id=` → `loadSpecific(id)`; otherwise `loadNext()`. Both idempotent — safe under StrictMode double-invoke. Never use a `firstLoad` ref.
 - **Practice state machine:** `loading → answering → submitted → revealed → complete | error`
 - **Stars:** Optimistic UI — flip locally, sync to server, revert on failure (`useTopicQuestions.ts`).
-- **Roadmap canvas:** `CANVAS_W=1020, CANVAS_H=700, NODE_W=176, NODE_H=72`. Cols at cx=100/340/580/870, rows at cy=60/170/280/390/500/610. Colors: violet (ColA), indigo (ColB), sky (ColC), emerald (ColD stats).
+- **Roadmap canvas:** `CANVAS_W=1020, CANVAS_H=700, NODE_W=176, NODE_H=72`. Cols at cx=100/340/580/870, rows at cy=60/170/280/390/500/610.
+
+## Math Input (MathLive)
+
+Answer input uses **MathLive** (`mathlive` npm) `<math-field>` web component — renders math visually, not raw LaTeX.
+
+- **`MathField.tsx`** — React wrapper. Exposes `insert(latex)`, `getValue()`, `focus()` via `useImperativeHandle`. MathLive's own keyboard and hamburger menu are suppressed (shadow DOM style injection + `menuItems = []`).
+- **`MathKeyboard.tsx`** — 10-group symbol panel. Use `onMouseDown` (not `onClick`) on buttons to avoid stealing focus from the math field. Template inserts use `#?` placeholders (e.g. `\frac{#?}{#?}`) so MathLive lands cursor in the first slot.
+- **`selectionMode: 'placeholder'`** must be passed to `mf.insert()` for cursor-in-slot to work.
+- **Correct answer display:** `correct_answer` is always raw LaTeX — render with `<Latex>` directly, not `renderLatex()` (which requires `\(...\)` delimiters).
+- **MathLive compact notation:** Single-character fractions output `\frac34` not `\frac{3}{4}`. Multi-character fractions use full braces. Account for this when writing `correct_answer` values in the DB.
 
 ## Key Conventions
 
-- **Backend:** Strict TS, no `any`. Zod validates all `req.body`/`req.query`. Routes are thin — all logic lives in services. Never call `supabase` from a route. `NodeNext` module system — use `.js` extension on imports even for `.ts` files.
-- **Frontend:** All fetch calls go through `lib/api.ts`. Use `cn()` from `lib/utils.ts` for Tailwind classes. Frontend types mirror backend in `src/types/api.ts`.
-- **Answer types:** `exact` (trim + case-insensitive) or `range` (`|given − correct| ≤ tolerance`). No MCQ.
-- **Solution hiding:** `correct_answer` and `solution_latex` are never sent to the client until after an attempt is submitted (`stripSolution()` in `questionService.ts`).
+- **Backend:** Strict TS, no `any`. Zod validates all `req.body`/`req.query`. Routes are thin — all logic in services. Never call `supabase` from a route. `NodeNext` module system — `.js` extension on imports even for `.ts` files.
+- **Frontend:** All fetch calls via `lib/api.ts`. Use `cn()` from `lib/utils.ts` for Tailwind. Frontend types mirror backend in `src/types/api.ts`.
+- **LaTeX rendering:** Mixed text+math → `renderLatex()` (handles `\(...\)` / `\[...\]` delimiters). Pure LaTeX string → `<Latex>` directly. Display block → `<LatexBlock>`.
+- **Answer types:** `exact` (trim + case-insensitive string match) or `range` (`|given − correct| ≤ tolerance`). No MCQ.
+- **Solution hiding:** `correct_answer` and `solution_latex` stripped before sending to client (`stripSolution()` in `questionService.ts`), only returned after attempt submission.
 
 ## Status
 
-**Built:** Backend (schema, services, routes, answer checking), full frontend (roadmap, drawer, practice session, history, star system), 24-topic syllabus with 5 prerequisite concepts each, 8 sample questions.
+**Built:** Backend (schema, services, routes, answer checking), full frontend (roadmap, drawer, practice session, history, star system), visual math input keyboard (MathLive), 24-topic syllabus with 5 prerequisite concepts each, 8 sample questions.
 
 **Not built yet:** Auth (Supabase Auth), progress analytics, timed mock paper mode, admin question editor. Only 2 of 24 topics have questions — adding more questions is the most useful next step.
 
@@ -87,7 +98,9 @@ UUID pattern: `aaaa000N-0000-0000-0000-000000000000` (Pure Math), `bbbb000N-0000
 
 | Problem | Fix |
 |---|---|
-| "permission denied for table X" | Run the GRANT statement above after creating the table |
+| "permission denied for table X" | Run GRANT statement after CREATE TABLE |
 | Drawer click loads wrong question | Use `loadSpecific()` not `loadNext()` — StrictMode fires effects twice |
-| Backend crashes on start | `.env` is missing — copy from `.env.example` and fill in credentials |
-| `tsx`/`vite: command not found` | `npm run setup` from the project root to install all deps |
+| Backend crashes on start | `.env` missing — copy `.env.example` and fill credentials |
+| `tsx`/`vite: command not found` | `npm run setup` from project root |
+| Math keyboard steals focus | Use `onMouseDown` + `e.preventDefault()` on keyboard buttons |
+| Cursor lands after fraction, not inside | Pass `selectionMode: 'placeholder'` to `mf.insert()` and use `#?` in template strings |

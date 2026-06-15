@@ -20,8 +20,9 @@ export function HomePage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10 flex flex-col gap-8">
-      <div>
+    <div className="flex flex-col h-full">
+      {/* Title bar */}
+      <div className="max-w-5xl mx-auto px-4 pt-8 pb-5 w-full shrink-0">
         <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
           ProjectMath
         </h1>
@@ -30,20 +31,23 @@ export function HomePage() {
         </p>
       </div>
 
-      {loading && (
-        <div className="flex justify-center py-16">
-          <Spinner size="lg" />
-        </div>
-      )}
-      {error && <ErrorMessage message={error} />}
-      {!loading && !error && (
-        <RoadmapGraph
-          topics={topics}
-          visited={visited}
-          progress={progress}
-          onTopicClick={handleTopicClick}
-        />
-      )}
+      {/* Roadmap — fills all remaining height, no scrollbars */}
+      <div className="flex-1 min-h-0">
+        {loading && (
+          <div className="flex justify-center py-16">
+            <Spinner size="lg" />
+          </div>
+        )}
+        {error && <ErrorMessage message={error} />}
+        {!loading && !error && (
+          <RoadmapGraph
+            topics={topics}
+            visited={visited}
+            progress={progress}
+            onTopicClick={handleTopicClick}
+          />
+        )}
+      </div>
 
       <TopicDrawer
         topic={selectedTopic}

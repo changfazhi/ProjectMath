@@ -2,23 +2,32 @@ import { supabase } from '../db/supabase.js';
 import { getQuestionWithSolution } from './questionService.js';
 import type { Attempt, SubmitAttemptBody, SubmitAttemptResponse } from '../types/index.js';
 
+function normalizeLaTeX(s: string): string {
+  return s
+    .replace(/\s+/g, '')
+    .replace(/\\mleft/g, '\\left')
+    .replace(/\\mright/g, '\\right')
+    // Expand compact MathLive fractions: \frac13 → \frac{1}{3}
+    .replace(/\\frac([^{\\])([^{\\])/g, '\\frac{$1}{$2}')
+    .replace(/\\frac([^{\\])\{/g, '\\frac{$1}{')
+    .replace(/\\frac\{([^}]+)\}([^{\\])/g, '\\frac{$1}{$2}')
+    .toLowerCase();
+}
+
 function checkAnswer(
   answerType: string,
   correctAnswer: string,
   givenAnswer: string,
   tolerance: number | null,
 ): boolean {
-  const given = givenAnswer.trim();
-  const correct = correctAnswer.trim();
-
   switch (answerType) {
     case 'exact':
     case 'mcq':
-      return given.toLowerCase() === correct.toLowerCase();
+      return normalizeLaTeX(givenAnswer) === normalizeLaTeX(correctAnswer);
 
     case 'range': {
-      const givenNum = parseFloat(given);
-      const correctNum = parseFloat(correct);
+      const givenNum = parseFloat(givenAnswer.trim());
+      const correctNum = parseFloat(correctAnswer.trim());
       if (isNaN(givenNum) || isNaN(correctNum)) return false;
       return Math.abs(givenNum - correctNum) <= (tolerance ?? 0.01);
     }
