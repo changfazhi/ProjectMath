@@ -2,8 +2,11 @@ import { supabase } from '../db/supabase.js';
 import type { AttemptStatus, Difficulty, Question, QuestionPublic, QuestionWithStatus } from '../types/index.js';
 
 function stripSolution(q: Question): QuestionPublic {
-  const { correct_answer: _ca, solution_latex: _sl, ...pub } = q;
-  return pub;
+  const { correct_answer: _ca, solution_latex: _sl, parts, ...pub } = q;
+  return {
+    ...pub,
+    parts: parts?.map(({ correct_answer: _pca, ...rest }) => rest) ?? null,
+  };
 }
 
 export async function getNextQuestion(
@@ -87,23 +90,37 @@ export async function getQuestionsByTopicWithStatus(
 
   const { data: attempts } = await supabase
     .from('attempts')
-    .select('question_id, is_correct')
+    .select('question_id, part_label, is_correct')
     .eq('session_id', sessionId)
     .in('question_id', questionIds);
 
-  // Per question: track if any attempt exists and if any is correct
-  const anyAttempt = new Set<string>();
-  const anyCorrect = new Set<string>();
+  // Group attempts by question_id → { part_label | null → is_correct (best result) }
+  type PartKey = string | null;
+  const attemptMap = new Map<string, Map<PartKey, boolean>>();
   for (const a of attempts ?? []) {
-    anyAttempt.add(a.question_id);
-    if (a.is_correct) anyCorrect.add(a.question_id);
+    if (!attemptMap.has(a.question_id)) attemptMap.set(a.question_id, new Map());
+    const partMap = attemptMap.get(a.question_id)!;
+    const key: PartKey = a.part_label ?? null;
+    partMap.set(key, (partMap.get(key) ?? false) || a.is_correct);
   }
 
   return questions.map((q) => {
-    const pub = stripSolution(q as Question);
+    const question = q as Question;
+    const pub = stripSolution(question);
+    const partMap = attemptMap.get(q.id);
+
     let status: AttemptStatus = 'not_attempted';
-    if (anyCorrect.has(q.id)) status = 'correct';
-    else if (anyAttempt.has(q.id)) status = 'attempted';
+    if (partMap && partMap.size > 0) {
+      const gradedParts = question.parts?.filter((p) => p.correct_answer !== null) ?? null;
+      if (gradedParts && gradedParts.length > 0) {
+        // Multi-part: correct only if every graded part has a correct attempt
+        const allCorrect = gradedParts.every((p) => partMap.get(p.label) === true);
+        status = allCorrect ? 'correct' : 'attempted';
+      } else {
+        // Single-answer: correct if the null-key attempt is correct
+        status = partMap.get(null) === true ? 'correct' : 'attempted';
+      }
+    }
     return { ...pub, status };
   });
 }

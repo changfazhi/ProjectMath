@@ -4,6 +4,7 @@ import type { Difficulty } from '../types/api'
 import { usePracticeSession } from '../hooks/usePracticeSession'
 import { QuestionCard } from '../components/question/QuestionCard'
 import { AnswerInput } from '../components/question/AnswerInput'
+import { MultiPartQuestion } from '../components/question/MultiPartQuestion'
 import { SolutionReveal } from '../components/question/SolutionReveal'
 import { StatsBar } from '../components/progress/StatsBar'
 import { Spinner } from '../components/ui/Spinner'
@@ -85,17 +86,36 @@ export function PracticePage() {
           <div className="flex flex-col gap-4">
             <QuestionCard question={session.question} />
 
-            {session.phase !== 'revealed' && (
-              <AnswerInput
-                question={session.question}
-                onSubmit={session.submitAnswer}
-                disabled={session.phase === 'submitted'}
-                loading={session.phase === 'submitted'}
-              />
-            )}
-
-            {session.phase === 'revealed' && session.result && (
-              <SolutionReveal result={session.result} onNext={session.nextQuestion} />
+            {session.question.parts ? (
+              /* Multi-part question */
+              <>
+                {(session.phase === 'answering' || session.phase === 'revealed') && (
+                  <MultiPartQuestion
+                    question={session.question}
+                    partStates={session.partStates}
+                    onSubmitPart={session.submitPart}
+                    revealed={session.phase === 'revealed'}
+                  />
+                )}
+                {session.phase === 'revealed' && session.result && (
+                  <SolutionReveal result={session.result} onNext={session.nextQuestion} />
+                )}
+              </>
+            ) : (
+              /* Single-answer question */
+              <>
+                {session.phase !== 'revealed' && (
+                  <AnswerInput
+                    question={session.question}
+                    onSubmit={session.submitAnswer}
+                    disabled={session.phase === 'submitted'}
+                    loading={session.phase === 'submitted'}
+                  />
+                )}
+                {session.phase === 'revealed' && session.result && (
+                  <SolutionReveal result={session.result} onNext={session.nextQuestion} />
+                )}
+              </>
             )}
           </div>
         )}

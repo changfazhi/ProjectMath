@@ -58,6 +58,7 @@ export const api = {
     submit: (body: {
       session_id: string
       question_id: string
+      part_label?: string
       answer_given: string
       time_taken_s?: number
     }) =>

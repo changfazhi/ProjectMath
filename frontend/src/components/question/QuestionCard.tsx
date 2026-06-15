@@ -26,7 +26,7 @@ export function QuestionCard({ question }: Props) {
           <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">{question.source}</span>
         )}
       </div>
-      <div className="text-lg leading-relaxed text-slate-800 dark:text-slate-100">
+      <div className="text-lg leading-relaxed text-slate-800 dark:text-slate-100 whitespace-pre-line">
         {renderLatex(question.prompt_latex)}
       </div>
     </Card>
