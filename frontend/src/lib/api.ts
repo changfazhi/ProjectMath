@@ -4,7 +4,9 @@ import type {
   MathLevel,
   QuestionPublic,
   QuestionWithStatus,
+  StarredQuestionRow,
   StarToggleResponse,
+  StreakStats,
   SubmitAttemptResponse,
   Topic,
   TopicConcept,
@@ -84,6 +86,18 @@ export const api = {
     list: (sessionId: string, topicId: string) => {
       const params = new URLSearchParams({ session_id: sessionId, topic_id: topicId })
       return request<string[]>(`/api/stars?${params}`)
+    },
+
+    listAll: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<StarredQuestionRow[]>(`/api/stars/all?${params}`)
+    },
+  },
+
+  streaks: {
+    get: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<StreakStats>(`/api/streaks?${params}`)
     },
   },
 }

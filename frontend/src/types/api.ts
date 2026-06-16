@@ -76,3 +76,31 @@ export interface ApiError {
   error: string
   details?: unknown
 }
+
+export interface StarredQuestionRow {
+  question_id: string
+  question_name: string | null
+  topic_id: string
+  topic_name: string
+  starred_at: string
+  latest_attempt: {
+    attempted_at: string
+    is_correct: boolean
+    time_taken_s: number | null
+  } | null
+}
+
+export interface DailyActivity {
+  date: string
+  correctCount: number
+  attemptCount: number
+}
+
+export interface StreakStats {
+  currentStreak: number
+  bestStreak: number
+  totalAttempts: number
+  totalSolved: number
+  totalQuestions: number
+  dailyActivity: DailyActivity[]
+}
