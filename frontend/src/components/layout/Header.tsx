@@ -57,6 +57,30 @@ export function Header() {
           >
             History
           </NavLink>
+          <NavLink
+            to="/starred"
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`
+            }
+          >
+            Starred
+          </NavLink>
+          <NavLink
+            to="/stats"
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`
+            }
+          >
+            Stats
+          </NavLink>
 
           <button
             onClick={toggleTheme}

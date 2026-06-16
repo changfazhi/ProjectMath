@@ -4,6 +4,8 @@ import { Header } from './components/layout/Header'
 import { HomePage } from './pages/HomePage'
 import { PracticePage } from './pages/PracticePage'
 import { HistoryPage } from './pages/HistoryPage'
+import { StatsPage } from './pages/StatsPage'
+import { StarredPage } from './pages/StarredPage'
 
 function RootLayout() {
   return (
@@ -24,6 +26,8 @@ const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'practice/:topicId', element: <PracticePage /> },
       { path: 'history', element: <HistoryPage /> },
+      { path: 'stats', element: <StatsPage /> },
+      { path: 'starred', element: <StarredPage /> },
     ],
   },
 ])

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { toggleStar, getStarredIds } from '../services/starService.js';
+import { toggleStar, getStarredIds, getStarredQuestions } from '../services/starService.js';
 import { getQuestionsByTopicWithStatus } from '../services/questionService.js';
 
 const router = Router();
@@ -19,6 +19,21 @@ router.post('/', async (req, res) => {
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid request body', details: err.issues });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/stars/all?session_id=UUID — all starred questions across all topics
+router.get('/all', async (req, res) => {
+  try {
+    const sessionId = z.string().uuid().parse(req.query.session_id);
+    const rows = await getStarredQuestions(sessionId);
+    res.json(rows);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'session_id must be a valid UUID' });
       return;
     }
     res.status(500).json({ error: (err as Error).message });
