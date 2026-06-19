@@ -46,6 +46,16 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
       ;(mf as MathfieldElement & { mathVirtualKeyboardPolicy: string }).mathVirtualKeyboardPolicy = 'off'
       ;(mf as MathfieldElement & { menuItems: unknown[] }).menuItems = []
 
+      // Remove built-in "or" → \lor and "and" → \land shortcuts — they trigger
+      // a suggestion box and leave the cursor in a broken state afterward.
+      const shortcuts = { ...(mf as MathfieldElement & { inlineShortcuts: Record<string, string> }).inlineShortcuts }
+      delete shortcuts['or']
+      delete shortcuts['and']
+      ;(mf as MathfieldElement & { inlineShortcuts: Record<string, string> }).inlineShortcuts = shortcuts
+
+      // Insert a thin space on space key instead of jumping the cursor (moveAfterParent).
+      ;(mf as MathfieldElement & { mathModeSpace: string }).mathModeSpace = '\\,'
+
       // MathLive renders toolbar icons into shadow DOM as non-button elements,
       // so we inject a <style> to suppress them after the shadow root is populated.
       const injectStyles = () => {

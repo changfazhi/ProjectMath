@@ -1,3 +1,4 @@
+import { evaluate } from 'mathjs';
 import { supabase } from '../db/supabase.js';
 import { getQuestionWithSolution } from './questionService.js';
 import type { Attempt, QuestionPart, SubmitAttemptBody, SubmitAttemptResponse } from '../types/index.js';
@@ -5,13 +6,50 @@ import type { Attempt, QuestionPart, SubmitAttemptBody, SubmitAttemptResponse } 
 function normalizeLaTeX(s: string): string {
   return s
     .replace(/\s+/g, '')
+    .replace(/\\,/g, '')
+    .replace(/\\ /g, '')
+    .replace(/\\;/g, '')
+    .replace(/\\:/g, '')
+    .replace(/\\!/g, '')
+    .replace(/\\quad/g, '')
+    .replace(/\\qquad/g, '')
     .replace(/\\mleft/g, '\\left')
     .replace(/\\mright/g, '\\right')
     // Expand compact MathLive fractions: \frac13 → \frac{1}{3}
     .replace(/\\frac([^{\\])([^{\\])/g, '\\frac{$1}{$2}')
     .replace(/\\frac([^{\\])\{/g, '\\frac{$1}{')
     .replace(/\\frac\{([^}]+)\}([^{\\])/g, '\\frac{$1}{$2}')
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\\text\{or\}/g, 'or')
+    .replace(/\\text\{and\}/g, 'and')
+    .replace(/\\lor\b/g, 'or')
+    .replace(/\\land\b/g, 'and')
+    .replace(/\\operatorname\{or\}/g, 'or')
+    .replace(/\\operatorname\{and\}/g, 'and');
+}
+
+function latexToMathExpr(normalized: string): string {
+  return normalized
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)')
+    .replace(/\\sqrt\{([^}]+)\}/g, 'sqrt($1)')
+    .replace(/\\pi/g, 'pi')
+    .replace(/\\cdot/g, '*')
+    .replace(/\\times/g, '*')
+    .replace(/\\left[\(\[]/g, '(')
+    .replace(/\\right[\)\]]/g, ')')
+    .replace(/\{/g, '(')
+    .replace(/\}/g, ')')
+    .replace(/\\/g, '');
+}
+
+function tryNumericEval(raw: string): number | null {
+  try {
+    const result = evaluate(latexToMathExpr(normalizeLaTeX(raw))) as unknown;
+    if (typeof result === 'number' && isFinite(result)) return result;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function checkAnswer(
@@ -22,8 +60,13 @@ function checkAnswer(
 ): boolean {
   switch (answerType) {
     case 'exact':
-    case 'mcq':
-      return normalizeLaTeX(givenAnswer) === normalizeLaTeX(correctAnswer);
+    case 'mcq': {
+      if (normalizeLaTeX(givenAnswer) === normalizeLaTeX(correctAnswer)) return true;
+      const given = tryNumericEval(givenAnswer);
+      const correct = tryNumericEval(correctAnswer);
+      if (given !== null && correct !== null) return Math.abs(given - correct) < 1e-9;
+      return false;
+    }
 
     case 'range': {
       const givenNum = parseFloat(givenAnswer.trim());

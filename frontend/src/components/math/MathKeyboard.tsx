@@ -94,6 +94,13 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    name: 'Logic',
+    buttons: [
+      { label: '\\text{or}',  insert: '\\text{ or } ', title: 'Logical or' },
+      { label: '\\text{and}', insert: '\\text{ and }', title: 'Logical and' },
+    ],
+  },
+  {
     name: 'Symbols',
     buttons: [
       { label: '\\pm',     insert: '\\pm ',     title: 'Plus-minus' },
