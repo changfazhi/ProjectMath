@@ -7,6 +7,7 @@ import attemptsRouter from './routes/attempts.js';
 import conceptsRouter from './routes/concepts.js';
 import starsRouter from './routes/stars.js';
 import streaksRouter from './routes/streaks.js';
+import chatRouter from './routes/chat.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -28,6 +29,7 @@ app.use('/api/questions', questionsRouter);
 app.use('/api/attempts', attemptsRouter);
 app.use('/api/stars', starsRouter);
 app.use('/api/streaks', streaksRouter);
+app.use('/api/chat', chatRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });

@@ -104,3 +104,17 @@ export interface StreakStats {
   totalQuestions: number
   dailyActivity: DailyActivity[]
 }
+
+export type ChatRole = 'user' | 'model'
+
+export interface ChatMessage {
+  id: string
+  role: ChatRole
+  content: string
+  created_at: string
+}
+
+export interface ChatSendResponse {
+  reply: ChatMessage
+  history: ChatMessage[]
+}

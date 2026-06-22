@@ -182,7 +182,7 @@ export function StatsPage() {
 
             {/* Month labels row */}
             <div className="flex gap-1 ml-9">
-              {weeks.map((week, i) => (
+              {weeks.map((_week, i) => (
                 <div
                   key={i}
                   className="w-3 overflow-visible whitespace-nowrap text-[10px] text-slate-400 dark:text-slate-500 leading-none"
