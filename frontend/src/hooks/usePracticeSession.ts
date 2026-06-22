@@ -33,6 +33,7 @@ type Action =
   | { type: 'PART_SUBMIT_DONE'; partLabel: string; isCorrect: boolean; correctAnswer: string; solutionLatex: string | null }
   | { type: 'ERROR'; message: string }
   | { type: 'RESET' }
+  | { type: 'RETRY' }
 
 function reducer(state: PracticeState, action: Action): PracticeState {
   switch (action.type) {
@@ -117,6 +118,22 @@ function reducer(state: PracticeState, action: Action): PracticeState {
 
     case 'RESET':
       return { ...initialState }
+
+    case 'RETRY': {
+      const retryPartStates: Record<string, PartState> = {}
+      if (state.question?.parts) {
+        for (const p of state.question.parts) {
+          retryPartStates[p.label] = { phase: 'idle' }
+        }
+      }
+      return {
+        ...state,
+        phase: 'answering',
+        result: null,
+        partStates: retryPartStates,
+        questionStartTime: Date.now(),
+      }
+    }
 
     default:
       return state
@@ -225,6 +242,10 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     loadNext()
   }, [loadNext])
 
+  const retryQuestion = useCallback(() => {
+    dispatch({ type: 'RETRY' })
+  }, [])
+
   const reset = useCallback((diff?: Difficulty) => {
     dispatch({ type: 'RESET' })
     loadNext(diff)
@@ -238,6 +259,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     submitAnswer,
     submitPart,
     nextQuestion,
+    retryQuestion,
     reset,
   }
 }

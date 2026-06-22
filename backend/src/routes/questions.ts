@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getNextQuestion, getQuestionById, getQuestionsByTopicWithStatus } from '../services/questionService.js';
+import { getNextQuestion, getQuestionById, getQuestionsByTopicWithStatus, getQuestionWithSolution } from '../services/questionService.js';
 
 const router = Router();
 
@@ -38,6 +38,20 @@ router.get('/:topicId/next', async (req, res) => {
       res.status(400).json({ error: 'session_id must be a valid UUID', details: err.issues });
       return;
     }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/questions/:id/solution
+router.get('/:id/solution', async (req, res) => {
+  try {
+    const question = await getQuestionWithSolution(req.params.id);
+    if (!question) {
+      res.status(404).json({ error: 'Question not found' });
+      return;
+    }
+    res.json({ solution_latex: question.solution_latex ?? null });
+  } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
 });

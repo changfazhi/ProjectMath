@@ -56,6 +56,9 @@ export const api = {
     },
 
     get: (id: string) => request<QuestionPublic>(`/api/questions/${id}`),
+
+    solution: (id: string) =>
+      request<{ solution_latex: string | null }>(`/api/questions/${id}/solution`),
   },
 
   attempts: {

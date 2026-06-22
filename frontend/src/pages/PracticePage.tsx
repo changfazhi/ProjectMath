@@ -15,17 +15,19 @@ import { StreakNotification } from '../components/ui/StreakNotification'
 import { ChatPanel } from '../components/chat/ChatPanel'
 import { useChatSession } from '../hooks/useChatSession'
 import { api } from '../lib/api'
+import { renderLatex } from '../lib/renderLatex'
 import { cn, formatTime } from '../lib/utils'
 
 function getActivityDate(): string {
   return new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
 
-type Tab = 'question' | 'attempts' | 'hints'
+type Tab = 'question' | 'attempts' | 'solution' | 'hints'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'question', label: 'Question' },
   { id: 'attempts', label: 'Attempts' },
+  { id: 'solution', label: 'Solution' },
   { id: 'hints', label: 'Hints' },
 ]
 
@@ -53,15 +55,32 @@ export function PracticePage() {
   const [attemptsLoading, setAttemptsLoading] = useState(false)
   const [attemptsError, setAttemptsError] = useState<string | null>(null)
 
+  // Solution tab state
+  const [solutionLatex, setSolutionLatex] = useState<string | null>(null)
+  const [solutionLoading, setSolutionLoading] = useState(false)
+  const [solutionError, setSolutionError] = useState<string | null>(null)
+
   const session = usePracticeSession(topicId ?? '', difficulty)
 
   // One shared chat instance drives both the desktop side panel and the mobile Hints tab.
   const chat = useChatSession(session.question?.id)
 
-  // Reset to Question tab whenever the active question changes
+  // Reset to Question tab and clear cached tab data whenever the question changes
   useEffect(() => {
     setActiveTab('question')
+    setSolutionLatex(null)
+    setSolutionError(null)
   }, [session.question?.id])
+
+  // Lazily fetch solution when Solution tab is activated (once per question)
+  useEffect(() => {
+    if (activeTab !== 'solution' || !session.question?.id || solutionLatex !== null || solutionError !== null) return
+    setSolutionLoading(true)
+    api.questions.solution(session.question.id)
+      .then((data) => setSolutionLatex(data.solution_latex ?? ''))
+      .catch((e: Error) => setSolutionError(e.message))
+      .finally(() => setSolutionLoading(false))
+  }, [activeTab, session.question?.id, solutionLatex, solutionError])
 
   // Lazily fetch attempts when Attempts tab is activated
   useEffect(() => {
@@ -184,7 +203,7 @@ export function PracticePage() {
                 />
               )}
               {session.phase === 'revealed' && session.result && (
-                <SolutionReveal result={session.result} onNext={session.nextQuestion} />
+                <SolutionReveal result={session.result} onNext={session.nextQuestion} onRetry={session.retryQuestion} />
               )}
             </>
           ) : (
@@ -198,7 +217,7 @@ export function PracticePage() {
                 />
               )}
               {session.phase === 'revealed' && session.result && (
-                <SolutionReveal result={session.result} onNext={session.nextQuestion} />
+                <SolutionReveal result={session.result} onNext={session.nextQuestion} onRetry={session.retryQuestion} />
               )}
             </>
           )}
@@ -260,6 +279,40 @@ export function PracticePage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Solution tab */}
+      {hasActiveQuestion && activeTab === 'solution' && (
+        <div>
+          {solutionLoading && (
+            <div className="flex justify-center py-10">
+              <Spinner size="lg" />
+            </div>
+          )}
+          {solutionError && (
+            <p className="text-sm text-red-500">{solutionError}</p>
+          )}
+          {!solutionLoading && !solutionError && (
+            <div className="rounded-xl p-5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">
+                Solution
+              </p>
+              {!solutionLatex ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  No solution available for this question.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {solutionLatex.split(/\n\n+/).map((block, i) => (
+                    <div key={i} className="text-base leading-relaxed text-slate-800 dark:text-slate-100">
+                      {renderLatex(block.trim())}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -5,7 +5,6 @@ import { renderLatex } from '../../lib/renderLatex'
 import { MathField, type MathFieldHandle } from '../math/MathField'
 import { MathKeyboard } from '../math/MathKeyboard'
 import { Button } from '../ui/Button'
-import { Latex } from '../math/Latex'
 import { cn } from '../../lib/utils'
 
 interface PartInputProps {
@@ -45,11 +44,6 @@ function PartInput({ part, partState, onSubmit }: PartInputProps) {
         <span className={cn('font-semibold', partState.isCorrect ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300')}>
           {partState.isCorrect ? '✓ Correct' : '✗ Incorrect'}
         </span>
-        {!partState.isCorrect && partState.correctAnswer && (
-          <span className="ml-2 text-slate-700 dark:text-slate-300">
-            Answer: <Latex className="text-sm">{partState.correctAnswer}</Latex>
-          </span>
-        )}
       </div>
     )
   }
@@ -172,11 +166,6 @@ export function MultiPartQuestion({ question, partStates, onSubmitPart, revealed
                 <span className={cn('font-semibold', partState.isCorrect ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300')}>
                   {partState.isCorrect ? '✓ Correct' : '✗ Incorrect'}
                 </span>
-                {!partState.isCorrect && partState.correctAnswer && (
-                  <span className="ml-2 text-slate-700 dark:text-slate-300">
-                    Answer: <Latex className="text-sm">{partState.correctAnswer}</Latex>
-                  </span>
-                )}
               </div>
             )}
           </div>
