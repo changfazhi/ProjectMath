@@ -93,3 +93,22 @@ export interface TopicProgress {
   correct: number;
   total: number;
 }
+
+export type ChatRole = 'user' | 'model';
+
+export interface ChatMessage {
+  id: string;
+  session_id: string;
+  question_id: string;
+  role: ChatRole;
+  content: string;
+  created_at: string;
+}
+
+// Chat message shape returned to client (no session_id/question_id needed)
+export type ChatMessagePublic = Pick<ChatMessage, 'id' | 'role' | 'content' | 'created_at'>;
+
+export interface ChatSendResponse {
+  reply: ChatMessagePublic;
+  history: ChatMessagePublic[];
+}

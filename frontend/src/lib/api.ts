@@ -1,5 +1,7 @@
 import type {
   Attempt,
+  ChatMessage,
+  ChatSendResponse,
   Difficulty,
   MathLevel,
   QuestionPublic,
@@ -99,5 +101,18 @@ export const api = {
       const params = new URLSearchParams({ session_id: sessionId })
       return request<StreakStats>(`/api/streaks?${params}`)
     },
+  },
+
+  chat: {
+    history: (sessionId: string, questionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId, question_id: questionId })
+      return request<ChatMessage[]>(`/api/chat?${params}`)
+    },
+
+    send: (sessionId: string, questionId: string, message: string) =>
+      request<ChatSendResponse>('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ session_id: sessionId, question_id: questionId, message }),
+      }),
   },
 }

@@ -43,7 +43,7 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
       const mf = elRef.current
       if (!mf) return
 
-      ;(mf as MathfieldElement & { mathVirtualKeyboardPolicy: string }).mathVirtualKeyboardPolicy = 'off'
+      ;(mf as unknown as { mathVirtualKeyboardPolicy: string }).mathVirtualKeyboardPolicy = 'off'
       ;(mf as MathfieldElement & { menuItems: unknown[] }).menuItems = []
 
       // Remove built-in "or" → \lor and "and" → \land shortcuts — they trigger

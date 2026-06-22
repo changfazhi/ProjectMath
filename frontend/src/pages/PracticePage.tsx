@@ -12,6 +12,8 @@ import { Spinner } from '../components/ui/Spinner'
 import { ErrorMessage } from '../components/ui/ErrorMessage'
 import { Button } from '../components/ui/Button'
 import { StreakNotification } from '../components/ui/StreakNotification'
+import { ChatPanel } from '../components/chat/ChatPanel'
+import { useChatSession } from '../hooks/useChatSession'
 import { api } from '../lib/api'
 import { cn, formatTime } from '../lib/utils'
 
@@ -52,6 +54,9 @@ export function PracticePage() {
   const [attemptsError, setAttemptsError] = useState<string | null>(null)
 
   const session = usePracticeSession(topicId ?? '', difficulty)
+
+  // One shared chat instance drives both the desktop side panel and the mobile Hints tab.
+  const chat = useChatSession(session.question?.id)
 
   // Reset to Question tab whenever the active question changes
   useEffect(() => {
@@ -104,7 +109,8 @@ export function PracticePage() {
     session.question != null
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col gap-6">
+    <div className="max-w-2xl lg:max-w-6xl mx-auto px-4 py-8 lg:flex lg:gap-6 lg:items-start">
+      <div className="flex flex-col gap-6 lg:flex-1 lg:min-w-0">
       <div className="flex items-center gap-3">
         <Link to="/" className="text-blue-600 hover:text-blue-700 text-sm">
           ← Topics
@@ -259,9 +265,9 @@ export function PracticePage() {
         </div>
       )}
 
-      {/* Hints tab — reserved for future use */}
+      {/* Hints tab — chat panel on mobile (desktop uses the side rail) */}
       {hasActiveQuestion && activeTab === 'hints' && (
-        <div />
+        <ChatPanel chat={chat} className="lg:hidden h-[28rem]" />
       )}
 
       {session.phase === 'complete' && (
@@ -290,6 +296,15 @@ export function PracticePage() {
         <StreakNotification
           streakCount={notification.streakCount}
           onClose={() => setNotification(n => ({ ...n, show: false }))}
+        />
+      )}
+      </div>
+
+      {/* Desktop side rail — chat beside the question (mobile uses the Hints tab) */}
+      {hasActiveQuestion && (
+        <ChatPanel
+          chat={chat}
+          className="hidden lg:flex w-96 shrink-0 sticky top-8 self-start max-h-[calc(100vh-4rem)]"
         />
       )}
     </div>
