@@ -121,7 +121,7 @@ export function MultiPartQuestion({ question, partStates, onSubmitPart, revealed
   const parts = question.parts ?? []
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col">
       {parts.map((part) => {
         const partState = partStates[part.label] ?? { phase: 'idle' as const }
         const isShowThat = part.answer_type === null
@@ -129,7 +129,7 @@ export function MultiPartQuestion({ question, partStates, onSubmitPart, revealed
         return (
           <div
             key={part.label}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 flex flex-col gap-3"
+            className="py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-3"
           >
             <div className="flex items-start gap-3">
               <span className="font-bold text-slate-700 dark:text-slate-300 text-base shrink-0">

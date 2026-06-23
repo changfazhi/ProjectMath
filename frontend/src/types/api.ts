@@ -24,7 +24,7 @@ export interface QuestionPublic {
   difficulty: Difficulty
   name: string | null
   prompt_latex: string
-  answer_type: AnswerType
+  answer_type: AnswerType | null
   tolerance: number | null
   mcq_options: string[] | null
   parts: QuestionPart[] | null
