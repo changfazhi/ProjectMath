@@ -10,6 +10,13 @@ interface Props {
 }
 
 export function AnswerInput({ question, onSubmit, disabled, loading }: Props) {
+  if (question.answer_type == null) {
+    return (
+      <span className="text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1 w-fit">
+        Show that — no submission required
+      </span>
+    )
+  }
   if (question.answer_type === 'range') {
     return (
       <RangeInput

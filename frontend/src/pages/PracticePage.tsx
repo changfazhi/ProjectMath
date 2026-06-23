@@ -3,6 +3,8 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { Attempt, Difficulty } from '../types/api'
 import { usePracticeSession } from '../hooks/usePracticeSession'
 import { QuestionCard } from '../components/question/QuestionCard'
+import { QuestionHeader } from '../components/question/QuestionHeader'
+import { Card } from '../components/ui/Card'
 import { AnswerInput } from '../components/question/AnswerInput'
 import { MultiPartQuestion } from '../components/question/MultiPartQuestion'
 import { SolutionReveal } from '../components/question/SolutionReveal'
@@ -190,10 +192,14 @@ export function PracticePage() {
       {/* Question tab */}
       {hasActiveQuestion && activeTab === 'question' && (
         <div className="flex flex-col gap-4">
-          <QuestionCard question={session.question!} />
-
           {session.question!.parts ? (
-            <>
+            <Card className="mb-4">
+              <QuestionHeader question={session.question!} />
+              {session.question!.prompt_latex && (
+                <div className="text-lg leading-relaxed text-slate-800 dark:text-slate-100 whitespace-pre-line">
+                  {renderLatex(session.question!.prompt_latex)}
+                </div>
+              )}
               {(session.phase === 'answering' || session.phase === 'revealed') && (
                 <MultiPartQuestion
                   question={session.question!}
@@ -203,11 +209,14 @@ export function PracticePage() {
                 />
               )}
               {session.phase === 'revealed' && session.result && (
-                <SolutionReveal result={session.result} onNext={session.nextQuestion} onRetry={session.retryQuestion} />
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <SolutionReveal result={session.result} onNext={session.nextQuestion} onRetry={session.retryQuestion} />
+                </div>
               )}
-            </>
+            </Card>
           ) : (
             <>
+              <QuestionCard question={session.question!} />
               {session.phase !== 'revealed' && (
                 <AnswerInput
                   question={session.question!}

@@ -33,6 +33,8 @@ function latexToMathExpr(normalized: string): string {
     .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)')
     .replace(/\\sqrt\{([^}]+)\}/g, 'sqrt($1)')
     .replace(/\\pi/g, 'pi')
+    .replace(/\\ln\b/g, 'log')    // mathjs log() = natural log
+    .replace(/\\log\b/g, 'log10') // \log = base-10 in SG H2
     .replace(/\\cdot/g, '*')
     .replace(/\\times/g, '*')
     .replace(/\\left[\(\[]/g, '(')
@@ -52,6 +54,45 @@ function tryNumericEval(raw: string): number | null {
   }
 }
 
+// Multi-point symbolic evaluation: substitute random values for variables and check
+// if both expressions agree. Handles commutativity and algebraic equivalences.
+function trySymbolicEval(given: string, correct: string): boolean {
+  const givenExpr = latexToMathExpr(normalizeLaTeX(given));
+  const correctExpr = latexToMathExpr(normalizeLaTeX(correct));
+
+  // Extract single-letter variables, skipping mathjs constants e and i
+  const varRe = /\b([a-df-hj-z])\b/g;
+  const vars = new Set([
+    ...[...givenExpr.matchAll(varRe)].map((m) => m[1]),
+    ...[...correctExpr.matchAll(varRe)].map((m) => m[1]),
+  ]);
+  if (vars.size === 0) return false;
+
+  const primes = [2, 3, 5, 7, 11, 13, 17, 19];
+  const scope1: Record<string, number> = {};
+  const scope2: Record<string, number> = {};
+  let idx = 0;
+  for (const v of vars) {
+    scope1[v] = primes[idx % primes.length];
+    scope2[v] = primes[(idx + 4) % primes.length];
+    idx++;
+  }
+
+  try {
+    const g1 = evaluate(givenExpr, scope1) as unknown;
+    const c1 = evaluate(correctExpr, scope1) as unknown;
+    if (typeof g1 !== 'number' || typeof c1 !== 'number' || !isFinite(g1) || !isFinite(c1)) return false;
+    if (Math.abs(g1 - c1) > 1e-9 * (Math.abs(c1) + 1)) return false;
+
+    const g2 = evaluate(givenExpr, scope2) as unknown;
+    const c2 = evaluate(correctExpr, scope2) as unknown;
+    if (typeof g2 !== 'number' || typeof c2 !== 'number' || !isFinite(g2) || !isFinite(c2)) return false;
+    return Math.abs(g2 - c2) <= 1e-9 * (Math.abs(c2) + 1);
+  } catch {
+    return false;
+  }
+}
+
 function checkAnswer(
   answerType: string,
   correctAnswer: string,
@@ -65,7 +106,7 @@ function checkAnswer(
       const given = tryNumericEval(givenAnswer);
       const correct = tryNumericEval(correctAnswer);
       if (given !== null && correct !== null) return Math.abs(given - correct) < 1e-9;
-      return false;
+      return trySymbolicEval(givenAnswer, correctAnswer);
     }
 
     case 'range': {
@@ -98,12 +139,17 @@ export async function submitAttempt(body: SubmitAttemptBody): Promise<SubmitAtte
     correctAnswer = part.correct_answer;
   } else {
     // Single-answer question
-    isCorrect = checkAnswer(
-      question.answer_type,
-      question.correct_answer,
-      body.answer_given,
-      question.tolerance,
-    );
+    if (!question.answer_type) {
+      // Show-that question: auto-correct, no grading needed
+      isCorrect = true;
+    } else {
+      isCorrect = checkAnswer(
+        question.answer_type,
+        question.correct_answer,
+        body.answer_given,
+        question.tolerance,
+      );
+    }
     correctAnswer = question.correct_answer;
   }
 
