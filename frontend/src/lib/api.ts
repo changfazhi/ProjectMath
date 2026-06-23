@@ -15,6 +15,7 @@ import type {
   StreakStats,
   SubmitAttemptResponse,
   Topic,
+  TopicAccuracy,
   TopicConcept,
   TopicProgress,
 } from '../types/api'
@@ -59,6 +60,11 @@ export const api = {
     progress: (sessionId: string) => {
       const params = new URLSearchParams({ session_id: sessionId })
       return request<TopicProgress[]>(`/api/topics/progress?${params}`)
+    },
+
+    accuracy: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<TopicAccuracy[]>(`/api/topics/accuracy?${params}`)
     },
   },
 
