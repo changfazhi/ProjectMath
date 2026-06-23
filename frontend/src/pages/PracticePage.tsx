@@ -7,6 +7,8 @@ import { QuestionHeader } from '../components/question/QuestionHeader'
 import { Card } from '../components/ui/Card'
 import { AnswerInput } from '../components/question/AnswerInput'
 import { MultiPartQuestion } from '../components/question/MultiPartQuestion'
+import { PhotoAnswer } from '../components/question/PhotoAnswer'
+import { GradingResult } from '../components/question/GradingResult'
 import { SolutionReveal } from '../components/question/SolutionReveal'
 import { StatsBar } from '../components/progress/StatsBar'
 import { Badge } from '../components/ui/Badge'
@@ -47,6 +49,7 @@ export function PracticePage() {
 
   const [difficulty, setDifficulty] = useState<Difficulty | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<Tab>('question')
+  const [inputMode, setInputMode] = useState<'photo' | 'type'>('photo')
   const [notification, setNotification] = useState<{ show: boolean; streakCount: number }>({
     show: false,
     streakCount: 0,
@@ -70,6 +73,7 @@ export function PracticePage() {
   // Reset to Question tab and clear cached tab data whenever the question changes
   useEffect(() => {
     setActiveTab('question')
+    setInputMode('photo')
     setSolutionLatex(null)
     setSolutionError(null)
   }, [session.question?.id])
@@ -190,48 +194,123 @@ export function PracticePage() {
       )}
 
       {/* Question tab */}
-      {hasActiveQuestion && activeTab === 'question' && (
-        <div className="flex flex-col gap-4">
-          {session.question!.parts ? (
-            <Card className="mb-4">
-              <QuestionHeader question={session.question!} />
-              {session.question!.prompt_latex && (
-                <div className="text-lg leading-relaxed text-slate-800 dark:text-slate-100 whitespace-pre-line">
-                  {renderLatex(session.question!.prompt_latex)}
+      {hasActiveQuestion && activeTab === 'question' && (() => {
+        const q = session.question!
+        const isMultiPart = q.parts != null
+        const answering = session.phase === 'answering'
+        const submitting = session.phase === 'submitted'
+        const revealed = session.phase === 'revealed'
+        // Typed-mode multi-part inputs render inside the prompt card during answering/revealed.
+        const showTypedMultiPart = isMultiPart && inputMode === 'type' && (answering || revealed)
+
+        return (
+          <div className="flex flex-col gap-4">
+            {/* Question prompt */}
+            {isMultiPart ? (
+              <Card className="mb-0">
+                <QuestionHeader question={q} />
+                {q.prompt_latex && (
+                  <div className="text-lg leading-relaxed text-slate-800 dark:text-slate-100 whitespace-pre-line">
+                    {renderLatex(q.prompt_latex)}
+                  </div>
+                )}
+                {/* Photo mode: list the parts read-only so the student knows what to attempt */}
+                {inputMode === 'photo' && q.parts && (
+                  <div className="mt-4 flex flex-col gap-3">
+                    {q.parts.map((p) => (
+                      <div key={p.label} className="text-base text-slate-700 dark:text-slate-300">
+                        <span className="font-semibold">({p.label}) </span>
+                        {renderLatex(p.prompt_latex)}
+                        {p.marks != null && (
+                          <span className="ml-2 text-sm text-slate-400">[{p.marks}]</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showTypedMultiPart && (
+                  <MultiPartQuestion
+                    question={q}
+                    partStates={session.partStates}
+                    onSubmitPart={session.submitPart}
+                    revealed={revealed}
+                  />
+                )}
+              </Card>
+            ) : (
+              <QuestionCard question={q} />
+            )}
+
+            {/* Answer area — photo grading is primary; "type instead" is the fallback */}
+            {(answering || submitting) && (
+              <Card>
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={() => setInputMode('photo')}
+                    disabled={submitting}
+                    className={cn(
+                      'px-3 py-1 text-sm rounded-lg border transition-colors',
+                      inputMode === 'photo'
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-blue-400',
+                    )}
+                  >
+                    📷 Photo
+                  </button>
+                  <button
+                    onClick={() => setInputMode('type')}
+                    disabled={submitting}
+                    className={cn(
+                      'px-3 py-1 text-sm rounded-lg border transition-colors',
+                      inputMode === 'type'
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-blue-400',
+                    )}
+                  >
+                    ⌨ Type instead
+                  </button>
                 </div>
-              )}
-              {(session.phase === 'answering' || session.phase === 'revealed') && (
-                <MultiPartQuestion
-                  question={session.question!}
-                  partStates={session.partStates}
-                  onSubmitPart={session.submitPart}
-                  revealed={session.phase === 'revealed'}
-                />
-              )}
-              {session.phase === 'revealed' && session.result && (
-                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-                  <SolutionReveal result={session.result} onNext={session.nextQuestion} onRetry={session.retryQuestion} />
-                </div>
-              )}
-            </Card>
-          ) : (
-            <>
-              <QuestionCard question={session.question!} />
-              {session.phase !== 'revealed' && (
-                <AnswerInput
-                  question={session.question!}
-                  onSubmit={session.submitAnswer}
-                  disabled={session.phase === 'submitted'}
-                  loading={session.phase === 'submitted'}
-                />
-              )}
-              {session.phase === 'revealed' && session.result && (
-                <SolutionReveal result={session.result} onNext={session.nextQuestion} onRetry={session.retryQuestion} />
-              )}
-            </>
-          )}
-        </div>
-      )}
+
+                {inputMode === 'photo' ? (
+                  <PhotoAnswer
+                    onSubmit={session.submitPhotos}
+                    disabled={submitting}
+                    loading={submitting}
+                  />
+                ) : (
+                  // Multi-part typed inputs live in the prompt card above; single-part here.
+                  !isMultiPart && (
+                    <AnswerInput
+                      question={q}
+                      onSubmit={session.submitAnswer}
+                      disabled={submitting}
+                      loading={submitting}
+                    />
+                  )
+                )}
+              </Card>
+            )}
+
+            {/* Revealed — AI grade (photo) + verdict / solution reveal */}
+            {revealed && (
+              <Card>
+                {session.gradingResult && (
+                  <div className="mb-4">
+                    <GradingResult grading={session.gradingResult} />
+                  </div>
+                )}
+                {session.result && (
+                  <SolutionReveal
+                    result={session.result}
+                    onNext={session.nextQuestion}
+                    onRetry={session.retryQuestion}
+                  />
+                )}
+              </Card>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Attempts tab */}
       {hasActiveQuestion && activeTab === 'attempts' && (

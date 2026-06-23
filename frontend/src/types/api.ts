@@ -8,6 +8,7 @@ export interface QuestionPart {
   prompt_latex: string
   answer_type: AnswerType | null
   tolerance: number | null
+  marks?: number | null
 }
 
 export interface Topic {
@@ -117,4 +118,47 @@ export interface ChatMessage {
 export interface ChatSendResponse {
   reply: ChatMessage
   history: ChatMessage[]
+}
+
+// ── Photo-based AI grading ──────────────────────────────────────────────
+
+export type GradingVerdict = 'correct' | 'partial' | 'incorrect'
+
+export interface GradingError {
+  step: string
+  description: string
+}
+
+export interface GradingPartResult {
+  label: string
+  verdict: GradingVerdict
+  marks_awarded: number
+  marks_total: number
+  errors: GradingError[]
+  hints: string[]
+  summary: string
+}
+
+export interface GradeResponse {
+  grading_id: string
+  parts: GradingPartResult[]
+  marks_awarded: number
+  marks_total: number
+  is_correct: boolean
+  overall_feedback: string | null
+  solution_latex: string
+  created_at: string
+}
+
+export interface Grading {
+  id: string
+  session_id: string
+  question_id: string
+  image_paths: string[]
+  marks_awarded: number
+  marks_total: number
+  is_correct: boolean
+  parts: GradingPartResult[]
+  overall_feedback: string | null
+  created_at: string
 }

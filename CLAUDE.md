@@ -26,6 +26,8 @@ Run in order in the Supabase SQL Editor:
 9. `009_asrjc_parts_data.sql` — per-part data for all ASRJC multi-part questions
 10. `010_dhs_prelim_2025.sql` — 22 DHS H2 Math Prelim 2025 questions (Papers 1 & 2)
 11. `011_chat_messages.sql` — `chat_messages` table (AI hint chatbot history)
+12. `012_fix_dhs_preamble.sql` — DHS preamble fix
+13. `013_solution_gradings.sql` — `gradings` table + `solution-uploads` Storage bucket (photo AI grading)
 
 **After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
 
@@ -66,6 +68,8 @@ Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). 
 | GET | `/api/streaks?session_id=UUID` | Streak stats + daily activity heatmap data |
 | GET | `/api/chat?session_id=UUID&question_id=UUID` | AI hint chat history for a question |
 | POST | `/api/chat` | Send a message → Socratic hint `{ reply, history }` (Gemini proxy, IP rate-limited) |
+| GET | `/api/grade?session_id=UUID&question_id=UUID` | Past photo gradings for a question |
+| POST | `/api/grade` | **multipart/form-data** (`images[]`, `session_id`, `question_id`, `time_taken_s?`) → AI grade of handwritten solution (Gemini vision, IP rate-limited) |
 
 `POST /api/attempts` body: `{ session_id, question_id, answer_given, part_label?, time_taken_s? }`. Include `part_label` for multi-part questions. `solution_latex` in the response is `null` until all graded parts of the question are submitted.
 
@@ -94,6 +98,32 @@ A Socratic tutor that gives progressive hints (never the final answer) for the q
 - **Rate limiting:** `express-rate-limit` (IP-keyed, `CHAT_RATE_LIMIT_PER_MIN`, default 15/min) on `POST /api/chat` is the primary bill defence; `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40) is a second per-question cap → `ChatLimitError` → HTTP 429.
 - **History:** persisted in `chat_messages` (keyed by `session_id` + `question_id`); `GET /api/chat` rehydrates. `correct_answer`/`solution_latex` are **never** returned to the client.
 - **Frontend:** `useChatSession` hook (optimistic send, rolls back on error) + `ChatPanel.tsx`. On `PracticePage` one shared chat instance renders as a sticky right rail on `lg` screens and inside the existing **Hints tab** on mobile (`hidden lg:flex` / `lg:hidden`). Model replies render through `renderLatex()`.
+
+## Photo-Based AI Grading
+
+Students photograph their **handwritten** solution; Gemini grades it against the stored model
+solution (it is an *examiner*, not a solver). Primary answer flow on `PracticePage` (typed/MathLive
+input remains as a "Type instead" fallback toggle).
+
+- **Pipeline:** `routes/grade.ts` → `services/gradingService.ts` → Gemini via `db/gemini.ts`.
+  Images arrive as `multipart/form-data` (`multer` memoryStorage), are uploaded to the private
+  `solution-uploads` Supabase Storage bucket, then sent to Gemini as base64 `inlineData` parts.
+- **Structured output:** `responseSchema` (JSON mode) forces a per-part shape:
+  `{ label, verdict, marks_awarded, marks_total, errors[{step,description}], hints[], summary }` +
+  `overall_feedback`. Parsing is deterministic.
+- **Grading rules** live in `buildGradingInstruction()`: credit valid alternative methods; for
+  sketches require labelled intercepts + asymptote equations + stationary points + correct shape;
+  for "hence" parts verify earlier results are used; auto-detect which part each photo covers; pin
+  every error to the precise step. The confidential `solution_latex` is injected for reference only.
+- **Persistence:** one row per submission in `gradings` (image paths + structured feedback) — the
+  data source for a future "mistake log" (`WHERE is_correct = false`). One `attempts` row is also
+  written per graded part (correct = full marks) so streaks/progress/roadmap ✓ keep working.
+- **Rate limiting:** `GRADE_RATE_LIMIT_PER_MIN` (default 5, lower than chat — vision is costlier),
+  `GRADE_MAX_IMAGES` (5), `GRADE_MAX_IMAGE_MB` (8).
+- **Frontend:** `PhotoAnswer.tsx` (camera/file upload + previews) → `session.submitPhotos()` in
+  `usePracticeSession` → `GradingResult.tsx` renders the marked feedback. `api.grade.*` in
+  `lib/api.ts` (uses `requestFormData`, no `Content-Type` header). Per-part `marks` is now an
+  optional field on the `parts` JSONB (AI infers when absent).
 
 ## Frontend Architecture
 
@@ -133,9 +163,9 @@ Quick reference for `answer_type`:
 
 ## Status
 
-**Built:** Full backend + frontend, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC Prelim 2025 + 22 DHS Prelim 2025 questions (Papers 1 & 2 each) across 18 topics, streak system with daily heatmap (/stats), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question).
+**Built:** Full backend + frontend, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC Prelim 2025 + 22 DHS Prelim 2025 questions (Papers 1 & 2 each) across 18 topics, streak system with daily heatmap (/stats), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow).
 
-**Not built:** Auth, timed mock mode, admin question editor.
+**Not built:** Auth, timed mock mode, admin question editor, "mistake log" page (data already captured in `gradings`).
 
 ## Common Pitfalls
 
@@ -152,3 +182,5 @@ Quick reference for `answer_type`:
 | Solution not revealing after last part | Run migration 008 — `part_label` column missing from attempts |
 | Backend crashes: `Missing GEMINI_API_KEY` | Add `GEMINI_API_KEY` to `backend/.env` (see `.env.example`) |
 | Chat returns `permission denied for table chat_messages` | Run migration 011 incl. its `GRANT ALL` |
+| Grading returns `permission denied for table gradings` | Run migration 013 incl. its `GRANT ALL` |
+| Grading: `Bucket not found` / upload fails | Run migration 013 (creates the `solution-uploads` bucket) |

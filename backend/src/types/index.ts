@@ -9,6 +9,7 @@ export interface QuestionPart {
   correct_answer: string | null;
   answer_type: AnswerType | null;
   tolerance: number | null;
+  marks?: number | null;
 }
 
 export type QuestionPartPublic = Omit<QuestionPart, 'correct_answer'>;
@@ -111,4 +112,65 @@ export type ChatMessagePublic = Pick<ChatMessage, 'id' | 'role' | 'content' | 'c
 export interface ChatSendResponse {
   reply: ChatMessagePublic;
   history: ChatMessagePublic[];
+}
+
+// ── Photo-based AI grading ──────────────────────────────────────────────
+
+export type GradingVerdict = 'correct' | 'partial' | 'incorrect';
+
+export interface GradingError {
+  step: string;        // where the mistake happened, e.g. "Line 3, integration by parts"
+  description: string; // what went wrong
+}
+
+export interface GradingPartResult {
+  label: string;       // detected part label, or "whole" for single-part questions
+  verdict: GradingVerdict;
+  marks_awarded: number;
+  marks_total: number;
+  errors: GradingError[];
+  hints: string[];
+  summary: string;
+}
+
+// Structured grade returned by Gemini (before totals/persistence are computed).
+export interface GradingAiOutput {
+  parts: GradingPartResult[];
+  overall_feedback: string;
+}
+
+export interface Grading {
+  id: string;
+  session_id: string;
+  question_id: string;
+  image_paths: string[];
+  marks_awarded: number;
+  marks_total: number;
+  is_correct: boolean;
+  parts: GradingPartResult[];
+  overall_feedback: string | null;
+  created_at: string;
+}
+
+export interface GradeImage {
+  mimeType: string;
+  buffer: Buffer;
+}
+
+export interface GradeSolutionParams {
+  session_id: string;
+  question_id: string;
+  images: GradeImage[];
+  time_taken_s?: number;
+}
+
+export interface GradeResponse {
+  grading_id: string;
+  parts: GradingPartResult[];
+  marks_awarded: number;
+  marks_total: number;
+  is_correct: boolean;
+  overall_feedback: string | null;
+  solution_latex: string;
+  created_at: string;
 }
