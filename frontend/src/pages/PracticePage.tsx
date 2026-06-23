@@ -16,6 +16,8 @@ import { Spinner } from '../components/ui/Spinner'
 import { ErrorMessage } from '../components/ui/ErrorMessage'
 import { Button } from '../components/ui/Button'
 import { StreakNotification } from '../components/ui/StreakNotification'
+import { QrPairModal } from '../components/pair/QrPairModal'
+import { usePairSocket } from '../hooks/usePairSocket'
 import { ChatPanel } from '../components/chat/ChatPanel'
 import { useChatSession } from '../hooks/useChatSession'
 import { api } from '../lib/api'
@@ -69,6 +71,35 @@ export function PracticePage() {
 
   // One shared chat instance drives both the desktop side panel and the mobile Hints tab.
   const chat = useChatSession(session.question?.id)
+
+  // "Upload via phone" QR pairing — desktop only.
+  const [pair, setPair] = useState<{ token: string; mobilePath: string } | null>(null)
+  const [pairError, setPairError] = useState<string | null>(null)
+  const pairSocket = usePairSocket(pair?.token ?? null, {
+    onGradingStart: session.beginExternalGrading,
+    onGraded: (grading) => {
+      session.receiveGrading(grading)
+      setPair(null)
+    },
+    onGradingError: session.rejectExternalGrading,
+  })
+
+  async function startPhonePairing() {
+    if (!session.question) return
+    setPairError(null)
+    try {
+      const res = await api.pair.create(session.sessionId, session.question.id)
+      setPair({ token: res.token, mobilePath: res.mobile_path })
+    } catch (e) {
+      setPairError((e as Error).message)
+    }
+  }
+
+  // Close the QR modal whenever the question changes.
+  useEffect(() => {
+    setPair(null)
+    setPairError(null)
+  }, [session.question?.id])
 
   // Reset to Question tab and clear cached tab data whenever the question changes
   useEffect(() => {
@@ -272,11 +303,26 @@ export function PracticePage() {
                 </div>
 
                 {inputMode === 'photo' ? (
-                  <PhotoAnswer
-                    onSubmit={session.submitPhotos}
-                    disabled={submitting}
-                    loading={submitting}
-                  />
+                  <div className="flex flex-col gap-4">
+                    {session.gradingError && (
+                      <div className="rounded-xl p-3 bg-amber-50 dark:bg-amber-900/25 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300">
+                        {session.gradingError}
+                      </div>
+                    )}
+                    <PhotoAnswer
+                      onSubmit={session.submitPhotos}
+                      disabled={submitting}
+                      loading={submitting}
+                    />
+                    {/* No camera on this device? Pair a phone to snap photos straight onto the screen */}
+                    <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                      <span className="text-sm text-slate-500 dark:text-slate-400">On a computer?</span>
+                      <Button variant="secondary" size="sm" onClick={startPhonePairing} disabled={submitting}>
+                        📱 Upload via phone
+                      </Button>
+                      {pairError && <span className="text-sm text-red-500">{pairError}</span>}
+                    </div>
+                  </div>
                 ) : (
                   // Multi-part typed inputs live in the prompt card above; single-part here.
                   !isMultiPart && (
@@ -438,6 +484,10 @@ export function PracticePage() {
           streakCount={notification.streakCount}
           onClose={() => setNotification(n => ({ ...n, show: false }))}
         />
+      )}
+
+      {pair && (
+        <QrPairModal mobilePath={pair.mobilePath} pair={pairSocket} onClose={() => setPair(null)} />
       )}
       </div>
 

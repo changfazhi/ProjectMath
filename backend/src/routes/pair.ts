@@ -1,0 +1,138 @@
+import { Router } from 'express';
+import multer from 'multer';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import { addImage, closePair, createPair, getValidPair, PairError } from '../services/pairService.js';
+import { gradeSolution, GradingError } from '../services/gradingService.js';
+import { getQuestionById } from '../services/questionService.js';
+import { emitToPair } from '../realtime.js';
+import type { CreatePairResponse, PairContext } from '../types/index.js';
+
+const router = Router();
+
+const MAX_IMAGE_MB = Number(process.env.GRADE_MAX_IMAGE_MB ?? 8);
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMAGE_MB * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error(`Unsupported file type: ${file.mimetype}`));
+  },
+});
+
+const pairLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: Number(process.env.PAIR_RATE_LIMIT_PER_MIN ?? 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests — slow down a moment.' },
+});
+
+const createSchema = z.object({
+  session_id: z.string().uuid(),
+  question_id: z.string().uuid(),
+});
+
+// POST /api/pair — desktop starts a pairing, gets a token to encode in the QR.
+router.post('/', pairLimiter, async (req, res) => {
+  try {
+    const { session_id, question_id } = createSchema.parse(req.body);
+    const pair = createPair(session_id, question_id);
+    const body: CreatePairResponse = {
+      token: pair.token,
+      mobile_path: `/m/${pair.token}`,
+      expires_at: pair.expires_at,
+    };
+    res.status(201).json(body);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid request body', details: err.issues });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/pair/:token — mobile page loads its (secret-free) context; notifies the desktop.
+router.get('/:token', pairLimiter, async (req, res) => {
+  const pair = getValidPair(req.params.token);
+  if (!pair) {
+    res.status(404).json({ valid: false, error: 'This link has expired.' });
+    return;
+  }
+  try {
+    const question = await getQuestionById(pair.question_id);
+    const body: PairContext = {
+      valid: true,
+      question_id: pair.question_id,
+      question_name: question?.name ?? null,
+    };
+    emitToPair(pair.token, 'pair:phone-connected');
+    res.json(body);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/pair/:token/photo — mobile sends one photo; it streams live to the desktop.
+router.post('/:token/photo', pairLimiter, upload.single('image'), async (req, res) => {
+  try {
+    const pair = getValidPair(req.params.token);
+    if (!pair) throw new PairError('This link has expired. Please scan a fresh QR code.', 404);
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No photo received.' });
+      return;
+    }
+    const count = addImage(pair.token, { mimeType: file.mimetype, buffer: file.buffer });
+    const dataUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    emitToPair(pair.token, 'pair:image', { index: count - 1, dataUrl });
+    res.status(201).json({ count });
+  } catch (err) {
+    if (err instanceof PairError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && /file too large|unsupported file type/i.test(err.message)) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/pair/:token/done — mobile finishes; grade all collected photos, push result to desktop.
+router.post('/:token/done', pairLimiter, async (req, res) => {
+  const pair = getValidPair(req.params.token);
+  if (!pair) {
+    res.status(404).json({ error: 'This link has expired. Please scan a fresh QR code.' });
+    return;
+  }
+  if (pair.images.length === 0) {
+    res.status(400).json({ error: 'Take at least one photo before finishing.' });
+    return;
+  }
+
+  // Respond to the phone immediately; grading streams to the desktop over the socket.
+  res.status(202).json({ ok: true });
+
+  emitToPair(pair.token, 'pair:grading');
+  try {
+    const grading = await gradeSolution({
+      session_id: pair.session_id,
+      question_id: pair.question_id,
+      images: pair.images,
+    });
+    emitToPair(pair.token, 'pair:graded', { grading });
+  } catch (err) {
+    const message =
+      err instanceof GradingError ? err.message : 'Grading failed — please try again on your computer.';
+    emitToPair(pair.token, 'pair:error', { message });
+  } finally {
+    closePair(pair.token);
+  }
+});
+
+export default router;

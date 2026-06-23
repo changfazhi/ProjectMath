@@ -139,6 +139,11 @@ export interface GradingPartResult {
   summary: string
 }
 
+export interface GradingIgnoredImage {
+  index: number
+  reason: string
+}
+
 export interface GradeResponse {
   grading_id: string
   parts: GradingPartResult[]
@@ -146,6 +151,7 @@ export interface GradeResponse {
   marks_total: number
   is_correct: boolean
   overall_feedback: string | null
+  ignored_images: GradingIgnoredImage[]
   solution_latex: string
   created_at: string
 }
@@ -161,4 +167,18 @@ export interface Grading {
   parts: GradingPartResult[]
   overall_feedback: string | null
   created_at: string
+}
+
+// ── "Upload via phone" QR pairing ───────────────────────────────────────
+
+export interface CreatePairResponse {
+  token: string
+  mobile_path: string
+  expires_at: number
+}
+
+export interface PairContext {
+  valid: boolean
+  question_id: string
+  question_name: string | null
 }

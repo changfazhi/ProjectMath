@@ -16,6 +16,7 @@ interface PracticeState {
   question: QuestionPublic | null
   result: SubmitAttemptResponse | null
   gradingResult: GradeResponse | null
+  gradingError: string | null
   partStates: Record<string, PartState>
   error: string | null
   sessionCorrect: number
@@ -32,6 +33,7 @@ type Action =
   | { type: 'SUBMIT_SUCCESS'; result: SubmitAttemptResponse }
   | { type: 'GRADE_START' }
   | { type: 'GRADE_SUCCESS'; grading: GradeResponse }
+  | { type: 'GRADE_REJECTED'; message: string }
   | { type: 'PART_SUBMIT_START'; partLabel: string }
   | { type: 'PART_SUBMIT_DONE'; partLabel: string; isCorrect: boolean; correctAnswer: string; solutionLatex: string | null }
   | { type: 'ERROR'; message: string }
@@ -41,7 +43,7 @@ type Action =
 function reducer(state: PracticeState, action: Action): PracticeState {
   switch (action.type) {
     case 'LOAD_START':
-      return { ...state, phase: 'loading', question: null, result: null, gradingResult: null, partStates: {}, error: null }
+      return { ...state, phase: 'loading', question: null, result: null, gradingResult: null, gradingError: null, partStates: {}, error: null }
 
     case 'LOAD_SUCCESS': {
       const partStates: Record<string, PartState> = {}
@@ -72,7 +74,11 @@ function reducer(state: PracticeState, action: Action): PracticeState {
     }
 
     case 'GRADE_START':
-      return { ...state, phase: 'submitted' }
+      return { ...state, phase: 'submitted', gradingError: null }
+
+    case 'GRADE_REJECTED':
+      // Soft, non-penalising error — keep the student on the question to retake the photo.
+      return { ...state, phase: 'answering', gradingError: action.message }
 
     case 'GRADE_SUCCESS': {
       const correct = action.grading.is_correct
@@ -155,6 +161,7 @@ function reducer(state: PracticeState, action: Action): PracticeState {
         phase: 'answering',
         result: null,
         gradingResult: null,
+        gradingError: null,
         partStates: retryPartStates,
         questionStartTime: Date.now(),
       }
@@ -170,6 +177,7 @@ const initialState: PracticeState = {
   question: null,
   result: null,
   gradingResult: null,
+  gradingError: null,
   partStates: {},
   error: null,
   sessionCorrect: 0,
@@ -275,11 +283,27 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         const grading = await api.grade.submit(sessionId, state.question.id, images, timeTaken)
         dispatch({ type: 'GRADE_SUCCESS', grading })
       } catch (err) {
-        dispatch({ type: 'ERROR', message: (err as Error).message })
+        // Photo failures (irrelevant/blank photo, transient errors) are recoverable — keep the
+        // student on the question to retake rather than dropping to the global error screen.
+        dispatch({ type: 'GRADE_REJECTED', message: (err as Error).message })
       }
     },
     [state.question, state.questionStartTime, sessionId],
   )
+
+  // Grading driven by an external channel (the "upload via phone" socket flow). These reuse
+  // the same actions as a local photo upload so the result lands in the same `revealed` state.
+  const beginExternalGrading = useCallback(() => {
+    dispatch({ type: 'GRADE_START' })
+  }, [])
+
+  const receiveGrading = useCallback((grading: GradeResponse) => {
+    dispatch({ type: 'GRADE_SUCCESS', grading })
+  }, [])
+
+  const rejectExternalGrading = useCallback((message: string) => {
+    dispatch({ type: 'GRADE_REJECTED', message })
+  }, [])
 
   const nextQuestion = useCallback(() => {
     loadNext()
@@ -302,6 +326,9 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     submitAnswer,
     submitPart,
     submitPhotos,
+    beginExternalGrading,
+    receiveGrading,
+    rejectExternalGrading,
     nextQuestion,
     retryQuestion,
     reset,

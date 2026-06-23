@@ -2,10 +2,12 @@ import type {
   Attempt,
   ChatMessage,
   ChatSendResponse,
+  CreatePairResponse,
   Difficulty,
   Grading,
   GradeResponse,
   MathLevel,
+  PairContext,
   QuestionPublic,
   QuestionWithStatus,
   StarredQuestionRow,
@@ -150,5 +152,24 @@ export const api = {
       const params = new URLSearchParams({ session_id: sessionId, question_id: questionId })
       return request<Grading[]>(`/api/grade?${params}`)
     },
+  },
+
+  pair: {
+    create: (sessionId: string, questionId: string) =>
+      request<CreatePairResponse>('/api/pair', {
+        method: 'POST',
+        body: JSON.stringify({ session_id: sessionId, question_id: questionId }),
+      }),
+
+    context: (token: string) => request<PairContext>(`/api/pair/${token}`),
+
+    uploadPhoto: (token: string, image: File) => {
+      const fd = new FormData()
+      fd.append('image', image)
+      return requestFormData<{ count: number }>(`/api/pair/${token}/photo`, fd)
+    },
+
+    done: (token: string) =>
+      request<{ ok: boolean }>(`/api/pair/${token}/done`, { method: 'POST' }),
   },
 }

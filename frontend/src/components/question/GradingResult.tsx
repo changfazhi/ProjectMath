@@ -91,6 +91,12 @@ export function GradingResult({ grading }: { grading: GradeResponse }) {
         )}
       </div>
 
+      {grading.ignored_images.length > 0 && (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Ignored {grading.ignored_images.map((g) => `Photo ${g.index} (${g.reason})`).join(', ')}.
+        </p>
+      )}
+
       <div className="flex flex-col gap-3">
         {grading.parts.map((p) => (
           <PartCard key={p.label} part={p} />
