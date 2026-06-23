@@ -6,6 +6,7 @@ import { PracticePage } from './pages/PracticePage'
 import { HistoryPage } from './pages/HistoryPage'
 import { StatsPage } from './pages/StatsPage'
 import { StarredPage } from './pages/StarredPage'
+import { MobileUploadPage } from './pages/MobileUploadPage'
 
 function RootLayout() {
   return (
@@ -19,6 +20,8 @@ function RootLayout() {
 }
 
 const router = createBrowserRouter([
+  // Lightweight phone upload page — standalone, no header/nav chrome.
+  { path: '/m/:token', element: <MobileUploadPage /> },
   {
     path: '/',
     element: <RootLayout />,

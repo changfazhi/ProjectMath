@@ -2,8 +2,12 @@ import type {
   Attempt,
   ChatMessage,
   ChatSendResponse,
+  CreatePairResponse,
   Difficulty,
+  Grading,
+  GradeResponse,
   MathLevel,
+  PairContext,
   QuestionPublic,
   QuestionWithStatus,
   StarredQuestionRow,
@@ -20,6 +24,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...init,
   })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<T>
+}
+
+// For multipart uploads — no Content-Type header so the browser sets the boundary.
+async function requestFormData<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(path, { method: 'POST', body: formData })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -117,5 +131,45 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ session_id: sessionId, question_id: questionId, message }),
       }),
+  },
+
+  grade: {
+    submit: (
+      sessionId: string,
+      questionId: string,
+      images: File[],
+      timeTakenS?: number,
+    ) => {
+      const fd = new FormData()
+      fd.append('session_id', sessionId)
+      fd.append('question_id', questionId)
+      if (timeTakenS !== undefined) fd.append('time_taken_s', String(timeTakenS))
+      for (const img of images) fd.append('images', img)
+      return requestFormData<GradeResponse>('/api/grade', fd)
+    },
+
+    history: (sessionId: string, questionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId, question_id: questionId })
+      return request<Grading[]>(`/api/grade?${params}`)
+    },
+  },
+
+  pair: {
+    create: (sessionId: string, questionId: string) =>
+      request<CreatePairResponse>('/api/pair', {
+        method: 'POST',
+        body: JSON.stringify({ session_id: sessionId, question_id: questionId }),
+      }),
+
+    context: (token: string) => request<PairContext>(`/api/pair/${token}`),
+
+    uploadPhoto: (token: string, image: File) => {
+      const fd = new FormData()
+      fd.append('image', image)
+      return requestFormData<{ count: number }>(`/api/pair/${token}/photo`, fd)
+    },
+
+    done: (token: string) =>
+      request<{ ok: boolean }>(`/api/pair/${token}/done`, { method: 'POST' }),
   },
 }

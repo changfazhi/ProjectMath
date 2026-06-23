@@ -9,7 +9,9 @@ cd backend && npm run dev      # port 3001, tsx watch
 cd frontend && npm run dev     # port 5173, Vite — proxies /api/* → 3001
 ```
 
-`backend/.env` (copy from `.env.example`): set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. For the AI hint chatbot also set `GEMINI_API_KEY` (optionally `GEMINI_MODEL`, `CHAT_RATE_LIMIT_PER_MIN`, `CHAT_MAX_MESSAGES_PER_QUESTION`). Never commit; never expose to the browser.
+`backend/.env` (copy from `.env.example`): set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. For the AI hint chatbot + photo grading also set `GEMINI_API_KEY` (optionally `GEMINI_MODEL`, `CHAT_RATE_LIMIT_PER_MIN`, `CHAT_MAX_MESSAGES_PER_QUESTION`, `GRADE_RATE_LIMIT_PER_MIN`, `GRADE_MAX_IMAGES`, `GRADE_MAX_IMAGE_MB`, `PAIR_TTL_MIN`, `PAIR_RATE_LIMIT_PER_MIN`). Never commit; never expose to the browser.
+
+For the **"upload via phone"** QR flow, open the desktop app via the machine's **LAN IP** (e.g. `http://192.168.x.x:5173`), not `localhost`, so the QR is reachable from the phone (Vite runs with `server.host: true`).
 
 ## Database Setup
 
@@ -26,6 +28,8 @@ Run in order in the Supabase SQL Editor:
 9. `009_asrjc_parts_data.sql` — per-part data for all ASRJC multi-part questions
 10. `010_dhs_prelim_2025.sql` — 22 DHS H2 Math Prelim 2025 questions (Papers 1 & 2)
 11. `011_chat_messages.sql` — `chat_messages` table (AI hint chatbot history)
+12. `012_fix_dhs_preamble.sql` — DHS preamble fix
+13. `013_solution_gradings.sql` — `gradings` table + `solution-uploads` Storage bucket (photo AI grading)
 
 **After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
 
@@ -66,6 +70,12 @@ Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). 
 | GET | `/api/streaks?session_id=UUID` | Streak stats + daily activity heatmap data |
 | GET | `/api/chat?session_id=UUID&question_id=UUID` | AI hint chat history for a question |
 | POST | `/api/chat` | Send a message → Socratic hint `{ reply, history }` (Gemini proxy, IP rate-limited) |
+| GET | `/api/grade?session_id=UUID&question_id=UUID` | Past photo gradings for a question |
+| POST | `/api/grade` | **multipart/form-data** (`images[]`, `session_id`, `question_id`, `time_taken_s?`) → AI grade of handwritten solution (Gemini vision, IP rate-limited) |
+| POST | `/api/pair` | Create a phone-upload pairing → `{ token, mobile_path, expires_at }` |
+| GET | `/api/pair/:token` | Mobile page context (secret-free); fires `pair:phone-connected` |
+| POST | `/api/pair/:token/photo` | **multipart** single `image` → streams to desktop via `pair:image` |
+| POST | `/api/pair/:token/done` | Grade collected photos → `pair:grading`/`pair:graded`/`pair:error` |
 
 `POST /api/attempts` body: `{ session_id, question_id, answer_given, part_label?, time_taken_s? }`. Include `part_label` for multi-part questions. `solution_latex` in the response is `null` until all graded parts of the question are submitted.
 
@@ -94,6 +104,25 @@ A Socratic tutor that gives progressive hints (never the final answer) for the q
 - **Rate limiting:** `express-rate-limit` (IP-keyed, `CHAT_RATE_LIMIT_PER_MIN`, default 15/min) on `POST /api/chat` is the primary bill defence; `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40) is a second per-question cap → `ChatLimitError` → HTTP 429.
 - **History:** persisted in `chat_messages` (keyed by `session_id` + `question_id`); `GET /api/chat` rehydrates. `correct_answer`/`solution_latex` are **never** returned to the client.
 - **Frontend:** `useChatSession` hook (optimistic send, rolls back on error) + `ChatPanel.tsx`. On `PracticePage` one shared chat instance renders as a sticky right rail on `lg` screens and inside the existing **Hints tab** on mobile (`hidden lg:flex` / `lg:hidden`). Model replies render through `renderLatex()`.
+
+## Photo-Based AI Grading
+
+Students photograph **handwritten** working; Gemini grades it against the stored model solution (it is an *examiner*, not a solver). Primary answer flow on `PracticePage`; typed/MathLive input remains a "Type instead" fallback.
+
+- **Pipeline:** `routes/grade.ts` → `services/gradingService.ts` → Gemini (`db/gemini.ts`). Images arrive as `multipart/form-data` (`multer`), sent to Gemini as base64 `inlineData`, and uploaded to the private `solution-uploads` bucket **only after** grading succeeds.
+- **Structured output** (`responseSchema`, deterministic): `{ gradable, rejection_reason, ignored_images[{index,reason}], parts[{label, verdict, marks_awarded, marks_total, errors[{step,description}], hints[], summary}], overall_feedback }`.
+- **Grading rules** (`buildGradingInstruction()`): credit valid alternative methods; sketches need labelled intercepts + asymptote equations + stationary points + correct shape; "hence" parts must use earlier results; auto-detect which part each photo covers; pin every error to the step. Confidential `solution_latex` injected for reference only.
+- **Junk filtering (STEP 0):** photos are numbered (`Photo N:`); blanks/objects/unrelated photos go in `ignored_images`. If nothing relevant remains → `gradable=false` → `GradingError` (HTTP 400 / `pair:error`) with no stored image, `gradings` row, or attempt. Frontend shows a soft `GRADE_REJECTED` (stay on the question to retake), not the global error screen.
+- **Persistence:** one `gradings` row per submission (images + feedback; future "mistake log" via `WHERE is_correct=false`) + one `attempts` row per graded part (correct = full marks) so streaks/progress/roadmap ✓ keep working.
+- **Limits/UI:** `GRADE_RATE_LIMIT_PER_MIN` (5), `GRADE_MAX_IMAGES` (5), `GRADE_MAX_IMAGE_MB` (8). `PhotoAnswer.tsx` → `session.submitPhotos()` → `GradingResult.tsx`; `api.grade.*` uses `requestFormData`. Per-part `marks` is an optional `parts` JSONB field (AI infers when absent).
+
+## Upload via Phone (QR pairing + Socket.IO)
+
+Desktops have no camera: "📱 Upload via phone" shows a QR; the phone opens `/m/:token`, snaps photos that stream live to the desktop over Socket.IO, and **Done** grades them via the same `gradeSolution()`.
+
+- **Backend:** `realtime.ts` (Socket.IO on the `http.Server`; desktops `pair:subscribe` to a token room; `emitToPair()`). `services/pairService.ts` = in-memory `Map` of capability tokens (`crypto.randomBytes(32).base64url`, `PAIR_TTL_MIN` default 10). `routes/pair.ts`: `POST /api/pair`, `GET /api/pair/:token` (+`pair:phone-connected`), `POST /api/pair/:token/photo` (→`pair:image`), `POST /api/pair/:token/done` (→`pair:grading`→`gradeSolution`→`pair:graded`|`pair:error`). Auth = possession of the unguessable token.
+- **Frontend:** `lib/socket.ts` (same-origin `io()`), `usePairSocket` (forwards events into `usePracticeSession` via `beginExternalGrading`/`receiveGrading`/`rejectExternalGrading`), `QrPairModal.tsx` (QR = `origin + mobile_path`), `MobileUploadPage.tsx` at top-level route `/m/:token` (outside `RootLayout`). `api.pair.*`.
+- **Dev:** Vite needs `server.host: true` + `/socket.io` ws proxy; open the desktop via the machine's **LAN IP** (not `localhost`) so the QR is phone-reachable.
 
 ## Frontend Architecture
 
@@ -133,9 +162,9 @@ Quick reference for `answer_type`:
 
 ## Status
 
-**Built:** Full backend + frontend, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC Prelim 2025 + 22 DHS Prelim 2025 questions (Papers 1 & 2 each) across 18 topics, streak system with daily heatmap (/stats), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question).
+**Built:** Full backend + frontend, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC Prelim 2025 + 22 DHS Prelim 2025 questions (Papers 1 & 2 each) across 18 topics, streak system with daily heatmap (/stats), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow, ignores irrelevant/blank photos), "upload via phone" QR pairing with live Socket.IO photo transfer.
 
-**Not built:** Auth, timed mock mode, admin question editor.
+**Not built:** Auth, timed mock mode, admin question editor, "mistake log" page (data already captured in `gradings`).
 
 ## Common Pitfalls
 
@@ -152,3 +181,7 @@ Quick reference for `answer_type`:
 | Solution not revealing after last part | Run migration 008 — `part_label` column missing from attempts |
 | Backend crashes: `Missing GEMINI_API_KEY` | Add `GEMINI_API_KEY` to `backend/.env` (see `.env.example`) |
 | Chat returns `permission denied for table chat_messages` | Run migration 011 incl. its `GRANT ALL` |
+| Grading returns `permission denied for table gradings` | Run migration 013 incl. its `GRANT ALL` |
+| Grading: `Bucket not found` / upload fails | Run migration 013 (creates the `solution-uploads` bucket) |
+| QR code opens but phone can't reach it | Open the desktop via the machine's LAN IP, not `localhost` (Vite `server.host: true`) |
+| Phone photos don't appear on desktop | `/socket.io` ws proxy missing from `vite.config.ts`, or backend not on `http.Server`+Socket.IO |
