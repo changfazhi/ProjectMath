@@ -285,5 +285,7 @@ GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
 | `\\` in `\begin{cases}` not working | Need `\\\\` in JSON for a LaTeX `\\` |
 | Part answer not grading | Check `answer_type` is set (not null) and `correct_answer` is non-null |
 | Solution not revealing after last part | `part_label` column may be missing — run schema migration first |
+| Marks shown twice in the UI, e.g. `[2] [2]` | The mark count belongs **only** in the part's `prompt_latex` as `\\([N]\\)`. Do **not** also add a `"marks": N` field to the part — the frontend renders both. Omit `marks` entirely (house style; matches ASRJC/DHS). |
+| `null value in column "answer_type" violates not-null constraint` | Question-level `answer_type` is `NOT NULL`. For an ungraded single-task question, wrap it as a multi-part question with **one `null` part** and give the question row a non-null fallback (`'exact', ''`). Only **per-part** `answer_type` may be `null`. |
 | MathLive outputs `\frac34` not `\frac{3}{4}` | `normalizeLaTeX()` in `attemptService.ts` handles this expansion automatically |
 | "no questions found" error | Topic UUID may be wrong — check `CLAUDE.md` for the full mapping |
