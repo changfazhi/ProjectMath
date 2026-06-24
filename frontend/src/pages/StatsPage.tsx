@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { getSessionId } from '../lib/session'
 import { Spinner } from '../components/ui/Spinner'
+import { AccuracyTable } from '../components/topic/AccuracyTable'
 import type { DailyActivity, StreakStats } from '../types/api'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -227,6 +228,9 @@ export function StatsPage() {
           </div>
         </div>
       )}
+
+      {/* Accuracy by topic */}
+      <AccuracyTable />
     </div>
   )
 }

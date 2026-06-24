@@ -95,6 +95,15 @@ export interface TopicProgress {
   total: number;
 }
 
+export interface TopicAccuracy {
+  topic_id: string;
+  topic_name: string;
+  questions_solved: number;
+  questions_total: number;
+  correct_attempts: number;
+  total_attempts: number;
+}
+
 export type ChatRole = 'user' | 'model';
 
 export interface ChatMessage {
