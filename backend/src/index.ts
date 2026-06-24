@@ -11,6 +11,7 @@ import streaksRouter from './routes/streaks.js';
 import chatRouter from './routes/chat.js';
 import gradeRouter from './routes/grade.js';
 import pairRouter from './routes/pair.js';
+import reviewRouter from './routes/review.js';
 import { initRealtime } from './realtime.js';
 
 const app = express();
@@ -36,6 +37,7 @@ app.use('/api/streaks', streaksRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/grade', gradeRouter);
 app.use('/api/pair', pairRouter);
+app.use('/api/review', reviewRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });

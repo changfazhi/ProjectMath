@@ -6,6 +6,7 @@ import { PracticePage } from './pages/PracticePage'
 import { HistoryPage } from './pages/HistoryPage'
 import { StatsPage } from './pages/StatsPage'
 import { StarredPage } from './pages/StarredPage'
+import { ReviewPage } from './pages/ReviewPage'
 import { MobileUploadPage } from './pages/MobileUploadPage'
 
 function RootLayout() {
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: 'history', element: <HistoryPage /> },
       { path: 'stats', element: <StatsPage /> },
       { path: 'starred', element: <StarredPage /> },
+      { path: 'review', element: <ReviewPage /> },
     ],
   },
 ])
