@@ -10,6 +10,7 @@ import type {
   PairContext,
   QuestionPublic,
   QuestionWithStatus,
+  ReviewItem,
   StarredQuestionRow,
   StarToggleResponse,
   StreakStats,
@@ -177,5 +178,29 @@ export const api = {
 
     done: (token: string) =>
       request<{ ok: boolean }>(`/api/pair/${token}/done`, { method: 'POST' }),
+  },
+
+  review: {
+    corrections: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<{ items: ReviewItem[] }>(`/api/review/corrections?${params}`)
+    },
+
+    weakTopics: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<{ items: ReviewItem[] }>(`/api/review/weak-topics?${params}`)
+    },
+
+    speedDrills: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<{ items: ReviewItem[] }>(`/api/review/speed-drills?${params}`)
+    },
+
+    spaced: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<{ items: ReviewItem[] }>(`/api/review/spaced?${params}`)
+    },
+
+    random: () => request<{ items: ReviewItem[] }>('/api/review/random'),
   },
 }

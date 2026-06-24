@@ -191,3 +191,12 @@ export interface PairContext {
   question_id: string
   question_name: string | null
 }
+
+// ── Spaced-repetition review queue ──────────────────────────────────────────
+
+export type ReviewMode = 'corrections' | 'weak-topics' | 'speed-drills' | 'spaced' | 'random'
+
+export interface ReviewItem {
+  question_id: string
+  topic_id: string
+}
