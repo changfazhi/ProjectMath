@@ -30,6 +30,9 @@ Run in order in the Supabase SQL Editor:
 11. `011_chat_messages.sql` — `chat_messages` table (AI hint chatbot history)
 12. `012_fix_dhs_preamble.sql` — DHS preamble fix
 13. `013_solution_gradings.sql` — `gradings` table + `solution-uploads` Storage bucket (photo AI grading)
+14. `014_hci_prelim_2025.sql` — 23 HCI H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–13, Paper 2 Q1–10)
+15. `015_acjc_prelim_2025.sql` — 24 ACJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–12, Paper 2 Q1–12)
+16. `016_cjc_prelim_2025.sql` — 22 CJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–11, Paper 2 Q1–11)
 
 **After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
 
@@ -49,7 +52,7 @@ Run in order in the Supabase SQL Editor:
 | aaaa0008 | Vector (Basic) | | aaaa0017 | Parametric Equations |
 | aaaa0009 | Vector (Lines) | | aaaa0018 | Differential Equations |
 
-Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). ASRJC questions: `cafe00NN-...` (Paper 1), `cafe10NN-...` (Paper 2). DHS questions: `d025000N-...` (Paper 1), `d025100N-...` (Paper 2).
+Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). ASRJC questions: `cafe00NN-...` (Paper 1), `cafe10NN-...` (Paper 2). DHS questions: `d025000N-...` (Paper 1), `d025100N-...` (Paper 2). HCI questions: `c025000N-...` (Paper 1), `c025100N-...` (Paper 2). ACJC questions: `a025000N-...` (Paper 1), `a025100N-...` (Paper 2). CJC questions: `b025000N-...` (Paper 1), `b025100N-...` (Paper 2).
 
 ## API Endpoints
 
@@ -162,7 +165,7 @@ Quick reference for `answer_type`:
 
 ## Status
 
-**Built:** Full backend + frontend, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC Prelim 2025 + 22 DHS Prelim 2025 questions (Papers 1 & 2 each) across 18 topics, streak system with daily heatmap (/stats), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow, ignores irrelevant/blank photos), "upload via phone" QR pairing with live Socket.IO photo transfer.
+**Built:** Full backend + frontend, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC + 22 DHS + 23 HCI + 24 ACJC + 22 CJC Prelim 2025 questions (Papers 1 & 2 each), streak system with daily heatmap (/stats), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow, ignores irrelevant/blank photos), "upload via phone" QR pairing with live Socket.IO photo transfer.
 
 **Not built:** Auth, timed mock mode, admin question editor, "mistake log" page (data already captured in `gradings`).
 
@@ -179,6 +182,7 @@ Quick reference for `answer_type`:
 | `syntax error at or near "\"` in Supabase | Unescaped `'` in SQL — use `$$...$$` dollar-quoting instead |
 | Part answer not grading | `answer_type` must be non-null and `correct_answer` non-null on the part |
 | Solution not revealing after last part | Run migration 008 — `part_label` column missing from attempts |
+| `null value in column "answer_type" violates not-null constraint` | The **question-level** `answer_type` column is `NOT NULL`. For an ungraded single-task question, do **not** insert it as a no-parts row with `answer_type = null`. Instead wrap it as a multi-part question with **one `null` part** (the ask) and give the question row a non-null fallback `'exact', ''` (parts override it). Only the per-part `answer_type` may be `null`. |
 | Backend crashes: `Missing GEMINI_API_KEY` | Add `GEMINI_API_KEY` to `backend/.env` (see `.env.example`) |
 | Chat returns `permission denied for table chat_messages` | Run migration 011 incl. its `GRANT ALL` |
 | Grading returns `permission denied for table gradings` | Run migration 013 incl. its `GRANT ALL` |
