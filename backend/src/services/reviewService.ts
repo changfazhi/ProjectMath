@@ -1,4 +1,5 @@
 import { supabase } from '../db/supabase.js';
+import { getSpacedDueItems } from './spacedRepetitionService.js';
 
 export interface ReviewItem {
   question_id: string;
@@ -110,47 +111,9 @@ export async function getSpeedDrillItems(sessionId: string): Promise<ReviewItem[
     .map(id => ({ question_id: id, topic_id: qMap.get(id)! }));
 }
 
-// Questions due for review via a Leitner-style spaced repetition schedule.
-// Box = number of correct attempts; interval[box] days since last correct.
+// Questions due for review per Wozniak SM-2 schedule (see spacedRepetitionService.ts).
 export async function getSpacedItems(sessionId: string): Promise<ReviewItem[]> {
-  const [attemptsRes, qMap] = await Promise.all([
-    supabase
-      .from('attempts')
-      .select('question_id, attempted_at')
-      .eq('session_id', sessionId)
-      .eq('is_correct', true)
-      .order('attempted_at', { ascending: true }),
-    fetchQuestionMap(),
-  ]);
-  if (attemptsRes.error) throw new Error(attemptsRes.error.message);
-
-  const now = Date.now();
-  const stats = new Map<string, { lastCorrect: number; count: number }>();
-
-  for (const a of (attemptsRes.data ?? [])) {
-    const t = new Date(a.attempted_at as string).getTime();
-    const existing = stats.get(a.question_id as string);
-    if (!existing) {
-      stats.set(a.question_id as string, { lastCorrect: t, count: 1 });
-    } else {
-      existing.lastCorrect = t; // ascending order → last entry is most recent
-      existing.count++;
-    }
-  }
-
-  const dueIds = [...stats.entries()]
-    .filter(([_, s]) => {
-      const boxIndex = Math.min(s.count - 1, INTERVALS_DAYS.length - 1);
-      const intervalMs = INTERVALS_DAYS[boxIndex]! * MS_PER_DAY;
-      return s.lastCorrect + intervalMs <= now;
-    })
-    .map(([id]) => id);
-
-  if (dueIds.length === 0) return [];
-
-  return dueIds
-    .filter(id => qMap.has(id))
-    .map(id => ({ question_id: id, topic_id: qMap.get(id)! }));
+  return getSpacedDueItems(sessionId);
 }
 
 // All questions — no session context needed.

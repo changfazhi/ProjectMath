@@ -200,3 +200,34 @@ export interface ReviewItem {
   question_id: string
   topic_id: string
 }
+
+// ── Weakness Diagnostic ──────────────────────────────────────────────────────
+
+export interface TopicDiagnosis {
+  topic_id: string
+  topic_name: string
+  accuracy: number
+  questions_attempted: number
+  strength_level: 'strong' | 'moderate' | 'weak'
+  ai_insight: string
+}
+
+export interface DiagnosisResult {
+  weak_topics: TopicDiagnosis[]
+  moderate_topics: TopicDiagnosis[]
+  strong_topics: TopicDiagnosis[]
+  overall_summary: string
+  generated_at: string
+}
+
+export interface StudyPlanItem {
+  question_id: string
+  topic_id: string
+  topic_name: string
+  question_name: string | null
+}
+
+export interface StudyPlanResponse {
+  items: StudyPlanItem[]
+  reasoning: string
+}

@@ -63,6 +63,76 @@ The `http.Server` wrapper (not `app.listen`) is required so Socket.IO can attach
 
 **Routing:** `frontend/src/App.tsx` defines a `createBrowserRouter` tree. `RootLayout` wraps all main routes with `<Header>`; `/m/:token` (`MobileUploadPage`) is standalone with no chrome.
 
+## Component Responsibilities
+
+| Component | Responsibility | File |
+|-----------|----------------|------|
+| **Pages** | Route handlers; fetch data via hooks; compose layouts | `src/pages/*.tsx` |
+| **Hooks** | State machines, data fetching, cancellation, caching | `src/hooks/*.ts` |
+| **Components (UI)** | Reusable button, card, spinner, badge, modal | `src/components/ui/` |
+| **Components (Topic)** | Roadmap, drawer, question table, concepts | `src/components/topic/` |
+| **Components (Question)** | Input types, multi-part, photo, grading result | `src/components/question/` |
+| **Components (Math)** | LaTeX rendering (inline/block), MathLive editor, keyboard | `src/components/math/` |
+| **Components (Chat)** | AI hint chatbot panel; message history | `src/components/chat/` |
+| **Components (Progress)** | Stats bar (streak, session counts), attempt history | `src/components/progress/` |
+| **Components (Pair)** | QR modal for phone pairing; mobile upload page | `src/components/pair/` |
+| **API Layer** | Fetch wrapper with auth; grouped by domain (topics, questions, attempts, etc.) | `src/lib/api.ts` |
+| **Socket** | Singleton Socket.IO connection for real-time pairing | `src/lib/socket.ts` |
+| **LaTeX Renderer** | Parse mixed text+math; dispatch to Latex/LatexBlock | `src/lib/renderLatex.tsx` |
+| **Auth Context** | Firebase auth state; login/upgrade modals; tier | `src/contexts/AuthContext.tsx` |
+| **Theme Context** | Light/dark mode toggle; read from localStorage | `src/contexts/ThemeContext.tsx` |
+
+## Pattern Overview
+
+**Overall:** Modern React SPA with reducer-based state machines, hook-driven data fetching, Firebase Auth identity, and real-time Socket.IO for phone pairing.
+
+**Key Characteristics:**
+- **Firebase Auth** — Google + email login; ID tokens verified server-side; user identity from `req.user.uid`
+- **Feature gating** — `gate(feature)` middleware on backend; `useFeature(feature)` hook on frontend
+- **No global state manager** — local component state + contexts (auth, theme) only
+- **Reducer state machines** — complex UI flows (practice session) use `useReducer` with typed actions
+- **Optimistic UI** — chat messages roll back on error; stars flip locally then sync
+- **Cancellation-aware** — hooks track `cancelled` flag to prevent state leaks after unmount
+- **Separation of concerns** — API calls isolated in `lib/api.ts`, never called from routes directly
+- **Strict TypeScript** — no `any`; types mirror backend API models
+
+## Layers
+
+**Page Layer:**
+- Purpose: Route handlers; map URL params to hook calls; compose layouts
+- Location: `src/pages/`
+- Contains: HomePage, PracticePage, HistoryPage, StarredPage, StatsPage, ReviewPage, MobileUploadPage
+- Depends on: Hooks, components, API types
+- Used by: React Router
+
+**Hook Layer (State + Data):**
+- Purpose: Encapsulate state machines, data fetching, side-effect logic
+- Location: `src/hooks/`
+- Contains: `usePracticeSession` (reducer + methods), `useTopics`, `useChatSession`, `usePairSocket`, `useFeature`, etc.
+- Depends on: `lib/api.ts`, `lib/socket.ts`, `contexts/AuthContext`, types
+- Used by: Pages, components
+
+**Component Layer (UI):**
+- Purpose: Render UI; accept props; dispatch events to parents
+- Location: `src/components/` (organized by domain: ui, topic, question, math, chat, progress, pair, layout)
+- Contains: Buttons, cards, spinners, math editors, question cards, topic roadmaps, login modal, upgrade modal, etc.
+- Depends on: Types, utils (cn, formatTime), renderLatex
+- Used by: Pages, other components
+
+**Library Layer (Utilities):**
+- Purpose: Centralized cross-cutting concerns
+- Location: `src/lib/`
+- Contains: API wrapper with auth (`api.ts`), socket singleton (`socket.ts`), LaTeX renderer (`renderLatex.tsx`), Tailwind utilities (`utils.ts`)
+- Depends on: External (fetch, socket.io-client, katex, firebase)
+- Used by: All layers
+
+**Context Layer:**
+- Purpose: Global UI and auth state
+- Location: `src/contexts/`
+- Contains: AuthContext (Firebase state, tier, modals), ThemeContext (light/dark)
+- Depends on: React, Firebase SDK
+- Used by: Root App, hooks
+
 ## Practice State Machine
 
 Managed by `useReducer` in `frontend/src/hooks/usePracticeSession.ts`.
@@ -88,12 +158,97 @@ loading  (cycle repeats)
 
 **Multi-part questions:** each part has its own `PartState` (`idle → submitting → done`). The overall phase transitions to `revealed` only when `solution_latex` is returned by the server (i.e., all graded parts have been submitted).
 
+## Data Flow
+
+### Primary Request Path (Practice Session)
+
+1. **Load question** (`PracticePage` mount or click)
+   - Calls `session.loadNext()` or `session.loadSpecific(id)` from `usePracticeSession`
+   - Invokes `api.questions.next()` or `api.questions.get()` — Bearer token attached by `api.ts`
+   - Backend returns `QuestionPublic` (LaTeX prompt, answer type, parts if multi-part)
+
+2. **Submit answer (typed)**
+   - Calls `api.attempts.submit({ question_id, answer_given, time_taken_s })` with Bearer token
+   - Backend (`gate('practice')`) verifies token → grades against `question.correct_answer`
+   - Returns `{ is_correct, correct_answer, solution_latex }` → session moves to `revealed`
+
+3. **Submit photo (handwritten)**
+   - Calls `api.grade.submit(questionId, images[], timeTakenS)` with Bearer token
+   - Backend (`gate('photoGrading')`) returns structured grading; persists to `gradings` + `attempts` tables
+   - On junk photo (`gradable=false`) → `GRADE_REJECTED` → student stays in `answering` to retake
+
+4. **Multi-part flow**
+   - Each part submits individually; overall phase transitions to `revealed` when `solution_latex` is returned (all graded parts done)
+
+### Secondary Flow: Phone Upload Pairing
+
+1. Desktop calls `api.pair.create(questionId)` with Bearer token → gets `{ token, mobile_path }`; subscribes to socket room
+2. Phone opens `/m/:token`, snaps photos via `api.pair.uploadPhoto()` — desktop sees live preview via `pair:image`
+3. Phone hits "Done" → backend grades via `gradeSolution()` → emits `pair:graded` → desktop transitions to `revealed`
+
+### Secondary Flow: AI Hint Chat
+
+1. User opens Hints tab → `api.chat.history(questionId)` with Bearer token rehydrates messages from `chat_messages`
+2. User sends message → `api.chat.send(questionId, text)` → backend (`gate('aiHints')`) calls Gemini → returns `{ reply, history }`
+3. Optimistic send with rollback on error; history persisted per Firebase UID + question_id
+
+## State Management
+
+- **Auth state:** `AuthContext` (Firebase UID, tier, `onAuthStateChanged` listener)
+- **Practice session:** Reducer-based state machine with explicit `PracticePhase` states
+- **Topics/questions:** Simple useState with loading/error (via `useTopics`, `useTopicQuestions`)
+- **Chat messages:** useState + optimistic updates with rollback
+- **Stars:** Optimistic flip locally; sync to server asynchronously
+- **Theme:** Context + localStorage
+
+## Key Abstractions
+
+**Practice State Machine:**
+- Purpose: Orchestrate complex question-answering flow (load → answer → submit → reveal → navigate)
+- Location: `src/hooks/usePracticeSession.ts`
+- Pattern: `useReducer` with typed discriminated unions for actions; phase-driven UI logic in pages/components
+
+**API Client:**
+- Purpose: Single entry point for all backend communication; attaches Firebase Bearer token; type-safe request/response
+- Location: `src/lib/api.ts` → grouped by domain (topics, questions, attempts, stars, chat, grade, pair, review)
+- Pattern: Namespace objects with methods that return `request<T>()` or `requestFormData<T>()`
+
+**Custom Hooks:**
+- Purpose: Isolate data fetching, caching, and error handling
+- Examples: `useTopics()`, `useChatSession()`, `usePairSocket()`, `useAttemptHistory()`
+- Pattern: useState for data/loading/error; useEffect for fetch; cleanup with `cancelled` flag
+
+**Auth Context:**
+- Purpose: Firebase auth state; login/upgrade modals; tier-based feature gating on frontend
+- Location: `src/contexts/AuthContext.tsx`
+- Pattern: `onAuthStateChanged` listener; `useAuth()` hook for consumers; `openLoginModal()` called from `api.ts` on 401
+
+## Entry Points
+
+**App Root:** `src/main.tsx` → `createRoot()` → `src/App.tsx` — bootstraps React, sets up router, auth context, and theme context.
+
+**Router:** `src/App.tsx` → `createBrowserRouter()`. Routes: `/` (HomePage), `/practice/:topicId` (PracticePage), `/m/:token` (MobileUploadPage, standalone), `/history`, `/starred`, `/stats`, `/review`.
+
+**HTTP API:** `src/lib/api.ts` → `request()` / `requestFormData()`. Bearer token from `auth.currentUser?.getIdToken()` attached to every request. Backend target: `http://localhost:3001/api/*` (dev via Vite proxy).
+
+**Socket.IO:** `src/lib/socket.ts` → `getSocket()` singleton. Events: `pair:subscribe`, `pair:phone-connected`, `pair:image`, `pair:grading`, `pair:graded`, `pair:error`.
+
+## Architectural Constraints
+
+- **Auth:** Firebase ID tokens (JWTs) verified server-side by `requireAuth` middleware; guest access allowed on public GET routes only
+- **Routing:** React Router SPA; no server-side rendering
+- **Global state:** Only Auth context, Theme context, and socket.io-client singleton; no Redux/Zustand/Recoil
+- **API calls:** Always via `lib/api.ts` wrapper; never direct `fetch()` from components or pages
+- **Component state:** Local `useState` or reducer; never prop drilling beyond 1–2 levels
+- **Async safety:** All fetch hooks track `cancelled` flag to prevent state updates after unmount
+- **Circular imports:** None detected; module dependency graph is acyclic
+
 ## AI Hint Chatbot Flow
 
 ```
 PracticePage → ChatPanel → useChatSession
   → api.chat.send()
-  → POST /api/chat  (routes/chat.ts)
+  → POST /api/chat  (routes/chat.ts, gate('aiHints'))
   → chatService.sendMessage()   (services/chatService.ts)
       buildSystemInstruction()  — injects question + solution_latex (server-only)
   → Gemini API  (db/gemini.ts, gemini-2.5-flash)
@@ -101,13 +256,13 @@ PracticePage → ChatPanel → useChatSession
   → return { reply, history }
 ```
 
-Rate-limited by `express-rate-limit` (IP-keyed). Protected by `gate('aiHints')` — requires login; tier can be raised to `'paid'` in `featureTiers.ts` when subscription is introduced. History rehydrated on page load via `GET /api/chat`. `correct_answer` and `solution_latex` are never returned to the browser.
+Rate-limited by `express-rate-limit` (IP-keyed). Protected by `gate('aiHints')` — requires login; tier can be raised to `'paid'` in `featureTiers.ts` when subscription is introduced. `correct_answer` and `solution_latex` are never returned to the browser.
 
 ## Photo Grading Pipeline
 
 ```
 PhotoAnswer.tsx → usePracticeSession.submitPhotos()
-  → api.grade.submit()  (multipart/form-data)
+  → api.grade.submit()  (multipart/form-data, gate('photoGrading'))
   → POST /api/grade  (routes/grade.ts, multer)
   → gradingService.gradeSolution()  (services/gradingService.ts)
       buildGradingInstruction()  — injects solution_latex (confidential)
@@ -142,12 +297,6 @@ Desktop: usePairSocket receives events → calls into usePracticeSession:
 
 Auth = possession of the unguessable 32-byte base64url token. Token TTL default 10 minutes (in-memory `Map` in `pairService.ts`).
 
-## Error Handling
-
-**Backend:** services throw typed errors (e.g., `GradingError`, `ChatLimitError`); routes catch and map to HTTP status codes. Zod parse failures return 400.
-
-**Frontend:** `api.ts` throws `Error` with the server's `error` field as the message. Hooks dispatch `ERROR` action → `error` phase → `<ErrorMessage>` component. Photo grading uses the softer `GRADE_REJECTED` path to avoid dropping to the error screen.
-
 ## Feature Gating
 
 All feature-to-tier assignments live in `backend/src/config/featureTiers.ts`:
@@ -167,6 +316,12 @@ The frontend `useFeature(feature)` hook mirrors this config for UX gating (hidin
 
 ---
 
+## Error Handling
+
+**Backend:** services throw typed errors (e.g., `GradingError`, `ChatLimitError`); routes catch and map to HTTP status codes. Zod parse failures return 400. Auth failures return 401 (missing/invalid token) or 402 (insufficient tier).
+
+**Frontend:** `api.ts` throws `Error` with the server's `error` field as the message. 401 responses open the login modal; 402 responses open the upgrade modal. Photo grading uses the softer `GRADE_REJECTED` path to avoid dropping to the error screen.
+
 ## Anti-Patterns
 
 ### Calling Supabase from a route
@@ -179,6 +334,16 @@ The frontend `useFeature(feature)` hook mirrors this config for UX gating (hidin
 **Why it's wrong:** `loadNext()` fetches a random unanswered question; under StrictMode double-invoke it may return different questions.
 **Do this instead:** use `loadSpecific(id)` for all drawer clicks and `?question_id=` param reads.
 
+### Direct backend calls from components
+**What happens:** A component calls `fetch()` directly instead of using `api.ts` or a hook.
+**Why it's wrong:** bypasses Bearer token injection and centralised error handling; may leak after unmount.
+**Do this instead:** create a hook in `src/hooks/` that calls `api.*`, or add a new domain to `src/lib/api.ts`.
+
+### Prop drilling state
+**What happens:** Passing state through 3+ intermediate components to reach the leaf that needs it.
+**Why it's wrong:** components become tightly coupled; renders cascade unnecessarily.
+**Do this instead:** lift state to a custom hook and call it directly from the leaf, or use Context for global UI state (auth, theme).
+
 ---
 
-*Architecture analysis: 2026-06-26 — updated 2026-06-26 to reflect Firebase Auth + feature gating*
+*Architecture analysis: 2026-06-26 — updated 2026-06-26 to reflect Firebase Auth + feature gating; merged with frontend architecture detail from main*
