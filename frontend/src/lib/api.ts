@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   ChatSendResponse,
   CreatePairResponse,
+  DiagnosisResult,
   Difficulty,
   Grading,
   GradeResponse,
@@ -14,6 +15,7 @@ import type {
   StarredQuestionRow,
   StarToggleResponse,
   StreakStats,
+  StudyPlanResponse,
   SubmitAttemptResponse,
   Topic,
   TopicAccuracy,
@@ -202,5 +204,15 @@ export const api = {
     },
 
     random: () => request<{ items: ReviewItem[] }>('/api/review/random'),
+
+    diagnosis: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<DiagnosisResult>(`/api/review/diagnosis?${params}`)
+    },
+
+    studyPlan: (sessionId: string) => {
+      const params = new URLSearchParams({ session_id: sessionId })
+      return request<StudyPlanResponse>(`/api/review/study-plan?${params}`)
+    },
   },
 }

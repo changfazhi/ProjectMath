@@ -1,6 +1,7 @@
 import { evaluate } from 'mathjs';
 import { supabase } from '../db/supabase.js';
 import { getQuestionWithSolution } from './questionService.js';
+import { upsertSRCard } from './spacedRepetitionService.js';
 import type { Attempt, QuestionPart, SubmitAttemptBody, SubmitAttemptResponse } from '../types/index.js';
 
 function normalizeLaTeX(s: string): string {
@@ -189,6 +190,14 @@ export async function submitAttempt(body: SubmitAttemptBody): Promise<SubmitAtte
     const submittedLabels = new Set((existingAttempts ?? []).map((a: { part_label: string }) => a.part_label));
     const allDone = [...gradedLabels].every((lbl) => submittedLabels.has(lbl));
     if (allDone) solutionLatex = question.solution_latex;
+  }
+
+  // Update SM-2 spaced-repetition card when the question is complete (solution revealed).
+  // Fire-and-forget — never blocks the attempt response.
+  if (solutionLatex !== null) {
+    upsertSRCard(body.session_id, body.question_id, question.topic_id, isCorrect).catch(() => {
+      // Non-critical; SR state will self-correct on next attempt.
+    });
   }
 
   return {
