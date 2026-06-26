@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gdrive": {
+      "command": "mcp-server-gdrive",
+      "args": [],
+      "env": {
+        "GDRIVE_OAUTH_PATH": "C:\\Users\\ngjie\\projects\\.gdrive-credentials.json",
+        "GDRIVE_CREDENTIALS_PATH": "C:\\Users\\ngjie\\projects\\.gdrive-token.json"
+      }
+    }
+  }
+}
