@@ -20,35 +20,55 @@
 ## Backend Patterns
 
 ### Route Responsibility
-Routes are thin wrappers — validate input, call one service function, return JSON. No business logic in routes.
+Routes are thin wrappers — apply auth middleware, validate input, call one service function, return JSON. No business logic in routes.
 
 ```typescript
 // Correct — backend/src/routes/attempts.ts
-router.post('/', async (req, res) => {
-  const body = submitSchema.parse(req.body);   // validate
-  const result = await submitAttempt(body);    // delegate
-  res.status(201).json(result);                // respond
+router.post('/', ...gate('practice'), async (req, res) => {
+  const body = submitSchema.parse(req.body);          // validate (no session_id)
+  const result = await submitAttempt(req.user!.uid, body);  // delegate with uid
+  res.status(201).json(result);                       // respond
 });
 ```
 
 ### Zod Validation
 Every `req.body` and `req.query` parameter is validated with Zod before use. Inline schemas for query params; named schemas for request bodies.
 
+`session_id` is **not** validated from request input — user identity comes from `req.user!.uid` set by `requireAuth` middleware after verifying the Firebase token.
+
 ```typescript
-// Body schema (named)
+// Body schema (named) — no session_id
 const submitSchema = z.object({
-  session_id: z.string().uuid(),
   question_id: z.string().uuid(),
   answer_given: z.string().min(1),
   time_taken_s: z.number().int().positive().optional(),
 });
 const body = submitSchema.parse(req.body);
 
-// Query param (inline)
-const sessionId = z.string().uuid().parse(req.query.session_id);
+// Query param (inline) — no session_id
+const questionId = z.string().uuid().parse(req.query.question_id);
 ```
 
 ZodError catches return HTTP 400 with `{ error, details }`. Other errors return HTTP 500.
+
+### Authentication & Feature Gating
+
+**`requireAuth`** (`backend/src/middleware/auth.ts`): verifies the Firebase ID token from the `Authorization: Bearer <token>` header, upserts the user row via atomic `INSERT ... ON CONFLICT DO UPDATE`, and sets `req.user = { uid: UUID, tier: 'free' | 'paid' }`. Returns 401 if the token is missing or invalid.
+
+**`gate(feature)`** (`backend/src/middleware/auth.ts`): composes `requireAuth` with a tier check against `FEATURE_TIERS[feature]` from `backend/src/config/featureTiers.ts`. Returns 402 if the user's tier is insufficient.
+
+```typescript
+// Use gate() on every route that requires identity
+router.post('/', ...gate('practice'), handler)   // free tier
+router.post('/', ...gate('aiHints'), handler)    // currently free, can flip to 'paid'
+
+// Public routes (no auth)
+router.get('/', handler)
+```
+
+**`FEATURE_TIERS`** (`backend/src/config/featureTiers.ts`): the single source of truth for which tier each feature requires. Changing a feature from free to paid is a one-line edit here — no route changes needed.
+
+**Frontend:** `useFeature(feature)` in `frontend/src/hooks/useFeature.ts` mirrors `FEATURE_TIERS` for UX gating only (show/hide buttons, show upgrade prompt). It is not a security boundary. Backend `gate()` is always the enforcement layer; `api.ts` handles 402 responses by opening the upgrade modal as a safety net.
 
 ### Database Access
 Never call `supabase` from a route file. All Supabase queries live in `backend/src/services/*.ts`.
@@ -152,4 +172,4 @@ The **question-level** `answer_type` column is `NOT NULL`. For a show-that singl
 
 ---
 
-*Convention analysis: 2026-06-26*
+*Convention analysis: 2026-06-26 — updated 2026-06-26 to reflect Firebase Auth middleware pattern and removal of session_id from request schemas*

@@ -9,12 +9,21 @@
 ┌──────────────────────────────────────────────────────────────┐
 │                    React SPA (Vite, port 5173)               │
 │  pages/  hooks/  components/  lib/api.ts  lib/socket.ts      │
-└────────────────────┬─────────────────────────────────────────┘
-                     │ HTTP /api/*  (proxied by Vite in dev)
-                     │ WebSocket /socket.io
-                     ▼
+│  contexts/AuthContext.tsx  hooks/useFeature.ts               │
+└──────────┬─────────────────────────┬────────────────────────┘
+           │ HTTP /api/*             │ Auth (login/token)
+           │ WebSocket /socket.io    │
+           │                         ▼
+           │               ┌─────────────────────┐
+           │               │  Firebase Auth       │
+           │               │  (Google + Email)    │
+           │               │  ID token → client   │
+           │               └─────────────────────┘
+           │ Bearer token in Authorization header
+           ▼
 ┌──────────────────────────────────────────────────────────────┐
 │             Express + Socket.IO (Node, port 3001)            │
+│   middleware/auth.ts (verifyIdToken, upsert user)            │
 │   routes/  (thin)  →  services/  (logic)  →  db/  (clients) │
 └──────────┬───────────────────────────────────────────────────┘
            │                                    │
@@ -33,10 +42,12 @@
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
 | Routes | `backend/src/routes/*.ts` | Parse/validate request (Zod), call one service function, return JSON |
+| Middleware | `backend/src/middleware/auth.ts` | Token verification (`verifyIdToken`), user upsert, `req.user` injection; `gate(feature)` for tier checks |
 | Services | `backend/src/services/*.ts` | Business logic, orchestration, Supabase + Gemini calls |
-| DB clients | `backend/src/db/supabase.ts`, `backend/src/db/gemini.ts` | Singleton client construction from env vars |
+| DB clients | `backend/src/db/supabase.ts`, `backend/src/db/gemini.ts`, `backend/src/db/firebase.ts` | Singleton client construction from env vars |
+| Config | `backend/src/config/featureTiers.ts` | Maps feature names to minimum tier (`'free'` \| `'paid'`) — single source of truth for access control |
 | Realtime | `backend/src/realtime.ts` | Socket.IO server init; `emitToPair()` for push events |
-| Entry | `backend/src/index.ts` | Mounts all routers on `http.Server`, calls `initRealtime()` |
+| Entry | `backend/src/index.ts` | Mounts all routers on `http.Server`, calls `initRealtime()`; CORS restricted to explicit origin allowlist |
 
 The `http.Server` wrapper (not `app.listen`) is required so Socket.IO can attach to the same port.
 
@@ -46,7 +57,7 @@ The `http.Server` wrapper (not `app.listen`) is required so Socket.IO can attach
 - `request<T>()` — JSON endpoints
 - `requestFormData<T>()` — multipart uploads (grade, pair photo)
 
-**Session identity:** `frontend/src/lib/session.ts` generates a UUID v4 stored in `localStorage` as `session_id`. No authentication; the session ID scopes all attempts, stars, and chat history.
+**Auth identity:** `frontend/src/contexts/AuthContext.tsx` manages Firebase auth state via `onAuthStateChanged`. `useAuth()` provides `user`, `tier` (`'free'` | `'paid'` | `null` for guests), `openLoginModal()`, and `openUpgradeModal()`. All API calls in `api.ts` attach a `Bearer` token from `auth.currentUser?.getIdToken()`; 401 responses open the login modal, 402 responses open the upgrade modal. `frontend/src/hooks/useFeature.ts` maps feature names to tier requirements and is used to show/hide UI elements — the backend `gate()` middleware is the actual enforcement boundary.
 
 **State layer:** custom hooks in `frontend/src/hooks/` own data fetching and derived state. Pages are thin consumers.
 
@@ -90,7 +101,7 @@ PracticePage → ChatPanel → useChatSession
   → return { reply, history }
 ```
 
-Rate-limited by `express-rate-limit` (IP-keyed). History rehydrated on page load via `GET /api/chat`. `correct_answer` and `solution_latex` are never returned to the browser.
+Rate-limited by `express-rate-limit` (IP-keyed). Protected by `gate('aiHints')` — requires login; tier can be raised to `'paid'` in `featureTiers.ts` when subscription is introduced. History rehydrated on page load via `GET /api/chat`. `correct_answer` and `solution_latex` are never returned to the browser.
 
 ## Photo Grading Pipeline
 
@@ -137,6 +148,25 @@ Auth = possession of the unguessable 32-byte base64url token. Token TTL default 
 
 **Frontend:** `api.ts` throws `Error` with the server's `error` field as the message. Hooks dispatch `ERROR` action → `error` phase → `<ErrorMessage>` component. Photo grading uses the softer `GRADE_REJECTED` path to avoid dropping to the error screen.
 
+## Feature Gating
+
+All feature-to-tier assignments live in `backend/src/config/featureTiers.ts`:
+
+```typescript
+export const FEATURE_TIERS: Record<string, 'free' | 'paid'> = {
+  practice:     'free',
+  aiHints:      'free',
+  photoGrading: 'free',
+  pairUpload:   'free',
+}
+```
+
+Routes apply `gate(feature)` middleware, which enforces the tier check and returns 402 for insufficient tier. To move a feature behind a paywall, change its value in `featureTiers.ts` — no route changes needed.
+
+The frontend `useFeature(feature)` hook mirrors this config for UX gating (hiding buttons, showing prompts) but is **not** a security boundary. The backend middleware is always authoritative.
+
+---
+
 ## Anti-Patterns
 
 ### Calling Supabase from a route
@@ -151,4 +181,4 @@ Auth = possession of the unguessable 32-byte base64url token. Token TTL default 
 
 ---
 
-*Architecture analysis: 2026-06-26*
+*Architecture analysis: 2026-06-26 — updated 2026-06-26 to reflect Firebase Auth + feature gating*

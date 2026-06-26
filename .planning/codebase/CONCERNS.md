@@ -4,17 +4,11 @@
 
 ---
 
-## No Authentication / Session Hijacking
+## ~~No Authentication / Session Hijacking~~ — RESOLVED
 
-**Severity: HIGH**
+**Severity: HIGH → RESOLVED**
 
-**Issue:** `session_id` is a client-generated UUID stored in `localStorage` with no server-side binding to a user identity. Any client that knows (or guesses) another user's UUID can submit attempts, toggle stars, read chat history, and retrieve gradings for that session.
-
-**Files:** `backend/src/routes/attempts.ts`, `backend/src/routes/stars.ts`, `backend/src/routes/chat.ts`, `backend/supabase/migrations/001_initial_schema.sql` (comment: "no auth required for MVP")
-
-**Impact:** Anyone can pollute another user's attempt history, invalidate their streaks, or retrieve their graded solution images if they learn the UUID. UUIDs are not secret by design (they are 122 bits of randomness, but are transmitted in every API request and stored in the browser).
-
-**Fix approach:** Add JWT-based or Supabase Auth sessions, binding `session_id` to an authenticated identity on the server. As a lower-effort interim, avoid accepting `session_id` from the client body; derive it from a signed cookie or bearer token instead.
+**Resolution:** Firebase Authentication implemented. All write endpoints are protected by `requireAuth` middleware (`backend/src/middleware/auth.ts`), which cryptographically verifies Firebase ID tokens via `getFirebaseAdmin().auth().verifyIdToken()`. User identity (`req.user.uid`) is derived server-side from the verified token — never accepted from client input. `session_id` is no longer passed in request bodies or query params.
 
 ---
 
@@ -28,7 +22,7 @@
 
 **Impact:** Questions (including `correct_answer` and `solution_latex`) can be read directly from Supabase without going through the backend's stripping logic. Attempts can be forged or deleted en masse. The entire answer/solution hiding scheme depends solely on the Express layer remaining the only access path.
 
-**Fix approach:** `ALTER TABLE questions ENABLE ROW LEVEL SECURITY` and add a policy that hides `correct_answer`/`solution_latex` for `anon`. Add RLS to `attempts`, `starred_questions`, `chat_messages`, and `gradings` to restrict reads/writes to the owning session.
+**Fix approach:** Intentionally deferred — all Supabase access goes through the Express backend using the service-role key; there is no direct browser→Supabase query path. The Express auth middleware is the enforcement layer. RLS remains a future hardening option if a direct Supabase query path is ever introduced.
 
 ---
 
@@ -48,7 +42,7 @@
 
 ## Rate Limiting Gaps on Write Endpoints
 
-**Severity: MEDIUM**
+**Severity: MEDIUM (partially mitigated)**
 
 **Issue:** `POST /api/chat` (15/min), `POST /api/grade` (5/min), and all `/api/pair/*` routes (30/min) are rate-limited. The following write endpoints have no rate limiting:
 
@@ -59,9 +53,9 @@ Read endpoints (GET) are entirely unprotected, which is less critical but could 
 
 **Files:** `backend/src/routes/attempts.ts`, `backend/src/routes/stars.ts` (no `rateLimit` import or middleware)
 
-**Impact:** A malicious client can write millions of attempt rows, degrading DB performance or inflating reported streak/progress counts. No Gemini cost risk here, but DB storage and query cost grows unbounded.
+**Partial mitigation (auth plan):** `POST /api/attempts` and `POST /api/stars` now require a verified Firebase token (`requireAuth`). Anonymous bulk-write abuse is eliminated. Authenticated abuse (a logged-in user spamming the endpoint) is still possible.
 
-**Fix approach:** Add a global `rateLimit` middleware in `backend/src/index.ts` (e.g. 120 req/min per IP) as a backstop, and apply a tighter limiter to `POST /api/attempts` (e.g. 60/min).
+**Remaining fix:** Add a global `rateLimit` middleware in `backend/src/index.ts` (e.g. 120 req/min per IP) as a backstop, and a per-user limiter for subscription-differentiated caps when tiers are introduced.
 
 ---
 
@@ -145,4 +139,36 @@ A grep across `backend/src` found no `TODO`, `FIXME`, or `HACK` comments and no 
 
 ---
 
-*Concerns audit: 2026-06-26*
+---
+
+## ~~CORS Fully Open~~ — RESOLVED
+
+**Severity: HIGH → RESOLVED**
+
+**Resolution:** `cors()` in `backend/src/index.ts` now uses an explicit `origin` allowlist (`localhost:5173` in dev, production domain in prod). Requests from arbitrary origins are rejected.
+
+---
+
+## Token Stored in IndexedDB (XSS Risk)
+
+**Severity: LOW**
+
+**Issue:** Firebase stores ID tokens in browser IndexedDB. Any JavaScript running on the page — including injected XSS code — can read it. A stolen token is valid for up to 1 hour.
+
+**Mitigating factors:** React escapes HTML by default, eliminating the most common XSS vector. The app stores no financially sensitive data. The alternative (httpOnly cookies + server-managed sessions) is significantly more complex.
+
+**Fix approach:** Accepted tradeoff for current app scope. If the app expands to store sensitive personal data, revisit httpOnly cookie-based sessions.
+
+---
+
+## Stripe Webhook Lacks Signature Verification (Future Critical)
+
+**Severity: FUTURE CRITICAL**
+
+**Issue:** When the subscription payment flow is added, `POST /api/webhooks/stripe` will receive events from Stripe. Without verifying the `Stripe-Signature` header, any actor can send a forged `customer.subscription.created` event and upgrade themselves for free.
+
+**Fix approach:** When implementing Stripe, use `stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET)` before processing any webhook payload. This is a two-line fix but must not be skipped.
+
+---
+
+*Concerns audit: 2026-06-26 — updated 2026-06-26 to reflect Firebase Auth resolutions and new concerns*
