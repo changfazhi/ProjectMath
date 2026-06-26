@@ -28,13 +28,13 @@
     - `starred_questions` — `backend/src/routes/stars.ts`
     - `chat_messages` — `backend/src/routes/chat.ts`
     - `gradings` — `backend/src/routes/grade.ts`
-  - Migrations: `backend/supabase/migrations/001_*.sql` through `016_*.sql` (+ pending `017_ri_prelim_2025.sql`)
+  - Migrations: `backend/supabase/migrations/001_*.sql` through `017_ri_prelim_2025.sql`
   - All tables require `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;` after creation
 
 **File Storage:**
 - Supabase Storage bucket: `solution-uploads` (private)
   - Created in migration `013_solution_gradings.sql`
-  - Used by `gradingService.ts` — images uploaded after successful grading
+  - Used by `backend/src/services/gradingService.ts` — images uploaded after successful grading
   - Images arrive via multer (`backend/src/routes/grade.ts`), sent to Gemini as base64 `inlineData`, then stored
 
 **Caching:**
@@ -87,7 +87,7 @@
 - Wraps `<math-field>` element using a `ref`
 - Exposes `insert(latex, options?)`, `getValue()`, `focus()` as imperative API
 - Suppresses built-in virtual keyboard and hamburger menu
-- Companion `MathKeyboard.tsx` — custom 10-group symbol panel; uses `onMouseDown` (not `onClick`) to avoid stealing focus from the math field
+- Companion `frontend/src/components/MathKeyboard.tsx` — custom 10-group symbol panel; uses `onMouseDown` (not `onClick`) to avoid stealing focus from the math field
 
 **Insert convention:**
 - Template placeholders: `#?` for tab-stops

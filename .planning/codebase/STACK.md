@@ -17,7 +17,7 @@
 - Browser (frontend, port 5173 via Vite)
 
 **Package Manager:**
-- npm (both workspaces)
+- npm (both workspaces, independent)
 - Lockfiles: `backend/package-lock.json`, `frontend/package-lock.json`
 
 ## Frameworks
@@ -51,9 +51,9 @@
 
 **Frontend Critical:**
 - katex ^0.17.0 — LaTeX rendering in the browser
-- mathlive ^0.110.0 — Web component math input (`<math-field>`); wrapped in `MathField.tsx`
+- mathlive ^0.110.0 — Web component math input (`<math-field>`); wrapped in `frontend/src/components/MathField.tsx`
 - socket.io-client ^4.8.3 — Real-time connection to backend; singleton in `frontend/src/lib/socket.ts`
-- qrcode.react ^4.2.0 — QR code display in `QrPairModal.tsx`
+- qrcode.react ^4.2.0 — QR code display in `frontend/src/components/QrPairModal.tsx`
 - uuid ^14.0.0 — Generates `session_id` stored in localStorage (`frontend/src/lib/session.ts`)
 
 **Frontend Dev:**
@@ -72,13 +72,13 @@
 **Build:**
 - `backend/tsconfig.json` — `target: ES2022`, `module: NodeNext`, `moduleResolution: NodeNext`, strict
 - `frontend/tsconfig.json` — composite project references (`tsconfig.app.json`, `tsconfig.node.json`)
-- `frontend/vite.config.ts` — Vite config with proxy rules (see INTEGRATIONS.md)
+- `frontend/vite.config.ts` — Vite config with `/api` and `/socket.io` proxy rules
 - `frontend/postcss.config.js` — Tailwind + autoprefixer
 
 ## Platform Requirements
 
 **Development:**
-- Node.js (version unspecified in `.nvmrc` — not present)
+- Node.js (no `.nvmrc` — version unspecified)
 - Both servers started independently: `cd backend && npm run dev`, `cd frontend && npm run dev`
 - Phone upload flow requires opening frontend via LAN IP (Vite `server.host: true`)
 

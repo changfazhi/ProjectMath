@@ -79,7 +79,7 @@ res.status(500).json({ error: (err as Error).message });
 All HTTP requests go through `frontend/src/lib/api.ts`. Never call `fetch` directly in components or hooks.
 
 - JSON requests: internal `request<T>(path, init?)` function
-- Form data (file uploads): internal `requestFormData<T>(path, formData)` function
+- Form data (file uploads): internal `requestFormData<T>(path, formData)` function — do NOT set `Content-Type` header; the browser sets the multipart boundary
 - Exported as `api.{namespace}.{method}(...)` — e.g., `api.attempts.submit(...)`, `api.grade.submit(...)`
 
 ### CSS / Tailwind
@@ -132,7 +132,13 @@ Defined per-question or per-part in the `answer_type` column:
 | `"range"` | Numerical with tolerance | `\|given − correct\| ≤ tolerance` (default 0.01) |
 | `null` | Show-that / ungraded part | No answer box rendered; no submission accepted |
 
-`normalizeLaTeX()` in `backend/src/services/attemptService.ts` strips whitespace, spacing commands, and expands compact MathLive fraction notation (`\frac13` → `\frac{1}{3}`) before comparison.
+`normalizeLaTeX()` in `backend/src/services/attemptService.ts` applies these transforms in order:
+1. Strip all whitespace
+2. Remove spacing commands: `\,` `\ ` `\;` `\:` `\!` `\quad` `\qquad`
+3. Normalise MathLive delimiters: `\mleft` → `\left`, `\mright` → `\right`
+4. Expand compact MathLive fractions: `\frac13` → `\frac{1}{3}` (three regex passes for mixed forms)
+5. Lowercase everything
+6. Normalise logical connectives: `\text{or}`, `\lor` → `or`; `\text{and}`, `\land` → `and`; `\operatorname{or/and}` → plain text
 
 The **question-level** `answer_type` column is `NOT NULL`. For a show-that single question, wrap it as a multi-part question with one `null` part and give the question row `answer_type = 'exact', correct_answer = ''`.
 
