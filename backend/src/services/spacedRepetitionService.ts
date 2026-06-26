@@ -39,7 +39,7 @@ function sm2(
 // Create or update an SM-2 card after a question is answered.
 // Called as fire-and-forget from attemptService when the solution is revealed.
 export async function upsertSRCard(
-  sessionId: string,
+  userId: string,
   questionId: string,
   topicId: string,
   isCorrect: boolean,
@@ -47,7 +47,7 @@ export async function upsertSRCard(
   const { data: existing } = await supabase
     .from('spaced_repetition_cards')
     .select('ef, interval_days, repetitions')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .eq('question_id', questionId)
     .maybeSingle();
 
@@ -65,7 +65,7 @@ export async function upsertSRCard(
     .from('spaced_repetition_cards')
     .upsert(
       {
-        session_id: sessionId,
+        session_id: userId,
         question_id: questionId,
         topic_id: topicId,
         ef,
@@ -79,12 +79,12 @@ export async function upsertSRCard(
 }
 
 // Returns all SR cards currently due for this session.
-export async function getSpacedDueItems(sessionId: string): Promise<SRReviewItem[]> {
+export async function getSpacedDueItems(userId: string): Promise<SRReviewItem[]> {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('spaced_repetition_cards')
     .select('question_id, topic_id')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .lte('due_at', now);
 
   if (error) throw new Error(error.message);

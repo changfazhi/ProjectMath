@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { getSessionId } from '../lib/session'
+import { useAuth } from '../contexts/AuthContext'
 
 export function useTopicsProgress() {
-  const sessionId = getSessionId()
+  const { user } = useAuth()
   const [progress, setProgress] = useState<Map<string, { correct: number; total: number }>>(
     new Map(),
   )
 
   useEffect(() => {
+    if (!user) {
+      setProgress(new Map())
+      return
+    }
     api.topics
-      .progress(sessionId)
+      .progress()
       .then((data) => {
         setProgress(new Map(data.map((p) => [p.topic_id, { correct: p.correct, total: p.total }])))
       })
       .catch(() => {})
-  }, [sessionId])
+  }, [user])
 
   return progress
 }

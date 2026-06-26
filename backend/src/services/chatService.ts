@@ -23,13 +23,13 @@ function toPublic(m: ChatMessage): ChatMessagePublic {
 }
 
 export async function getChatHistory(
-  sessionId: string,
+  userId: string,
   questionId: string,
 ): Promise<ChatMessagePublic[]> {
   const { data, error } = await supabase
     .from('chat_messages')
     .select('*')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .eq('question_id', questionId)
     .order('created_at', { ascending: true });
 
@@ -73,14 +73,14 @@ ${question.solution_latex}`;
 }
 
 export async function sendHintMessage(
-  sessionId: string,
+  userId: string,
   questionId: string,
   userMessage: string,
 ): Promise<ChatSendResponse> {
   const question = await getQuestionWithSolution(questionId);
   if (!question) throw new Error(`Question ${questionId} not found`);
 
-  const history = await getChatHistory(sessionId, questionId);
+  const history = await getChatHistory(userId, questionId);
   if (history.length >= MAX_MESSAGES_PER_QUESTION) {
     throw new ChatLimitError(
       'You have reached the hint limit for this question. Try working through it or reveal the solution.',
@@ -108,8 +108,8 @@ export async function sendHintMessage(
   const { data, error } = await supabase
     .from('chat_messages')
     .insert([
-      { session_id: sessionId, question_id: questionId, role: 'user', content: userMessage },
-      { session_id: sessionId, question_id: questionId, role: 'model', content: replyText },
+      { session_id: userId, question_id: questionId, role: 'user', content: userMessage },
+      { session_id: userId, question_id: questionId, role: 'model', content: replyText },
     ])
     .select('*');
 

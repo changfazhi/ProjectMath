@@ -297,7 +297,7 @@ Never call `supabase` from a route file. All Supabase queries live in `backend/s
 - `PORT` — server port (default 3001)
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — database credentials
 - `GEMINI_API_KEY`, `GEMINI_MODEL` — AI grading
-- `FIREBASE_PROJECT_ID` (or service account JSON) — Firebase Admin initialization
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` — Firebase Admin SDK (all three required; use `cert()` from `firebase-admin/app`)
 - `CORS_ORIGIN` — allowed origin for CORS (e.g., `http://localhost:5173` in dev)
 - `CHAT_RATE_LIMIT_PER_MIN`, `CHAT_MAX_MESSAGES_PER_QUESTION` — hint chatbot limits
 - `GRADE_RATE_LIMIT_PER_MIN`, `GRADE_MAX_IMAGES`, `GRADE_MAX_IMAGE_MB` — photo grading limits

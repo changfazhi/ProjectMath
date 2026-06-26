@@ -88,7 +88,7 @@ export function PracticePage() {
     if (!session.question) return
     setPairError(null)
     try {
-      const res = await api.pair.create(session.sessionId, session.question.id)
+      const res = await api.pair.create(session.question.id)
       setPair({ token: res.token, mobilePath: res.mobile_path })
     } catch (e) {
       setPairError((e as Error).message)
@@ -125,24 +125,24 @@ export function PracticePage() {
     setAttemptsLoading(true)
     setAttemptsError(null)
     api.attempts
-      .list(session.sessionId, session.question.id)
+      .list(session.question.id)
       .then(setAttemptsList)
       .catch((e: Error) => setAttemptsError(e.message))
       .finally(() => setAttemptsLoading(false))
-  }, [activeTab, session.question?.id, session.sessionId])
+  }, [activeTab, session.question?.id])
 
   // Show streak notification once per day on first correct answer
   useEffect(() => {
     if (session.phase !== 'revealed' || !session.result?.is_correct) return
     const today = getActivityDate()
     if (localStorage.getItem('streak_notified_date') === today) return
-    api.streaks.get(session.sessionId).then((stats) => {
+    api.streaks.get().then((stats) => {
       if (stats.currentStreak > 0) {
         setNotification({ show: true, streakCount: stats.currentStreak })
         localStorage.setItem('streak_notified_date', today)
       }
     }).catch(() => {})
-  }, [session.phase, session.result, session.sessionId])
+  }, [session.phase, session.result])
 
   useEffect(() => {
     if (initialQuestionId) {

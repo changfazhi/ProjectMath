@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { gate } from '../middleware/auth.js';
 import { ChatLimitError, getChatHistory, sendHintMessage } from '../services/chatService.js';
 
 const router = Router();
@@ -15,21 +16,19 @@ const chatLimiter = rateLimit({
 });
 
 const sendSchema = z.object({
-  session_id: z.string().uuid(),
   question_id: z.string().uuid(),
   message: z.string().min(1).max(2000),
 });
 
-// GET /api/chat?session_id=UUID&question_id=UUID — rehydrate history
-router.get('/', async (req, res) => {
+// GET /api/chat?question_id=UUID — rehydrate history
+router.get('/', ...gate('aiHints'), async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
     const questionId = z.string().uuid().parse(req.query.question_id);
-    const history = await getChatHistory(sessionId, questionId);
+    const history = await getChatHistory(req.user!.uid, questionId);
     res.json(history);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id and question_id must be valid UUIDs' });
+      res.status(400).json({ error: 'question_id must be a valid UUID' });
       return;
     }
     res.status(500).json({ error: (err as Error).message });
@@ -37,10 +36,10 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/chat — send a message, get a hint
-router.post('/', chatLimiter, async (req, res) => {
+router.post('/', ...gate('aiHints'), chatLimiter, async (req, res) => {
   try {
-    const { session_id, question_id, message } = sendSchema.parse(req.body);
-    const result = await sendHintMessage(session_id, question_id, message);
+    const { question_id, message } = sendSchema.parse(req.body);
+    const result = await sendHintMessage(req.user!.uid, question_id, message);
     res.json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {

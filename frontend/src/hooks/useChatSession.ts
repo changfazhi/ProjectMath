@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChatMessage } from '../types/api'
 import { api } from '../lib/api'
-import { getSessionId } from '../lib/session'
 
 export interface ChatSession {
   messages: ChatMessage[]
@@ -11,12 +10,10 @@ export interface ChatSession {
 }
 
 export function useChatSession(questionId: string | undefined): ChatSession {
-  const sessionId = getSessionId()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Rehydrate persisted history whenever the question changes.
   useEffect(() => {
     if (!questionId) {
       setMessages([])
@@ -25,7 +22,7 @@ export function useChatSession(questionId: string | undefined): ChatSession {
     let cancelled = false
     setError(null)
     api.chat
-      .history(sessionId, questionId)
+      .history(questionId)
       .then((history) => {
         if (!cancelled) setMessages(history)
       })
@@ -35,14 +32,13 @@ export function useChatSession(questionId: string | undefined): ChatSession {
     return () => {
       cancelled = true
     }
-  }, [questionId, sessionId])
+  }, [questionId])
 
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim()
       if (!trimmed || !questionId || loading) return
 
-      // Optimistically append the user's message.
       const optimistic: ChatMessage = {
         id: `temp-${Date.now()}`,
         role: 'user',
@@ -55,16 +51,16 @@ export function useChatSession(questionId: string | undefined): ChatSession {
       setError(null)
 
       try {
-        const res = await api.chat.send(sessionId, questionId, trimmed)
+        const res = await api.chat.send(questionId, trimmed)
         setMessages(res.history)
       } catch (e) {
-        setMessages(snapshot) // roll back on failure
+        setMessages(snapshot)
         setError((e as Error).message)
       } finally {
         setLoading(false)
       }
     },
-    [questionId, sessionId, messages, loading],
+    [questionId, messages, loading],
   )
 
   return { messages, loading, error, send }

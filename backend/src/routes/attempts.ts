@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { gate } from '../middleware/auth.js';
 import { submitAttempt, getAttemptsBySession } from '../services/attemptService.js';
 
 const router = Router();
 
 const submitSchema = z.object({
-  session_id: z.string().uuid(),
   question_id: z.string().uuid(),
   part_label: z.string().min(1).optional(),
   answer_given: z.string().min(1),
@@ -13,12 +13,10 @@ const submitSchema = z.object({
 });
 
 // POST /api/attempts
-// Body: { session_id, question_id, answer_given, time_taken_s? }
-// Returns: { attempt_id, is_correct, correct_answer, solution_latex }
-router.post('/', async (req, res) => {
+router.post('/', ...gate('practice'), async (req, res) => {
   try {
     const body = submitSchema.parse(req.body);
-    const result = await submitAttempt(body);
+    const result = await submitAttempt(req.user!.uid, body);
     res.status(201).json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -33,19 +31,17 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/attempts?session_id=xxx&question_id=yyy (question_id optional)
-router.get('/', async (req, res) => {
+// GET /api/attempts?question_id=yyy (question_id optional)
+router.get('/', ...gate('practice'), async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
     const questionId = req.query.question_id
       ? z.string().uuid().parse(req.query.question_id)
       : undefined;
-
-    const attempts = await getAttemptsBySession(sessionId, questionId);
+    const attempts = await getAttemptsBySession(req.user!.uid, questionId);
     res.json(attempts);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
+      res.status(400).json({ error: 'question_id must be a valid UUID' });
       return;
     }
     res.status(500).json({ error: (err as Error).message });

@@ -145,14 +145,14 @@ ${question.solution_latex}`;
 }
 
 async function uploadImages(
-  sessionId: string,
+  userId: string,
   questionId: string,
   images: GradeSolutionParams['images'],
 ): Promise<string[]> {
   const paths: string[] = [];
   for (const img of images) {
     const ext = MIME_EXT[img.mimeType] ?? 'jpg';
-    const path = `${sessionId}/${questionId}/${randomUUID()}.${ext}`;
+    const path = `${userId}/${questionId}/${randomUUID()}.${ext}`;
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(path, img.buffer, { contentType: img.mimeType, upsert: false });
@@ -210,7 +210,7 @@ async function recordAttempts(
       const r = byLabel.get(qp.label.toLowerCase());
       const isCorrect = r ? r.marks_awarded >= r.marks_total && r.marks_total > 0 : false;
       rows.push({
-        session_id: params.session_id,
+        session_id: params.userId,
         question_id: params.question_id,
         part_label: qp.label,
         answer_given: '[photo]',
@@ -223,7 +223,7 @@ async function recordAttempts(
     const total = parts.reduce((s, p) => s + p.marks_total, 0);
     const awarded = parts.reduce((s, p) => s + p.marks_awarded, 0);
     rows.push({
-      session_id: params.session_id,
+      session_id: params.userId,
       question_id: params.question_id,
       part_label: null,
       answer_given: '[photo]',
@@ -304,12 +304,12 @@ export async function gradeSolution(params: GradeSolutionParams): Promise<GradeR
   const overallFeedback = (ai.overall_feedback ?? '') + ignoredNote || null;
 
   // 3. Now persist the photos and the grading record (also the future mistake-log data source).
-  const imagePaths = await uploadImages(params.session_id, params.question_id, params.images);
+  const imagePaths = await uploadImages(params.userId, params.question_id, params.images);
 
   const { data, error } = await supabase
     .from('gradings')
     .insert({
-      session_id: params.session_id,
+      session_id: params.userId,
       question_id: params.question_id,
       image_paths: imagePaths,
       marks_awarded: marksAwarded,
@@ -341,13 +341,13 @@ export async function gradeSolution(params: GradeSolutionParams): Promise<GradeR
 
 // Past gradings for a question, newest first — used to rehydrate the UI.
 export async function getGradingsForQuestion(
-  sessionId: string,
+  userId: string,
   questionId: string,
 ): Promise<Grading[]> {
   const { data, error } = await supabase
     .from('gradings')
     .select('*')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .eq('question_id', questionId)
     .order('created_at', { ascending: false });
 

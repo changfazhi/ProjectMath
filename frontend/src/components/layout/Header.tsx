@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 function SunIcon() {
   return (
@@ -20,6 +21,7 @@ function MoonIcon() {
 
 export function Header() {
   const { theme, toggleTheme } = useTheme()
+  const { user, openLoginModal, signOut } = useAuth()
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur">
@@ -101,6 +103,23 @@ export function Header() {
           >
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </button>
+
+          {user ? (
+            <button
+              onClick={() => signOut()}
+              title={user.email ?? undefined}
+              className="ml-1 px-3 py-1.5 rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              Sign out
+            </button>
+          ) : (
+            <button
+              onClick={() => openLoginModal()}
+              className="ml-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              Sign in
+            </button>
+          )}
         </nav>
       </div>
     </header>

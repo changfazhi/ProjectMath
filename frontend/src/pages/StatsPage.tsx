@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { getSessionId } from '../lib/session'
 import { Spinner } from '../components/ui/Spinner'
 import { AccuracyTable } from '../components/topic/AccuracyTable'
 import type { DailyActivity, StreakStats } from '../types/api'
@@ -106,7 +105,7 @@ export function StatsPage() {
   const [timeLeft, setTimeLeft] = useState(getTimeUntilReset)
 
   useEffect(() => {
-    api.streaks.get(getSessionId())
+    api.streaks.get()
       .then(setStats)
       .catch(e => setError((e as Error).message))
       .finally(() => setLoading(false))

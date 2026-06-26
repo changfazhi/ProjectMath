@@ -17,7 +17,11 @@ import { initRealtime } from './realtime.js';
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? (process.env.CORS_ORIGIN ?? 'https://yourproductiondomain.com')
+    : 'http://localhost:5173',
+}));
 app.use(express.json());
 
 app.use('/api/topics', topicsRouter);

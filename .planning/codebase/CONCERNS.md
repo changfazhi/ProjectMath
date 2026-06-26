@@ -6,7 +6,7 @@
 
 **Severity: HIGH → RESOLVED**
 
-**Resolution:** Firebase Authentication implemented. All write endpoints are protected by `requireAuth` middleware (`backend/src/middleware/auth.ts`), which cryptographically verifies Firebase ID tokens via `getFirebaseAdmin().auth().verifyIdToken()`. User identity (`req.user.uid`) is derived server-side from the verified token — never accepted from client input. `session_id` is no longer passed in request bodies or query params.
+**Resolution:** Firebase Authentication implemented. All write endpoints are protected by `requireAuth` middleware (`backend/src/middleware/auth.ts`), which cryptographically verifies Firebase ID tokens via `getAuth(getFirebaseAdmin()).verifyIdToken()` (modern `firebase-admin/auth` named export). User identity (`req.user.uid`) is derived server-side from the verified token — never accepted from client input. `session_id` is no longer passed in request bodies or query params.
 
 ---
 

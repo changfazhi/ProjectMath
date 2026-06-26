@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import type { QuestionWithStatus } from '../types/api'
 
-export function useTopicQuestions(topicId: string | null, sessionId: string) {
+export function useTopicQuestions(topicId: string | null) {
   const [questions, setQuestions] = useState<QuestionWithStatus[]>([])
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
@@ -19,8 +19,8 @@ export function useTopicQuestions(topicId: string | null, sessionId: string) {
     setError(null)
 
     Promise.all([
-      api.topics.questions(topicId, sessionId),
-      api.stars.list(sessionId, topicId),
+      api.topics.questions(topicId),
+      api.stars.list(topicId),
     ])
       .then(([qs, starred]) => {
         if (!cancelled) {
@@ -39,11 +39,10 @@ export function useTopicQuestions(topicId: string | null, sessionId: string) {
     return () => {
       cancelled = true
     }
-  }, [topicId, sessionId])
+  }, [topicId])
 
   const toggleStar = useCallback(
     async (questionId: string) => {
-      // Optimistic update
       setStarredIds((prev) => {
         const next = new Set(prev)
         if (next.has(questionId)) next.delete(questionId)
@@ -51,8 +50,7 @@ export function useTopicQuestions(topicId: string | null, sessionId: string) {
         return next
       })
       try {
-        const { starred } = await api.stars.toggle(sessionId, questionId)
-        // Sync with server response in case optimistic update was wrong
+        const { starred } = await api.stars.toggle(questionId)
         setStarredIds((prev) => {
           const next = new Set(prev)
           if (starred) next.add(questionId)
@@ -60,7 +58,6 @@ export function useTopicQuestions(topicId: string | null, sessionId: string) {
           return next
         })
       } catch {
-        // Revert optimistic update on failure
         setStarredIds((prev) => {
           const next = new Set(prev)
           if (next.has(questionId)) next.delete(questionId)
@@ -69,7 +66,7 @@ export function useTopicQuestions(topicId: string | null, sessionId: string) {
         })
       }
     },
-    [sessionId],
+    [],
   )
 
   return { questions, starredIds, toggleStar, loading, error }

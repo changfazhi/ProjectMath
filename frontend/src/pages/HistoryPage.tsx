@@ -1,12 +1,10 @@
-import { getSessionId } from '../lib/session'
 import { useAttemptHistory } from '../hooks/useAttemptHistory'
 import { AttemptRow } from '../components/progress/AttemptRow'
 import { Spinner } from '../components/ui/Spinner'
 import { ErrorMessage } from '../components/ui/ErrorMessage'
 
 export function HistoryPage() {
-  const sessionId = getSessionId()
-  const { attempts, loading, error, refetch } = useAttemptHistory(sessionId)
+  const { attempts, loading, error, refetch } = useAttemptHistory()
 
   const total = attempts.length
   const correct = attempts.filter((a) => a.is_correct).length
@@ -18,9 +16,6 @@ export function HistoryPage() {
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
           Practice History
         </h1>
-        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500 font-mono">
-          Session: {sessionId.slice(0, 8)}…
-        </p>
       </div>
 
       {!loading && !error && total > 0 && (

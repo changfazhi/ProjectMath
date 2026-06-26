@@ -58,11 +58,11 @@ interface TopicStat {
   questions_attempted: number;
 }
 
-async function buildTopicStats(sessionId: string): Promise<TopicStat[]> {
+async function buildTopicStats(userId: string): Promise<TopicStat[]> {
   const [topicsRes, questionsRes, attemptsRes] = await Promise.all([
     supabase.from('topics').select('id, name').order('name'),
     supabase.from('questions').select('id, topic_id'),
-    supabase.from('attempts').select('question_id, is_correct').eq('session_id', sessionId),
+    supabase.from('attempts').select('question_id, is_correct').eq('session_id', userId),
   ]);
 
   if (topicsRes.error) throw new Error(topicsRes.error.message);
@@ -104,8 +104,8 @@ async function buildTopicStats(sessionId: string): Promise<TopicStat[]> {
     .sort((a, b) => a.accuracy - b.accuracy);
 }
 
-export async function getWeaknessDiagnosis(sessionId: string): Promise<DiagnosisResult> {
-  const statsArr = await buildTopicStats(sessionId);
+export async function getWeaknessDiagnosis(userId: string): Promise<DiagnosisResult> {
+  const statsArr = await buildTopicStats(userId);
 
   const promptText = `You are an expert Singapore H2 A-Level Mathematics tutor. Analyze this student's performance and provide a structured diagnosis.
 
@@ -174,12 +174,12 @@ Write overall_summary in 2–3 sentences: biggest strength, biggest weakness, an
 
 // Algorithmic study plan — no second Gemini call. Selects up to 10 unsolved questions
 // from the weakest topics so the student has immediate, prioritised practice.
-export async function getPersonalisedStudyPlan(sessionId: string): Promise<StudyPlanResponse> {
-  const statsArr = await buildTopicStats(sessionId);
+export async function getPersonalisedStudyPlan(userId: string): Promise<StudyPlanResponse> {
+  const statsArr = await buildTopicStats(userId);
 
   const [questionsRes, attemptsRes, topicsRes2] = await Promise.all([
     supabase.from('questions').select('id, topic_id, name'),
-    supabase.from('attempts').select('question_id, is_correct').eq('session_id', sessionId),
+    supabase.from('attempts').select('question_id, is_correct').eq('session_id', userId),
     supabase.from('topics').select('id, name'),
   ]);
 

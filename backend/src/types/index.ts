@@ -75,7 +75,6 @@ export interface Attempt {
 }
 
 export interface SubmitAttemptBody {
-  session_id: string;
   question_id: string;
   part_label?: string;
   answer_given: string;
@@ -176,7 +175,7 @@ export interface GradeImage {
 }
 
 export interface GradeSolutionParams {
-  session_id: string;
+  userId: string;
   question_id: string;
   images: GradeImage[];
   time_taken_s?: number;
@@ -199,7 +198,7 @@ export interface GradeResponse {
 // Ephemeral pairing handshake — held in memory only, never persisted.
 export interface PairSession {
   token: string;
-  session_id: string;
+  userId: string;
   question_id: string;
   images: GradeImage[];
   created_at: number; // epoch ms

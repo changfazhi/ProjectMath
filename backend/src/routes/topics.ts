@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { requireAuth } from '../middleware/auth.js';
 import { getAllTopics, getTopicById, getTopicsAccuracy, getTopicsProgress } from '../services/topicService.js';
 
 const router = Router();
 
 const levelSchema = z.enum(['H1', 'H2']).optional();
 
-// GET /api/topics?level=H2
+// GET /api/topics?level=H2 — public
 router.get('/', async (req, res) => {
   try {
     const level = levelSchema.parse(req.query.level);
@@ -21,37 +22,27 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/topics/progress?session_id=UUID
-router.get('/progress', async (req, res) => {
+// GET /api/topics/progress — requires auth
+router.get('/progress', requireAuth, async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
-    const progress = await getTopicsProgress(sessionId);
+    const progress = await getTopicsProgress(req.user!.uid);
     res.json(progress);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-// GET /api/topics/accuracy?session_id=UUID
-router.get('/accuracy', async (req, res) => {
+// GET /api/topics/accuracy — requires auth
+router.get('/accuracy', requireAuth, async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
-    const accuracy = await getTopicsAccuracy(sessionId);
+    const accuracy = await getTopicsAccuracy(req.user!.uid);
     res.json(accuracy);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-// GET /api/topics/:id
+// GET /api/topics/:id — public
 router.get('/:id', async (req, res) => {
   try {
     const topic = await getTopicById(req.params.id);
