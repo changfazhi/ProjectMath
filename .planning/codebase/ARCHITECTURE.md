@@ -314,6 +314,18 @@ Routes apply `gate(feature)` middleware, which enforces the tier check and retur
 
 The frontend `useFeature(feature)` hook mirrors this config for UX gating (hiding buttons, showing prompts) but is **not** a security boundary. The backend middleware is always authoritative.
 
+### Access Level Reference
+
+| Who | `'free'` feature | `'paid'` feature |
+|---|---|---|
+| Guest (not signed in) | blocked → login modal | blocked → login modal |
+| Signed-in free user | allowed | blocked → upgrade modal |
+| Paid user | allowed | allowed |
+
+To change a feature's access level, edit **both**:
+1. `backend/src/config/featureTiers.ts` — enforcement (security boundary)
+2. `frontend/src/hooks/useFeature.ts` — UX gating (keep in sync manually)
+
 ---
 
 ## Error Handling
