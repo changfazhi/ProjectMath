@@ -112,6 +112,7 @@ export interface StreakStats {
   totalAttempts: number
   totalSolved: number
   totalQuestions: number
+  uniqueQuestionsAttempted: number
   dailyActivity: DailyActivity[]
 }
 

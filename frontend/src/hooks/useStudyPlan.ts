@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { resolvePlan } from '../lib/studyPlan'
 import { useAuth } from '../contexts/AuthContext'
@@ -7,6 +7,29 @@ import type { StudyPlanItem, QuestStatus } from '../types/api'
 export interface Quest extends StudyPlanItem {
   status: QuestStatus
   index: number
+}
+
+function computeStatuses(items: StudyPlanItem[], attempts: { question_id: string; is_correct: boolean }[]): Quest[] {
+  const planIds = new Set(items.map(i => i.question_id))
+  const scoped = attempts.filter(a => planIds.has(a.question_id))
+  const correctIds = new Set<string>()
+  const incorrectIds = new Set<string>()
+  for (const a of scoped) {
+    if (a.is_correct) correctIds.add(a.question_id)
+    else incorrectIds.add(a.question_id)
+  }
+  // A question is 'correct' only when it has a correct attempt and no subsequent wrong one
+  const correctSet = new Set([...correctIds].filter(id => !incorrectIds.has(id)))
+  const triedSet = new Set(scoped.map(a => a.question_id))
+  return items.map((item, i) => ({
+    ...item,
+    index: i,
+    status: correctSet.has(item.question_id)
+      ? 'correct'
+      : triedSet.has(item.question_id)
+        ? 'attempted'
+        : 'pending',
+  }))
 }
 
 export function useStudyPlan(isOpen: boolean) {
@@ -18,9 +41,15 @@ export function useStudyPlan(isOpen: boolean) {
   // Bumped on window focus / tab visibility to trigger a status re-derive (SYNC-01)
   const [refreshKey, setRefreshKey] = useState(0)
 
+  // Cache plan items so focus-triggered refreshes only re-query attempts, not Firestore
+  const planItemsRef = useRef<StudyPlanItem[] | null>(null)
+
+  // Full load: Firestore + attempts. Runs when sidebar opens or auth settles.
   useEffect(() => {
-    // Wait for sidebar to open and for auth to settle before hitting Firestore
-    if (!isOpen) return
+    if (!isOpen) {
+      planItemsRef.current = null  // clear cache so next open re-reads from Firestore
+      return
+    }
     if (authLoading) return
 
     let cancelled = false
@@ -38,31 +67,11 @@ export function useStudyPlan(isOpen: boolean) {
           }
           return
         }
-        const planQuestionIds = new Set(plan.items.map(item => item.question_id))
+        planItemsRef.current = plan.items
         const allAttempts = await api.attempts.list()
         if (cancelled) return
-        // Scope to only the plan's questions so unrelated history doesn't inflate status
-        const attempts = allAttempts.filter(a => planQuestionIds.has(a.question_id))
-        const correctIds = new Set<string>()
-        const incorrectIds = new Set<string>()
-        for (const a of attempts) {
-          if (a.is_correct) correctIds.add(a.question_id)
-          else incorrectIds.add(a.question_id)
-        }
-        // A question is 'correct' only when all its attempts are correct (multi-part safety)
-        const correctSet = new Set([...correctIds].filter(id => !incorrectIds.has(id)))
-        const triedSet = new Set(attempts.map(a => a.question_id))
-        const q: Quest[] = plan.items.map((item, i) => ({
-          ...item,
-          index: i,
-          status: correctSet.has(item.question_id)
-            ? 'correct'
-            : triedSet.has(item.question_id)
-              ? 'attempted'
-              : 'pending',
-        }))
         if (!cancelled) {
-          setQuests(q)
+          setQuests(computeStatuses(plan.items, allAttempts))
           setIsStale(stale)
         }
       } catch (err) {
@@ -76,11 +85,35 @@ export function useStudyPlan(isOpen: boolean) {
     return () => {
       cancelled = true
     }
-  // Re-run when sidebar opens, when user signs in/out, when auth finishes loading, or on focus refresh
-  }, [isOpen, user?.uid, authLoading, refreshKey])
+  // Re-run when sidebar opens, when user signs in/out, or when auth finishes loading
+  }, [isOpen, user?.uid, authLoading])
 
-  // Register focus/visibilitychange listeners while the sidebar is open so quest
-  // statuses re-derive from api.attempts.list() when the student returns from practice (SYNC-01).
+  // Status-only refresh: re-query attempts against cached plan items (no Firestore call).
+  // Runs on window focus / visibilitychange to reflect practice completed on other tabs (SYNC-01).
+  useEffect(() => {
+    if (!isOpen || refreshKey === 0) return
+    const cachedItems = planItemsRef.current
+    if (!cachedItems || cachedItems.length === 0) return
+
+    let cancelled = false
+
+    async function refreshStatuses() {
+      try {
+        const allAttempts = await api.attempts.list()
+        if (cancelled) return
+        setQuests(computeStatuses(cachedItems!, allAttempts))
+      } catch {
+        // Silent fail — cached statuses remain visible
+      }
+    }
+
+    refreshStatuses()
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, refreshKey])
+
+  // Register focus/visibilitychange listeners while the sidebar is open (SYNC-01).
   // Status is computed only — no setDoc/updateDoc/localStorage status write (SYNC-02).
   useEffect(() => {
     if (!isOpen) return

@@ -63,27 +63,40 @@ export async function persistPlan(uid: string | null, plan: StoredPlan): Promise
   }
 }
 
+const FIRESTORE_TIMEOUT_MS = 5000
+
 /**
- * Unified read: Firestore-first when signed in, localStorage fallback.
- * On a Firestore hit, write-through to localStorage (refresh fast-load cache).
- * Falls back to localStorage on any Firestore failure (PERS-03 / T-02-01-D).
- * When uid is null, returns localStorage result directly (PERS-02 anonymous path).
+ * Unified read: localStorage-first for today's plan (same-device fast path).
+ * Falls through to Firestore when localStorage has no plan or it is stale
+ * (cross-device sync — e.g. user opens on a second device).
+ * Falls back to whatever localStorage held on any Firestore failure or timeout.
  */
 export async function resolvePlan(
   uid: string | null,
 ): Promise<{ plan: StoredPlan | null; isStale: boolean }> {
+  const local = loadStoredPlan()
+
+  // Fast path: today's plan is already in localStorage — skip Firestore entirely.
+  if (local.plan && !local.isStale) {
+    return local
+  }
+
+  // localStorage miss or stale → try Firestore for cross-device sync (PERS-01/PERS-03).
   if (uid !== null) {
     try {
-      const remote = await loadRemotePlan(uid)
+      const remote = await Promise.race([
+        loadRemotePlan(uid),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('firestore-timeout')), FIRESTORE_TIMEOUT_MS),
+        ),
+      ])
       if (remote !== null) {
-        // Write-through: keep the localStorage cache fresh for fast subsequent loads
         savePlan(remote)
-        // Remote docs are keyed by today's date, so they are never stale
         return { plan: remote, isStale: false }
       }
     } catch {
-      // Firestore unavailable (offline / rules / transient) — degrade to cache (T-02-01-D)
+      // Firestore unavailable / timeout / rules error — degrade to local cache (T-02-01-D)
     }
   }
-  return loadStoredPlan()
+  return local
 }
