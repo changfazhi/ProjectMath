@@ -122,7 +122,7 @@ function checkAnswer(
   }
 }
 
-export async function submitAttempt(body: SubmitAttemptBody): Promise<SubmitAttemptResponse> {
+export async function submitAttempt(userId: string, body: SubmitAttemptBody): Promise<SubmitAttemptResponse> {
   const question = await getQuestionWithSolution(body.question_id);
   if (!question) throw new Error(`Question ${body.question_id} not found`);
 
@@ -157,7 +157,7 @@ export async function submitAttempt(body: SubmitAttemptBody): Promise<SubmitAtte
   const { data, error } = await supabase
     .from('attempts')
     .insert({
-      session_id: body.session_id,
+      session_id: userId,
       question_id: body.question_id,
       part_label: body.part_label ?? null,
       answer_given: body.answer_given,
@@ -183,7 +183,7 @@ export async function submitAttempt(body: SubmitAttemptBody): Promise<SubmitAtte
     const { data: existingAttempts } = await supabase
       .from('attempts')
       .select('part_label')
-      .eq('session_id', body.session_id)
+      .eq('session_id', userId)
       .eq('question_id', body.question_id)
       .not('part_label', 'is', null);
 
@@ -195,7 +195,7 @@ export async function submitAttempt(body: SubmitAttemptBody): Promise<SubmitAtte
   // Update SM-2 spaced-repetition card when the question is complete (solution revealed).
   // Fire-and-forget — never blocks the attempt response.
   if (solutionLatex !== null) {
-    upsertSRCard(body.session_id, body.question_id, question.topic_id, isCorrect).catch(() => {
+    upsertSRCard(userId, body.question_id, question.topic_id, isCorrect).catch(() => {
       // Non-critical; SR state will self-correct on next attempt.
     });
   }

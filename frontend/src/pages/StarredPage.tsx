@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { getSessionId } from '../lib/session'
 import { Badge } from '../components/ui/Badge'
 import { Spinner } from '../components/ui/Spinner'
 import { ErrorMessage } from '../components/ui/ErrorMessage'
@@ -27,26 +26,24 @@ function StarIcon({ filled }: { filled: boolean }) {
 }
 
 export function StarredPage() {
-  const sessionId = getSessionId()
   const navigate = useNavigate()
 
   const [rows, setRows] = useState<StarredQuestionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // Track which question IDs have been unstarred this session (visual only until refresh)
   const [unstarred, setUnstarred] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     api.stars
-      .listAll(sessionId)
+      .listAll()
       .then(setRows)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [sessionId])
+  }, [])
 
   function handleUnstar(questionId: string) {
     setUnstarred((prev) => new Set(prev).add(questionId))
-    api.stars.toggle(sessionId, questionId).catch(() => {
+    api.stars.toggle(questionId).catch(() => {
       // revert visual if the call fails
       setUnstarred((prev) => {
         const next = new Set(prev)

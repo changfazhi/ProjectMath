@@ -31,12 +31,12 @@ export interface StreakStats {
   dailyActivity: DailyActivity[];
 }
 
-export async function getStreakStats(sessionId: string): Promise<StreakStats> {
+export async function getStreakStats(userId: string): Promise<StreakStats> {
   const [attemptsResult, countResult] = await Promise.all([
     supabase
       .from('attempts')
       .select('is_correct, question_id, attempted_at')
-      .eq('session_id', sessionId),
+      .eq('session_id', userId),
     supabase
       .from('questions')
       .select('*', { count: 'exact', head: true }),

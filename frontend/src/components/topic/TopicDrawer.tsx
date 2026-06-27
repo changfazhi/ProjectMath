@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Topic } from '../../types/api'
-import { getSessionId } from '../../lib/session'
 import { useConcepts } from '../../hooks/useConcepts'
 import { useTopicQuestions } from '../../hooks/useTopicQuestions'
 import { ConceptsList } from './ConceptsList'
@@ -18,12 +17,11 @@ interface Props {
 
 export function TopicDrawer({ topic, onClose }: Props) {
   const navigate = useNavigate()
-  const sessionId = getSessionId()
   const open = topic !== null
 
   const { concepts, loading: conceptsLoading, error: conceptsError } = useConcepts(topic?.id ?? null)
   const { questions, starredIds, toggleStar, loading: questionsLoading, error: questionsError } =
-    useTopicQuestions(topic?.id ?? null, sessionId)
+    useTopicQuestions(topic?.id ?? null)
 
   // Close on Escape key
   useEffect(() => {

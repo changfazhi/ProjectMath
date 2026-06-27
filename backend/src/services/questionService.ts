@@ -11,7 +11,7 @@ function stripSolution(q: Question): QuestionPublic {
 
 export async function getNextQuestion(
   topicId: string,
-  sessionId: string,
+  userId: string,
   difficulty?: Difficulty,
 ): Promise<QuestionPublic | null> {
   let query = supabase
@@ -30,7 +30,7 @@ export async function getNextQuestion(
   const { data: correctAttempts } = await supabase
     .from('attempts')
     .select('question_id')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .eq('is_correct', true)
     .in('question_id', questions.map((q) => q.id));
 
@@ -74,7 +74,7 @@ export async function getQuestionWithSolution(id: string): Promise<Question | nu
 
 export async function getQuestionsByTopicWithStatus(
   topicId: string,
-  sessionId: string,
+  userId: string,
 ): Promise<QuestionWithStatus[]> {
   const { data: questions, error } = await supabase
     .from('questions')
@@ -91,7 +91,7 @@ export async function getQuestionsByTopicWithStatus(
   const { data: attempts } = await supabase
     .from('attempts')
     .select('question_id, part_label, is_correct')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .in('question_id', questionIds);
 
   // Group attempts by question_id → { part_label | null → is_correct (best result) }

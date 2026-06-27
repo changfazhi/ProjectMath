@@ -1,19 +1,14 @@
 import { Router } from 'express';
-import { z } from 'zod';
+import { gate } from '../middleware/auth.js';
 import { getStreakStats } from '../services/streakService.js';
 
 const router = Router();
 
-router.get('/', async (req, res) => {
+router.get('/', ...gate('practice'), async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
-    const stats = await getStreakStats(sessionId);
+    const stats = await getStreakStats(req.user!.uid);
     res.json(stats);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });

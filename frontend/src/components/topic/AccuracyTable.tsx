@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../lib/api'
-import { getSessionId } from '../../lib/session'
 import { ProgressBar } from '../ui/ProgressBar'
 import { Spinner } from '../ui/Spinner'
 import type { TopicAccuracy } from '../../types/api'
@@ -54,7 +53,7 @@ export function AccuracyTable() {
 
   useEffect(() => {
     api.topics
-      .accuracy(getSessionId())
+      .accuracy()
       .then(setRows)
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false))

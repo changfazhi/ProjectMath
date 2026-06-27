@@ -20,9 +20,9 @@ async function fetchQuestionMap(): Promise<Map<string, string>> {
 }
 
 // Questions attempted at least once but never correctly.
-export async function getCorrectionsItems(sessionId: string): Promise<ReviewItem[]> {
+export async function getCorrectionsItems(userId: string): Promise<ReviewItem[]> {
   const [attemptsRes, qMapResult] = await Promise.all([
-    supabase.from('attempts').select('question_id, is_correct').eq('session_id', sessionId),
+    supabase.from('attempts').select('question_id, is_correct').eq('session_id', userId),
     fetchQuestionMap(),
   ]);
   if (attemptsRes.error) throw new Error(attemptsRes.error.message);
@@ -41,9 +41,9 @@ export async function getCorrectionsItems(sessionId: string): Promise<ReviewItem
 }
 
 // All questions from the bottom 25% of topics by accuracy.
-export async function getWeakTopicsItems(sessionId: string): Promise<ReviewItem[]> {
+export async function getWeakTopicsItems(userId: string): Promise<ReviewItem[]> {
   const [attemptsRes, qMap] = await Promise.all([
-    supabase.from('attempts').select('question_id, is_correct').eq('session_id', sessionId),
+    supabase.from('attempts').select('question_id, is_correct').eq('session_id', userId),
     fetchQuestionMap(),
   ]);
   if (attemptsRes.error) throw new Error(attemptsRes.error.message);
@@ -76,12 +76,12 @@ export async function getWeakTopicsItems(sessionId: string): Promise<ReviewItem[
 }
 
 // Solved questions with the slowest average correct-attempt time (bottom 20%).
-export async function getSpeedDrillItems(sessionId: string): Promise<ReviewItem[]> {
+export async function getSpeedDrillItems(userId: string): Promise<ReviewItem[]> {
   const [attemptsRes, qMap] = await Promise.all([
     supabase
       .from('attempts')
       .select('question_id, time_taken_s')
-      .eq('session_id', sessionId)
+      .eq('session_id', userId)
       .eq('is_correct', true)
       .not('time_taken_s', 'is', null),
     fetchQuestionMap(),
@@ -112,8 +112,8 @@ export async function getSpeedDrillItems(sessionId: string): Promise<ReviewItem[
 }
 
 // Questions due for review per Wozniak SM-2 schedule (see spacedRepetitionService.ts).
-export async function getSpacedItems(sessionId: string): Promise<ReviewItem[]> {
-  return getSpacedDueItems(sessionId);
+export async function getSpacedItems(userId: string): Promise<ReviewItem[]> {
+  return getSpacedDueItems(userId);
 }
 
 // All questions — no session context needed.

@@ -14,14 +14,14 @@ export interface StarredQuestionRow {
 }
 
 export async function toggleStar(
-  sessionId: string,
+  userId: string,
   questionId: string,
 ): Promise<{ starred: boolean }> {
   // Check if already starred
   const { data: existing } = await supabase
     .from('starred_questions')
     .select('id')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .eq('question_id', questionId)
     .maybeSingle();
 
@@ -29,20 +29,20 @@ export async function toggleStar(
     await supabase
       .from('starred_questions')
       .delete()
-      .eq('session_id', sessionId)
+      .eq('session_id', userId)
       .eq('question_id', questionId);
     return { starred: false };
   }
 
-  await supabase.from('starred_questions').insert({ session_id: sessionId, question_id: questionId });
+  await supabase.from('starred_questions').insert({ session_id: userId, question_id: questionId });
   return { starred: true };
 }
 
-export async function getStarredQuestions(sessionId: string): Promise<StarredQuestionRow[]> {
+export async function getStarredQuestions(userId: string): Promise<StarredQuestionRow[]> {
   const { data: starred, error: starError } = await supabase
     .from('starred_questions')
     .select('question_id, starred_at')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .order('starred_at', { ascending: false });
 
   if (starError) throw new Error(starError.message);
@@ -58,7 +58,7 @@ export async function getStarredQuestions(sessionId: string): Promise<StarredQue
     supabase
       .from('attempts')
       .select('question_id, is_correct, time_taken_s, attempted_at')
-      .eq('session_id', sessionId)
+      .eq('session_id', userId)
       .in('question_id', questionIds)
       .order('attempted_at', { ascending: false }),
   ]);
@@ -98,7 +98,7 @@ export async function getStarredQuestions(sessionId: string): Promise<StarredQue
 }
 
 export async function getStarredIds(
-  sessionId: string,
+  userId: string,
   questionIds: string[],
 ): Promise<string[]> {
   if (questionIds.length === 0) return [];
@@ -106,7 +106,7 @@ export async function getStarredIds(
   const { data, error } = await supabase
     .from('starred_questions')
     .select('question_id')
-    .eq('session_id', sessionId)
+    .eq('session_id', userId)
     .in('question_id', questionIds);
 
   if (error) throw new Error(error.message);

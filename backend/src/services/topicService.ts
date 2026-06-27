@@ -16,13 +16,13 @@ export async function getAllTopics(level?: MathLevel): Promise<Topic[]> {
   return data as Topic[];
 }
 
-export async function getTopicsProgress(sessionId: string): Promise<TopicProgress[]> {
+export async function getTopicsProgress(userId: string): Promise<TopicProgress[]> {
   const [questionsResult, attemptsResult] = await Promise.all([
     supabase.from('questions').select('id, topic_id'),
     supabase
       .from('attempts')
       .select('question_id')
-      .eq('session_id', sessionId)
+      .eq('session_id', userId)
       .eq('is_correct', true),
   ]);
 
@@ -49,14 +49,14 @@ export async function getTopicsProgress(sessionId: string): Promise<TopicProgres
   }));
 }
 
-export async function getTopicsAccuracy(sessionId: string): Promise<TopicAccuracy[]> {
+export async function getTopicsAccuracy(userId: string): Promise<TopicAccuracy[]> {
   const [topicsResult, questionsResult, attemptsResult] = await Promise.all([
     supabase.from('topics').select('id, name').order('name'),
     supabase.from('questions').select('id, topic_id'),
     supabase
       .from('attempts')
       .select('question_id, is_correct')
-      .eq('session_id', sessionId),
+      .eq('session_id', userId),
   ]);
 
   if (topicsResult.error) throw new Error(topicsResult.error.message);

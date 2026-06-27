@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { gate } from '../middleware/auth.js';
 import { gradeSolution, getGradingsForQuestion, GradingError } from '../services/gradingService.js';
 
 const router = Router();
@@ -30,21 +31,19 @@ const gradeLimiter = rateLimit({
 });
 
 const bodySchema = z.object({
-  session_id: z.string().uuid(),
   question_id: z.string().uuid(),
   time_taken_s: z.coerce.number().int().positive().optional(),
 });
 
-// GET /api/grade?session_id=UUID&question_id=UUID — rehydrate past gradings
-router.get('/', async (req, res) => {
+// GET /api/grade?question_id=UUID — rehydrate past gradings
+router.get('/', ...gate('photoGrading'), async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
     const questionId = z.string().uuid().parse(req.query.question_id);
-    const gradings = await getGradingsForQuestion(sessionId, questionId);
+    const gradings = await getGradingsForQuestion(req.user!.uid, questionId);
     res.json(gradings);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id and question_id must be valid UUIDs' });
+      res.status(400).json({ error: 'question_id must be a valid UUID' });
       return;
     }
     res.status(500).json({ error: (err as Error).message });
@@ -52,16 +51,16 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/grade — multipart upload of solution photo(s) → AI grade
-router.post('/', gradeLimiter, upload.array('images', MAX_IMAGES), async (req, res) => {
+router.post('/', ...gate('photoGrading'), gradeLimiter, upload.array('images', MAX_IMAGES), async (req, res) => {
   try {
-    const { session_id, question_id, time_taken_s } = bodySchema.parse(req.body);
+    const { question_id, time_taken_s } = bodySchema.parse(req.body);
     const files = (req.files as Express.Multer.File[]) ?? [];
     if (files.length === 0) {
       res.status(400).json({ error: 'Attach at least one photo of your solution.' });
       return;
     }
     const result = await gradeSolution({
-      session_id,
+      userId: req.user!.uid,
       question_id,
       time_taken_s,
       images: files.map((f) => ({ mimeType: f.mimetype, buffer: f.buffer })),

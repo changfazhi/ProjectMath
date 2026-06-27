@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { z } from 'zod';
+import { gate } from '../middleware/auth.js';
 import {
   getCorrectionsItems,
   getWeakTopicsItems,
@@ -14,60 +14,38 @@ import {
 
 const router = Router();
 
-const sessionSchema = z.string().uuid();
-
-function sessionId(raw: unknown): string {
-  return sessionSchema.parse(raw);
-}
-
-router.get('/corrections', async (req, res) => {
+router.get('/corrections', ...gate('review'), async (req, res) => {
   try {
-    const items = await getCorrectionsItems(sessionId(req.query.session_id));
+    const items = await getCorrectionsItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-router.get('/weak-topics', async (req, res) => {
+router.get('/weak-topics', ...gate('review'), async (req, res) => {
   try {
-    const items = await getWeakTopicsItems(sessionId(req.query.session_id));
+    const items = await getWeakTopicsItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-router.get('/speed-drills', async (req, res) => {
+router.get('/speed-drills', ...gate('review'), async (req, res) => {
   try {
-    const items = await getSpeedDrillItems(sessionId(req.query.session_id));
+    const items = await getSpeedDrillItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-router.get('/spaced', async (req, res) => {
+router.get('/spaced', ...gate('review'), async (req, res) => {
   try {
-    const items = await getSpacedItems(sessionId(req.query.session_id));
+    const items = await getSpacedItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });
@@ -81,15 +59,11 @@ router.get('/random', async (_req, res) => {
   }
 });
 
-router.get('/diagnosis', async (req, res) => {
+router.get('/diagnosis', ...gate('review'), async (req, res) => {
   try {
-    const result = await getWeaknessDiagnosis(sessionId(req.query.session_id));
+    const result = await getWeaknessDiagnosis(req.user!.uid);
     res.json(result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     const msg = (err as Error).message;
     if (msg.includes('Attempt at least')) {
       res.status(403).json({ error: msg });
@@ -99,15 +73,11 @@ router.get('/diagnosis', async (req, res) => {
   }
 });
 
-router.get('/study-plan', async (req, res) => {
+router.get('/study-plan', ...gate('review'), async (req, res) => {
   try {
-    const result = await getPersonalisedStudyPlan(sessionId(req.query.session_id));
+    const result = await getPersonalisedStudyPlan(req.user!.uid);
     res.json(result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });

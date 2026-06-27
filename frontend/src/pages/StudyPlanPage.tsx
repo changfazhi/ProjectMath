@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { getSessionId } from '../lib/session'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
 import type { StudyPlanItem } from '../types/api'
@@ -10,7 +9,6 @@ import type { StudyPlanItem } from '../types/api'
 
 interface StoredPlan {
   date: string
-  session_id: string
   items: StudyPlanItem[]
   reasoning: string
 }
@@ -21,12 +19,12 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function loadStoredPlan(sessionId: string): StoredPlan | null {
+function loadStoredPlan(): StoredPlan | null {
   try {
     const raw = localStorage.getItem(PLAN_KEY)
     if (!raw) return null
     const p = JSON.parse(raw) as StoredPlan
-    if (p.date !== todayStr() || p.session_id !== sessionId) return null
+    if (p.date !== todayStr()) return null
     return p
   } catch {
     return null
@@ -147,17 +145,15 @@ export function StudyPlanPage() {
     setLoading(true)
     setError(null)
     try {
-      const sessionId = getSessionId()
-
       let items: StudyPlanItem[]
       let planReasoning: string
 
-      const stored = loadStoredPlan(sessionId)
+      const stored = loadStoredPlan()
       if (stored) {
         items = stored.items
         planReasoning = stored.reasoning
       } else {
-        const fresh = await api.review.studyPlan(sessionId)
+        const fresh = await api.review.studyPlan()
         if (fresh.items.length === 0) {
           setError("You've already mastered all the recommended questions — great work!")
           setLoading(false)
@@ -165,11 +161,11 @@ export function StudyPlanPage() {
         }
         items = fresh.items
         planReasoning = fresh.reasoning
-        savePlan({ date: todayStr(), session_id: sessionId, items, reasoning: planReasoning })
+        savePlan({ date: todayStr(), items, reasoning: planReasoning })
       }
 
       // Check attempt status for each question
-      const attempts = await api.attempts.list(sessionId)
+      const attempts = await api.attempts.list()
       const correctSet = new Set(attempts.filter(a => a.is_correct).map(a => a.question_id))
       const triedSet = new Set(attempts.map(a => a.question_id))
 

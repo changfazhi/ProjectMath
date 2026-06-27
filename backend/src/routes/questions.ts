@@ -1,33 +1,27 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { requireAuth } from '../middleware/auth.js';
 import { getNextQuestion, getQuestionById, getQuestionsByTopicWithStatus, getQuestionWithSolution } from '../services/questionService.js';
 
 const router = Router();
 
 const difficultySchema = z.coerce.number().int().min(1).max(3).optional();
 
-// GET /api/topics/:topicId/questions?session_id=UUID
-router.get('/:topicId/questions', async (req, res) => {
+// GET /api/topics/:topicId/questions — requires auth (status needs userId)
+router.get('/:topicId/questions', requireAuth, async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
-    const questions = await getQuestionsByTopicWithStatus(req.params.topicId, sessionId);
+    const questions = await getQuestionsByTopicWithStatus(req.params.topicId, req.user!.uid);
     res.json(questions);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID' });
-      return;
-    }
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-// GET /api/topics/:topicId/next?session_id=xxx&difficulty=2
-router.get('/:topicId/next', async (req, res) => {
+// GET /api/topics/:topicId/next?difficulty=2 — requires auth (skips already-answered questions)
+router.get('/:topicId/next', requireAuth, async (req, res) => {
   try {
-    const sessionId = z.string().uuid().parse(req.query.session_id);
     const difficulty = difficultySchema.parse(req.query.difficulty) as 1 | 2 | 3 | undefined;
-
-    const question = await getNextQuestion(req.params.topicId, sessionId, difficulty);
+    const question = await getNextQuestion(req.params.topicId, req.user!.uid, difficulty);
     if (!question) {
       res.status(404).json({ error: 'No questions found for this topic' });
       return;
@@ -35,7 +29,7 @@ router.get('/:topicId/next', async (req, res) => {
     res.json(question);
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'session_id must be a valid UUID', details: err.issues });
+      res.status(400).json({ error: 'Invalid query parameters', details: err.issues });
       return;
     }
     res.status(500).json({ error: (err as Error).message });

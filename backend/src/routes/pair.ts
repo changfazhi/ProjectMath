@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { gate } from '../middleware/auth.js';
 import { addImage, closePair, createPair, getValidPair, PairError } from '../services/pairService.js';
 import { gradeSolution, GradingError } from '../services/gradingService.js';
 import { getQuestionById } from '../services/questionService.js';
@@ -31,15 +32,14 @@ const pairLimiter = rateLimit({
 });
 
 const createSchema = z.object({
-  session_id: z.string().uuid(),
   question_id: z.string().uuid(),
 });
 
-// POST /api/pair — desktop starts a pairing, gets a token to encode in the QR.
-router.post('/', pairLimiter, async (req, res) => {
+// POST /api/pair — desktop starts a pairing (requires auth; userId stored in pair for grading).
+router.post('/', ...gate('pairUpload'), pairLimiter, async (req, res) => {
   try {
-    const { session_id, question_id } = createSchema.parse(req.body);
-    const pair = createPair(session_id, question_id);
+    const { question_id } = createSchema.parse(req.body);
+    const pair = createPair(req.user!.uid, question_id);
     const body: CreatePairResponse = {
       token: pair.token,
       mobile_path: `/m/${pair.token}`,
@@ -55,7 +55,7 @@ router.post('/', pairLimiter, async (req, res) => {
   }
 });
 
-// GET /api/pair/:token — mobile page loads its (secret-free) context; notifies the desktop.
+// GET /api/pair/:token — mobile page loads its context; no auth (phone uses token as auth).
 router.get('/:token', pairLimiter, async (req, res) => {
   const pair = getValidPair(req.params.token);
   if (!pair) {
@@ -76,7 +76,7 @@ router.get('/:token', pairLimiter, async (req, res) => {
   }
 });
 
-// POST /api/pair/:token/photo — mobile sends one photo; it streams live to the desktop.
+// POST /api/pair/:token/photo — mobile sends one photo; no auth (token is the auth).
 router.post('/:token/photo', pairLimiter, upload.single('image'), async (req, res) => {
   try {
     const pair = getValidPair(req.params.token);
@@ -121,7 +121,7 @@ router.post('/:token/done', pairLimiter, async (req, res) => {
   emitToPair(pair.token, 'pair:grading');
   try {
     const grading = await gradeSolution({
-      session_id: pair.session_id,
+      userId: pair.userId,
       question_id: pair.question_id,
       images: pair.images,
     });

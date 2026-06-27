@@ -6,6 +6,7 @@
 
 **Files:**
 - Backend routes: `lowercase.ts` (e.g., `routes/attempts.ts`, `routes/chat.ts`)
+- Backend middleware: `camelCase.ts` (e.g., `middleware/auth.ts`)
 - Backend services: `camelCaseService.ts` (e.g., `attemptService.ts`, `gradingService.ts`)
 - Frontend components: `PascalCase.tsx` (e.g., `Button.tsx`, `PracticePage.tsx`)
 - Frontend hooks: `useCamelCase.ts` (e.g., `usePracticeSession.ts`, `useChatSession.ts`)
@@ -25,7 +26,7 @@
 
 **Types:**
 - PascalCase for interfaces and type aliases (e.g., `QuestionPublic`, `SubmitAttemptResponse`)
-- camelCase for type properties matching database snake_case (e.g., `session_id`, `question_id`)
+- camelCase for type properties matching database snake_case (e.g., `question_id`, `user_id`)
 - Union types use PascalCase (e.g., `MathLevel`, `Difficulty`, `AttemptStatus`)
 - Generic types: `T` for generic, `Omit`/`Pick` utilities from lib/types
 - Type imports: `import type { TypeName }` — always use `type` keyword
@@ -55,7 +56,7 @@
   - `strict: true`
   - `esModuleInterop: true`
   - `skipLibCheck: true`
-  
+
 - **Frontend (`frontend/tsconfig.app.json`):**
   - `target: es2023`
   - `module: esnext`
@@ -77,6 +78,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import type { Attempt, QuestionPart } from '../types/index.js'
+import { gate } from '../middleware/auth.js'
 import { supabase } from '../db/supabase.js'
 ```
 
@@ -85,6 +87,7 @@ import { supabase } from '../db/supabase.js'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { Attempt, Difficulty } from '../types/api'
+import { useAuth } from '../contexts/AuthContext'
 import { usePracticeSession } from '../hooks/usePracticeSession'
 import { Card } from '../components/ui/Card'
 ```
@@ -93,6 +96,62 @@ import { Card } from '../components/ui/Card'
 - Not configured; all imports use relative paths
 - Frontend imports relative to `src/`
 - Backend imports relative to `src/` with `.js` extensions
+
+## Backend Patterns
+
+### Route Responsibility
+Routes are thin wrappers — apply auth middleware, validate input, call one service function, return JSON. No business logic in routes.
+
+```typescript
+// Correct — backend/src/routes/attempts.ts
+router.post('/', ...gate('practice'), async (req, res) => {
+  const body = submitSchema.parse(req.body)          // validate (no session_id)
+  const result = await submitAttempt(req.user!.uid, body)  // delegate with uid
+  res.status(201).json(result)                       // respond
+})
+```
+
+### Zod Validation
+Every `req.body` and `req.query` parameter is validated with Zod before use. Inline schemas for query params; named schemas for request bodies.
+
+`session_id` is **not** validated from request input — user identity comes from `req.user!.uid` set by `requireAuth` middleware after verifying the Firebase token.
+
+```typescript
+// Body schema (named) — no session_id
+const submitSchema = z.object({
+  question_id: z.string().uuid(),
+  answer_given: z.string().min(1),
+  time_taken_s: z.number().int().positive().optional(),
+})
+const body = submitSchema.parse(req.body)
+
+// Query param (inline) — no session_id
+const questionId = z.string().uuid().parse(req.query.question_id)
+```
+
+ZodError catches return HTTP 400 with `{ error, details }`. Other errors return HTTP 500.
+
+### Authentication & Feature Gating
+
+**`requireAuth`** (`backend/src/middleware/auth.ts`): verifies the Firebase ID token from the `Authorization: Bearer <token>` header, upserts the user row via atomic `INSERT ... ON CONFLICT DO UPDATE`, and sets `req.user = { uid: UUID, tier: 'free' | 'paid' }`. Returns 401 if the token is missing or invalid.
+
+**`gate(feature)`** (`backend/src/middleware/auth.ts`): composes `requireAuth` with a tier check against `FEATURE_TIERS[feature]` from `backend/src/config/featureTiers.ts`. Returns 402 if the user's tier is insufficient.
+
+```typescript
+// Use gate() on every route that requires identity
+router.post('/', ...gate('practice'), handler)   // free tier
+router.post('/', ...gate('aiHints'), handler)    // currently free, can flip to 'paid'
+
+// Public routes (no auth required)
+router.get('/', handler)
+```
+
+**`FEATURE_TIERS`** (`backend/src/config/featureTiers.ts`): the single source of truth for which tier each feature requires. Changing a feature from free to paid is a one-line edit here — no route changes needed.
+
+**Frontend:** `useFeature(feature)` in `frontend/src/hooks/useFeature.ts` mirrors `FEATURE_TIERS` for UX gating only (show/hide buttons, show upgrade prompt). It is not a security boundary. Backend `gate()` is always the enforcement layer; `api.ts` handles 401 by opening the login modal and 402 by opening the upgrade modal.
+
+### Database Access
+Never call `supabase` from a route file. All Supabase queries live in `backend/src/services/*.ts`.
 
 ## Error Handling
 
@@ -122,11 +181,6 @@ import { Card } from '../components/ui/Card'
   }
   ```
 
-- **Error throwing for logic errors:**
-  ```typescript
-  if (!question) throw new Error(`Question ${id} not found`)
-  ```
-
 - **Service → Route error propagation:**
   - Services throw descriptive errors
   - Routes catch and map to HTTP status codes
@@ -138,10 +192,8 @@ import { Card } from '../components/ui/Card'
   ```typescript
   try {
     const result = await someAsyncFn()
-    // ... process
   } catch (e) {
-    const error = (e as Error).message
-    setError(error)
+    setError((e as Error).message)
   }
   ```
 
@@ -152,7 +204,7 @@ import { Card } from '../components/ui/Card'
   try {
     await api.call()
   } catch (e) {
-    setState(snapshot) // revert on failure
+    setState(snapshot)
     setError((e as Error).message)
   }
   ```
@@ -160,13 +212,8 @@ import { Card } from '../components/ui/Card'
 - **Cancelled flag for cleanup:**
   ```typescript
   let cancelled = false
-  fetchData()
-    .then(data => {
-      if (!cancelled) setState(data)
-    })
-  return () => {
-    cancelled = true
-  }
+  fetchData().then(data => { if (!cancelled) setState(data) })
+  return () => { cancelled = true }
   ```
 
 ## Logging
@@ -183,7 +230,7 @@ import { Card } from '../components/ui/Card'
 
 **When to Comment:**
 - Complex algorithms or regex patterns (see `attemptService.ts` with normalizeLaTeX explanation)
-- API endpoint documentation above route handlers (e.g., `// POST /api/grade — multipart upload...`)
+- API endpoint documentation above route handlers
 - Special handling notes (e.g., `// Images are held in memory: forwarded to Gemini as base64`)
 - Clarifications about edge cases (e.g., multi-part question reveal logic)
 
@@ -192,25 +239,20 @@ import { Card } from '../components/ui/Card'
 - Simple loops or conditionals
 - Standard patterns (useEffect, useState usage)
 
-**JSDoc/TSDoc:**
-- Not used in this codebase
-- Types are explicit enough without JSDoc
+**JSDoc/TSDoc:** Not used in this codebase; types are explicit enough without it.
 
 ## Function Design
 
-**Size:** 
+**Size:**
 - Most functions 15–50 lines
 - Largest services (e.g., gradingService.ts) break complex logic into helpers
 - Routes are thin (~15 lines) — delegate to services
 
 **Parameters:**
-- Prefer object parameters over multiple args (readability)
+- Prefer object parameters over multiple positional args
   ```typescript
   // Good
-  export async function submitAttempt(body: SubmitAttemptBody): Promise<SubmitAttemptResponse>
-  
-  // Over
-  export async function submitAttempt(sessionId, questionId, answerGiven, ...): ...
+  export async function submitAttempt(uid: string, body: SubmitAttemptBody): Promise<SubmitAttemptResponse>
   ```
 
 **Return Values:**
@@ -232,18 +274,20 @@ import { Card } from '../components/ui/Card'
 
 **Backend Layer Structure:**
 - `routes/` — thin request handlers, validation, error mapping
+- `middleware/` — auth middleware (`requireAuth`, `gate`)
 - `services/` — business logic, database access
-- `db/` — Supabase and Gemini clients
+- `db/` — Supabase, Gemini, and Firebase Admin clients
+- `config/` — `featureTiers.ts` (feature-to-tier mapping)
 - `types/` — TypeScript definitions
 - `index.ts` — Express app setup and routing
 
 **Frontend Layer Structure:**
 - `pages/` — full-page components
-- `components/` — reusable React components (ui/, question/, topic/, math/, chat/, etc.)
-- `hooks/` — custom hooks for state/side-effects
-- `lib/` — utilities (api, session, socket, utils, renderLatex)
+- `components/` — reusable React components (ui/, question/, topic/, math/, chat/, progress/, pair/, layout/)
+- `hooks/` — custom hooks for state/side-effects; includes `useFeature.ts`
+- `lib/` — utilities (api with auth, socket, utils, renderLatex)
 - `types/` — TypeScript definitions
-- `contexts/` — React Context (currently ThemeContext)
+- `contexts/` — React Context (AuthContext, ThemeContext)
 - `main.tsx` — entry point
 - `App.tsx` — router setup
 
@@ -253,6 +297,8 @@ import { Card } from '../components/ui/Card'
 - `PORT` — server port (default 3001)
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — database credentials
 - `GEMINI_API_KEY`, `GEMINI_MODEL` — AI grading
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` — Firebase Admin SDK (all three required; use `cert()` from `firebase-admin/app`)
+- `CORS_ORIGIN` — allowed origin for CORS (e.g., `http://localhost:5173` in dev)
 - `CHAT_RATE_LIMIT_PER_MIN`, `CHAT_MAX_MESSAGES_PER_QUESTION` — hint chatbot limits
 - `GRADE_RATE_LIMIT_PER_MIN`, `GRADE_MAX_IMAGES`, `GRADE_MAX_IMAGE_MB` — photo grading limits
 - `PAIR_TTL_MIN` — phone upload pairing token lifetime
@@ -267,4 +313,4 @@ import { Card } from '../components/ui/Card'
 
 ---
 
-*Convention analysis: 2026-06-26*
+*Convention analysis: 2026-06-26 — merged: auth middleware patterns from firebase-auth branch + naming / style / module design detail from main branch*

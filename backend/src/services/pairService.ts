@@ -23,13 +23,13 @@ function isExpired(p: PairSession): boolean {
   return Date.now() > p.expires_at;
 }
 
-export function createPair(sessionId: string, questionId: string): PairSession {
+export function createPair(userId: string, questionId: string): PairSession {
   // 256 bits of entropy, URL-safe — the token is the only credential, so it must be unguessable.
   const token = randomBytes(32).toString('base64url');
   const now = Date.now();
   const pair: PairSession = {
     token,
-    session_id: sessionId,
+    userId,
     question_id: questionId,
     images: [],
     created_at: now,

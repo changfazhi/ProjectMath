@@ -1,6 +1,5 @@
 import { useCallback, useReducer, useRef } from 'react'
 import { api } from '../lib/api'
-import { getSessionId } from '../lib/session'
 import type { Difficulty, GradeResponse, QuestionPublic, SubmitAttemptResponse } from '../types/api'
 
 type PracticePhase = 'loading' | 'answering' | 'submitted' | 'revealed' | 'complete' | 'error'
@@ -188,7 +187,6 @@ const initialState: PracticeState = {
 
 export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
   const [state, dispatch] = useReducer(reducer, initialState)
-  const sessionId = getSessionId()
   const difficultyRef = useRef(difficulty)
   difficultyRef.current = difficulty
 
@@ -197,7 +195,6 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     try {
       const question = await api.questions.next(
         topicId,
-        sessionId,
         diff !== undefined ? diff : difficultyRef.current,
       )
       dispatch({ type: 'LOAD_SUCCESS', question })
@@ -209,7 +206,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         dispatch({ type: 'ERROR', message: msg })
       }
     }
-  }, [topicId, sessionId])
+  }, [topicId])
 
   const loadSpecific = useCallback(async (questionId: string) => {
     dispatch({ type: 'LOAD_START' })
@@ -230,7 +227,6 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         : undefined
       try {
         const result = await api.attempts.submit({
-          session_id: sessionId,
           question_id: state.question.id,
           answer_given: answerGiven,
           time_taken_s: timeTaken,
@@ -240,7 +236,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         dispatch({ type: 'ERROR', message: (err as Error).message })
       }
     },
-    [state.question, state.questionStartTime, sessionId],
+    [state.question, state.questionStartTime],
   )
 
   const submitPart = useCallback(
@@ -252,7 +248,6 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         : undefined
       try {
         const result = await api.attempts.submit({
-          session_id: sessionId,
           question_id: state.question.id,
           part_label: partLabel,
           answer_given: answerGiven,
@@ -269,7 +264,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         dispatch({ type: 'ERROR', message: (err as Error).message })
       }
     },
-    [state.question, state.questionStartTime, sessionId],
+    [state.question, state.questionStartTime],
   )
 
   const submitPhotos = useCallback(
@@ -280,7 +275,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         ? Math.max(1, Math.round((Date.now() - state.questionStartTime) / 1000))
         : undefined
       try {
-        const grading = await api.grade.submit(sessionId, state.question.id, images, timeTaken)
+        const grading = await api.grade.submit(state.question.id, images, timeTaken)
         dispatch({ type: 'GRADE_SUCCESS', grading })
       } catch (err) {
         // Photo failures (irrelevant/blank photo, transient errors) are recoverable — keep the
@@ -288,7 +283,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
         dispatch({ type: 'GRADE_REJECTED', message: (err as Error).message })
       }
     },
-    [state.question, state.questionStartTime, sessionId],
+    [state.question, state.questionStartTime],
   )
 
   // Grading driven by an external channel (the "upload via phone" socket flow). These reuse
@@ -320,7 +315,6 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
 
   return {
     ...state,
-    sessionId,
     loadNext,
     loadSpecific,
     submitAnswer,

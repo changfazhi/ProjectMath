@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
-import { getSessionId } from '../lib/session'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
 import type { DiagnosisResult, TopicDiagnosis } from '../types/api'
@@ -128,10 +127,9 @@ export function ReviewPage() {
   const [totalAttempts, setTotalAttempts] = useState(0)
 
   useEffect(() => {
-    const sessionId = getSessionId()
     Promise.all([
-      api.review.spaced(sessionId),
-      api.streaks.get(sessionId),
+      api.review.spaced(),
+      api.streaks.get(),
     ])
       .then(([spaced, streaks]) => {
         setSpacedDueCount(spaced.items.length)
@@ -155,8 +153,7 @@ export function ReviewPage() {
     try {
       let queue = loadQueue('review_queue_corrections')
       if (!queue) {
-        const sessionId = getSessionId()
-        const { items } = await api.review.corrections(sessionId)
+        const { items } = await api.review.corrections()
         if (items.length === 0) {
           setCorrectionsError('No incorrect questions yet — nothing to correct!')
           setCorrectionsLoading(false)
@@ -186,8 +183,7 @@ export function ReviewPage() {
     try {
       let queue = loadQueue('review_queue_spaced')
       if (!queue) {
-        const sessionId = getSessionId()
-        const { items } = await api.review.spaced(sessionId)
+        const { items } = await api.review.spaced()
         if (items.length === 0) {
           setSpacedError('No questions due for review today — check back later!')
           setSpacedLoading(false)
@@ -219,7 +215,7 @@ export function ReviewPage() {
     setDiagError(null)
 
     try {
-      const result = await api.review.diagnosis(getSessionId())
+      const result = await api.review.diagnosis()
       setDiagnosis(result)
       setDiagState('shown')
     } catch (err) {
