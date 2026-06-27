@@ -220,6 +220,8 @@ export interface DiagnosisResult {
   generated_at: string
 }
 
+export type QuestStatus = 'correct' | 'attempted' | 'pending'
+
 export interface StudyPlanItem {
   question_id: string
   topic_id: string

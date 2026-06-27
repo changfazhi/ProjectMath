@@ -3,41 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
-import type { StudyPlanItem } from '../types/api'
-
-// ── Persistence ───────────────────────────────────────────────────────────────
-
-interface StoredPlan {
-  date: string
-  items: StudyPlanItem[]
-  reasoning: string
-}
-
-const PLAN_KEY = 'study_plan_v1'
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function loadStoredPlan(): StoredPlan | null {
-  try {
-    const raw = localStorage.getItem(PLAN_KEY)
-    if (!raw) return null
-    const p = JSON.parse(raw) as StoredPlan
-    if (p.date !== todayStr()) return null
-    return p
-  } catch {
-    return null
-  }
-}
-
-function savePlan(plan: StoredPlan) {
-  localStorage.setItem(PLAN_KEY, JSON.stringify(plan))
-}
+import type { StudyPlanItem, QuestStatus } from '../types/api'
+import { todayStr, savePlan, loadStoredPlan } from '../lib/studyPlan'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type QuestStatus = 'correct' | 'attempted' | 'pending'
 
 interface Quest extends StudyPlanItem {
   status: QuestStatus
@@ -148,8 +117,8 @@ export function StudyPlanPage() {
       let items: StudyPlanItem[]
       let planReasoning: string
 
-      const stored = loadStoredPlan()
-      if (stored) {
+      const { plan: stored, isStale } = loadStoredPlan()
+      if (stored && !isStale) {
         items = stored.items
         planReasoning = stored.reasoning
       } else {
