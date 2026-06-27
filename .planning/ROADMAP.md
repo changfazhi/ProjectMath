@@ -14,7 +14,7 @@ Two phases deliver a persistent, collapsible study plan sidebar for Math Trainer
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Collapsible Sidebar with Local Plan** - Persistent sidebar in RootLayout showing today's quest list, collapsible, with empty/new-day states (completed 2026-06-27)
-- [ ] **Phase 2: Firestore Sync and Live Quest Status** - Cloud persistence keyed to Firebase UID plus live status refresh from the attempts API
+- [x] **Phase 2: Firestore Sync and Live Quest Status** - Cloud persistence keyed to Firebase UID plus live status refresh from the attempts API (completed 2026-06-27)
 
 ## Phase Details
 
@@ -60,14 +60,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Quest statuses update to ✓ correct or ↩ attempted in the sidebar when the user returns from a practice question — no full page reload required
   4. Quest status is always derived from the attempts API (`GET /api/attempts`) — no separate status store is written or maintained
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Firestore-backed cross-device plan persistence (save under users/{uid}/study_plans/{date}, Firestore-first read, localStorage cache/fallback)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Live quest status refresh from the attempts API on window focus / visibilitychange (no reload, no status store)
+- [x] 02-02-PLAN.md — Live quest status refresh from the attempts API on window focus / visibilitychange (no reload, no status store)
 
 ## Progress
 
@@ -77,4 +77,4 @@ Phases execute in numeric order: 1 → 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Collapsible Sidebar with Local Plan | 3/3 | Complete    | 2026-06-27 |
-| 2. Firestore Sync and Live Quest Status | 1/2 | In Progress|  |
+| 2. Firestore Sync and Live Quest Status | 2/2 | Complete   | 2026-06-27 |

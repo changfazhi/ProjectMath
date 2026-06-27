@@ -29,8 +29,8 @@
 
 ### Status Sync
 
-- [ ] **SYNC-01**: Quest statuses (correct/attempted/pending) update in the sidebar when the user returns from a practice page without requiring a full page reload
-- [ ] **SYNC-02**: Status is derived from the attempts API (`GET /api/attempts`) — no separate status store
+- [x] **SYNC-01**: Quest statuses (correct/attempted/pending) update in the sidebar when the user returns from a practice page without requiring a full page reload
+- [x] **SYNC-02**: Status is derived from the attempts API (`GET /api/attempts`) — no separate status store
 
 ## v2 Requirements
 
@@ -70,8 +70,8 @@
 | PERS-01 | Phase 2 | Complete |
 | PERS-02 | Phase 2 | Complete |
 | PERS-03 | Phase 2 | Complete |
-| SYNC-01 | Phase 2 | Pending |
-| SYNC-02 | Phase 2 | Pending |
+| SYNC-01 | Phase 2 | Complete |
+| SYNC-02 | Phase 2 | Complete |
 
 **Coverage:**
 
