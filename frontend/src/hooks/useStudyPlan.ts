@@ -15,6 +15,8 @@ export function useStudyPlan(isOpen: boolean) {
   const [isStale, setIsStale] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Bumped on window focus / tab visibility to trigger a status re-derive (SYNC-01)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     // Wait for sidebar to open and for auth to settle before hitting Firestore
@@ -74,8 +76,33 @@ export function useStudyPlan(isOpen: boolean) {
     return () => {
       cancelled = true
     }
-  // Re-run when sidebar opens, when user signs in/out, or when auth finishes loading
-  }, [isOpen, user?.uid, authLoading])
+  // Re-run when sidebar opens, when user signs in/out, when auth finishes loading, or on focus refresh
+  }, [isOpen, user?.uid, authLoading, refreshKey])
+
+  // Register focus/visibilitychange listeners while the sidebar is open so quest
+  // statuses re-derive from api.attempts.list() when the student returns from practice (SYNC-01).
+  // Status is computed only — no setDoc/updateDoc/localStorage status write (SYNC-02).
+  useEffect(() => {
+    if (!isOpen) return
+
+    function onFocus() {
+      setRefreshKey(k => k + 1)
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        setRefreshKey(k => k + 1)
+      }
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [isOpen])
 
   const correctCount = quests.filter(q => q.status === 'correct').length
   const total = quests.length
