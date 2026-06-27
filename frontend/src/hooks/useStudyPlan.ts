@@ -31,8 +31,11 @@ export function useStudyPlan(isOpen: boolean) {
           }
           return
         }
-        const attempts = await api.attempts.list()
+        const planQuestionIds = new Set(plan.items.map(item => item.question_id))
+        const allAttempts = await api.attempts.list()
         if (cancelled) return
+        // Scope to only the plan's questions so unrelated history doesn't inflate status
+        const attempts = allAttempts.filter(a => planQuestionIds.has(a.question_id))
         const correctIds = new Set<string>()
         const incorrectIds = new Set<string>()
         for (const a of attempts) {
