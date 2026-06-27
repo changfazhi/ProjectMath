@@ -1,9 +1,10 @@
 ---
 phase: 02-firestore-sync-and-live-quest-status
 verified: 2026-06-27T15:10:00Z
-status: human_needed
-score: 3/4 must-haves verified
-behavior_unverified: 1
+status: passed
+score: 4/4 must-haves verified
+behavior_unverified: 0
+human_verified: 2026-06-27
 overrides_applied: 0
 human_verification:
   - test: "Open sidebar while signed in, navigate to a pending quest's practice question, answer it correctly, then switch back to the tab / click back to the app. Observe sidebar without reloading the page."
