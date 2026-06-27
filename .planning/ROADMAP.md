@@ -69,5 +69,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Collapsible Sidebar with Local Plan | 3/3 | Complete   | 2026-06-27 |
+| 1. Collapsible Sidebar with Local Plan | 3/3 | Complete    | 2026-06-27 |
 | 2. Firestore Sync and Live Quest Status | 0/TBD | Not started | - |

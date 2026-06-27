@@ -7,19 +7,19 @@
 
 ### Sidebar UI
 
-- [ ] **SIDE-01**: User sees a collapsed sidebar tab/icon accessible from every page in the app
-- [ ] **SIDE-02**: User can expand the sidebar by clicking the tab/icon to reveal their study plan
-- [ ] **SIDE-03**: User can collapse the sidebar by clicking again (collapsed state is default)
-- [ ] **SIDE-04**: When no study plan has been generated today, the expanded sidebar shows a "Generate plan" button that navigates to `/review`
-- [ ] **SIDE-05**: When a new day begins and a prior day's plan exists, the sidebar shows that plan greyed out with a prominent "New day — generate today's plan" prompt
-- [ ] **SIDE-06**: The sidebar does not overlay or obstruct main page content when collapsed
+- [x] **SIDE-01**: User sees a collapsed sidebar tab/icon accessible from every page in the app
+- [x] **SIDE-02**: User can expand the sidebar by clicking the tab/icon to reveal their study plan
+- [x] **SIDE-03**: User can collapse the sidebar by clicking again (collapsed state is default)
+- [x] **SIDE-04**: When no study plan has been generated today, the expanded sidebar shows a "Generate plan" button that navigates to `/review`
+- [x] **SIDE-05**: When a new day begins and a prior day's plan exists, the sidebar shows that plan greyed out with a prominent "New day — generate today's plan" prompt
+- [x] **SIDE-06**: The sidebar does not overlay or obstruct main page content when collapsed
 
 ### Quest List
 
-- [ ] **QUEST-01**: The expanded sidebar lists all quest items from today's study plan (question name, topic, status icon)
-- [ ] **QUEST-02**: Each quest item shows its current status: ✓ correct, ↩ attempted, or numbered (pending)
-- [ ] **QUEST-03**: Clicking a quest item navigates the user to that practice question (`/practice/:topicId?question_id=...`)
-- [ ] **QUEST-04**: A progress summary (e.g. "2 / 5 complete") is visible at the top of the quest list
+- [x] **QUEST-01**: The expanded sidebar lists all quest items from today's study plan (question name, topic, status icon)
+- [x] **QUEST-02**: Each quest item shows its current status: ✓ correct, ↩ attempted, or numbered (pending)
+- [x] **QUEST-03**: Clicking a quest item navigates the user to that practice question (`/practice/:topicId?question_id=...`)
+- [x] **QUEST-04**: A progress summary (e.g. "2 / 5 complete") is visible at the top of the quest list
 
 ### Persistence
 
@@ -57,16 +57,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SIDE-01 | Phase 1 | Pending |
-| SIDE-02 | Phase 1 | Pending |
-| SIDE-03 | Phase 1 | Pending |
-| SIDE-04 | Phase 1 | Pending |
-| SIDE-05 | Phase 1 | Pending |
-| SIDE-06 | Phase 1 | Pending |
-| QUEST-01 | Phase 1 | Pending |
-| QUEST-02 | Phase 1 | Pending |
-| QUEST-03 | Phase 1 | Pending |
-| QUEST-04 | Phase 1 | Pending |
+| SIDE-01 | Phase 1 | Complete |
+| SIDE-02 | Phase 1 | Complete |
+| SIDE-03 | Phase 1 | Complete |
+| SIDE-04 | Phase 1 | Complete |
+| SIDE-05 | Phase 1 | Complete |
+| SIDE-06 | Phase 1 | Complete |
+| QUEST-01 | Phase 1 | Complete |
+| QUEST-02 | Phase 1 | Complete |
+| QUEST-03 | Phase 1 | Complete |
+| QUEST-04 | Phase 1 | Complete |
 | PERS-01 | Phase 2 | Pending |
 | PERS-02 | Phase 2 | Pending |
 | PERS-03 | Phase 2 | Pending |
@@ -74,6 +74,7 @@
 | SYNC-02 | Phase 2 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 15 total
 - Mapped to phases: 15
 - Unmapped: 0 ✓
