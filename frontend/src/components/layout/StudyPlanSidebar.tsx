@@ -15,12 +15,15 @@ export function StudyPlanSidebar() {
 
   const triggerRef = useRef<HTMLButtonElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  // Prevents returning focus to the trigger before the panel has ever been opened,
+  // which would steal keyboard focus from the page content on mount.
+  const hasOpenedRef = useRef(false)
 
-  // Focus management: move to close button on open, return to trigger on close
   useEffect(() => {
     if (isOpen) {
+      hasOpenedRef.current = true
       closeRef.current?.focus()
-    } else {
+    } else if (hasOpenedRef.current) {
       triggerRef.current?.focus()
     }
   }, [isOpen])
