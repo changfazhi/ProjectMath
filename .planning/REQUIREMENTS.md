@@ -23,9 +23,9 @@
 
 ### Persistence
 
-- [ ] **PERS-01**: When user is signed in (Firebase Auth), today's study plan is saved to Firestore under their UID so it survives page refresh and is accessible across devices
-- [ ] **PERS-02**: When user is not signed in (anonymous/no auth), study plan falls back to `localStorage` (existing behaviour preserved)
-- [ ] **PERS-03**: On load, the sidebar reads from Firestore first (if signed in) with `localStorage` as a fast-load cache
+- [x] **PERS-01**: When user is signed in (Firebase Auth), today's study plan is saved to Firestore under their UID so it survives page refresh and is accessible across devices
+- [x] **PERS-02**: When user is not signed in (anonymous/no auth), study plan falls back to `localStorage` (existing behaviour preserved)
+- [x] **PERS-03**: On load, the sidebar reads from Firestore first (if signed in) with `localStorage` as a fast-load cache
 
 ### Status Sync
 
@@ -67,9 +67,9 @@
 | QUEST-02 | Phase 1 | Complete |
 | QUEST-03 | Phase 1 | Complete |
 | QUEST-04 | Phase 1 | Complete |
-| PERS-01 | Phase 2 | Pending |
-| PERS-02 | Phase 2 | Pending |
-| PERS-03 | Phase 2 | Pending |
+| PERS-01 | Phase 2 | Complete |
+| PERS-02 | Phase 2 | Complete |
+| PERS-03 | Phase 2 | Complete |
 | SYNC-01 | Phase 2 | Pending |
 | SYNC-02 | Phase 2 | Pending |
 
