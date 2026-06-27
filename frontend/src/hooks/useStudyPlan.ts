@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { loadStoredPlan } from '../lib/studyPlan'
+import { resolvePlan } from '../lib/studyPlan'
+import { useAuth } from '../contexts/AuthContext'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
 
 export interface Quest extends StudyPlanItem {
@@ -9,13 +10,16 @@ export interface Quest extends StudyPlanItem {
 }
 
 export function useStudyPlan(isOpen: boolean) {
+  const { user, loading: authLoading } = useAuth()
   const [quests, setQuests] = useState<Quest[]>([])
   const [isStale, setIsStale] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Wait for sidebar to open and for auth to settle before hitting Firestore
     if (!isOpen) return
+    if (authLoading) return
 
     let cancelled = false
 
@@ -23,7 +27,8 @@ export function useStudyPlan(isOpen: boolean) {
       setLoading(true)
       setError(null)
       try {
-        const { plan, isStale: stale } = loadStoredPlan()
+        // Firestore-first when signed in; localStorage fallback for anonymous / offline (PERS-02/03)
+        const { plan, isStale: stale } = await resolvePlan(user?.uid ?? null)
         if (!plan) {
           if (!cancelled) {
             setQuests([])
@@ -69,7 +74,8 @@ export function useStudyPlan(isOpen: boolean) {
     return () => {
       cancelled = true
     }
-  }, [isOpen])
+  // Re-run when sidebar opens, when user signs in/out, or when auth finishes loading
+  }, [isOpen, user?.uid, authLoading])
 
   const correctCount = quests.filter(q => q.status === 'correct').length
   const total = quests.length
