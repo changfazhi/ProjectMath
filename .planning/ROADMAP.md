@@ -28,7 +28,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A progress summary (e.g. "2 / 5 complete") appears at the top of the expanded quest list
   4. Clicking any quest item navigates to the correct practice question at `/practice/:topicId?question_id=...`
   5. When no plan exists the expanded sidebar shows a "Generate plan" button that links to `/review`; when a new day begins it shows the prior plan greyed out with a "New day — generate today's plan" prompt
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 01-01-PLAN.md — Walking skeleton: shared studyPlan lib + useStudyPlan hook + QuestItem + StudyPlanSidebar mounted in RootLayout (open → see quests → click → navigate)
+- [ ] 01-02-PLAN.md — Empty / stale-day / loading / error states + refresh-on-open + WCAG focus & Escape handling
+- [ ] 01-03-PLAN.md — End-to-end human verification of the Phase 1 sidebar
 **UI hint**: yes
 
 ### Phase 2: Firestore Sync and Live Quest Status
@@ -50,5 +53,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Collapsible Sidebar with Local Plan | 0/TBD | Not started | - |
+| 1. Collapsible Sidebar with Local Plan | 0/3 | Not started | - |
 | 2. Firestore Sync and Live Quest Status | 0/TBD | Not started | - |
