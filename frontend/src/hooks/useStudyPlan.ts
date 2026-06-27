@@ -33,7 +33,14 @@ export function useStudyPlan(isOpen: boolean) {
         }
         const attempts = await api.attempts.list()
         if (cancelled) return
-        const correctSet = new Set(attempts.filter(a => a.is_correct).map(a => a.question_id))
+        const correctIds = new Set<string>()
+        const incorrectIds = new Set<string>()
+        for (const a of attempts) {
+          if (a.is_correct) correctIds.add(a.question_id)
+          else incorrectIds.add(a.question_id)
+        }
+        // A question is 'correct' only when all its attempts are correct (multi-part safety)
+        const correctSet = new Set([...correctIds].filter(id => !incorrectIds.has(id)))
         const triedSet = new Set(attempts.map(a => a.question_id))
         const q: Quest[] = plan.items.map((item, i) => ({
           ...item,
