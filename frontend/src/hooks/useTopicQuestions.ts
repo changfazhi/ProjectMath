@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 import type { QuestionWithStatus } from '../types/api'
 
 export function useTopicQuestions(topicId: string | null) {
+  const { user } = useAuth()
   const [questions, setQuestions] = useState<QuestionWithStatus[]>([])
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
@@ -39,7 +41,7 @@ export function useTopicQuestions(topicId: string | null) {
     return () => {
       cancelled = true
     }
-  }, [topicId])
+  }, [topicId, user])
 
   const toggleStar = useCallback(
     async (questionId: string) => {
