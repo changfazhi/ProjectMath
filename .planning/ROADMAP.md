@@ -13,7 +13,7 @@ Two phases deliver a persistent, collapsible study plan sidebar for Math Trainer
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Collapsible Sidebar with Local Plan** - Persistent sidebar in RootLayout showing today's quest list, collapsible, with empty/new-day states
+- [x] **Phase 1: Collapsible Sidebar with Local Plan** - Persistent sidebar in RootLayout showing today's quest list, collapsible, with empty/new-day states (completed 2026-06-27)
 - [ ] **Phase 2: Firestore Sync and Live Quest Status** - Cloud persistence keyed to Firebase UID plus live status refresh from the attempts API
 
 ## Phase Details
@@ -32,18 +32,18 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Clicking any quest item navigates to the correct practice question at `/practice/:topicId?question_id=...`
   5. When no plan exists the expanded sidebar shows a "Generate plan" button that links to `/review`; when a new day begins it shows the prior plan greyed out with a "New day — generate today's plan" prompt
 
-**Plans**: 3 plans
+**Plans**: 3/3 plans complete
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Walking skeleton: shared studyPlan lib + useStudyPlan hook + QuestItem + StudyPlanSidebar mounted in RootLayout (open → see quests → click → navigate)
+- [x] 01-01-PLAN.md — Walking skeleton: shared studyPlan lib + useStudyPlan hook + QuestItem + StudyPlanSidebar mounted in RootLayout (open → see quests → click → navigate)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Empty / stale-day / loading / error states + refresh-on-open + WCAG focus & Escape handling
+- [x] 01-02-PLAN.md — Empty / stale-day / loading / error states + refresh-on-open + WCAG focus & Escape handling
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — End-to-end human verification of the Phase 1 sidebar
+- [x] 01-03-PLAN.md — End-to-end human verification of the Phase 1 sidebar
 
 **UI hint**: yes
 
@@ -69,5 +69,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Collapsible Sidebar with Local Plan | 0/3 | Not started | - |
+| 1. Collapsible Sidebar with Local Plan | 3/3 | Complete   | 2026-06-27 |
 | 2. Firestore Sync and Live Quest Status | 0/TBD | Not started | - |
