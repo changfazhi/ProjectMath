@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
-import type { DiagnosisResult, TopicDiagnosis } from '../types/api'
+import type { DiagnosisResult, ReviewItem, TopicDiagnosis } from '../types/api'
 
 // ── Queue helpers ─────────────────────────────────────────────────────────────
 
