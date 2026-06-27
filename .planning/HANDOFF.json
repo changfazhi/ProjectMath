@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-27T14:28:19.847Z",
+  "phase": "01",
+  "phase_name": "collapsible-sidebar-with-local-plan",
+  "phase_dir": ".planning/phases/01-collapsible-sidebar-with-local-plan",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Plan 01-01: Walking skeleton — trigger, panel, quest list", "status": "done", "commit": "a0093fc"},
+    {"id": 2, "name": "Plan 01-02: Sidebar states + keyboard accessibility", "status": "done", "commit": "bcea63a"},
+    {"id": 3, "name": "Plan 01-03: Human verification checkpoint", "status": "done", "commit": "b319231"},
+    {"id": 4, "name": "Code review — 4 correctness bugs found", "status": "done", "commit": "52601c6"},
+    {"id": 5, "name": "Code review fixes — all 4 HIGH/MEDIUM findings fixed", "status": "done", "commit": "9a0de38"},
+    {"id": 6, "name": "Phase 01 marked complete in STATE.md + ROADMAP.md", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 7, "name": "Merge worktree branch into main repo", "status": "human_action_required"},
+    {"id": 8, "name": "Plan Phase 2: Firestore Sync and Live Quest Status", "status": "not_started"},
+    {"id": 9, "name": "Execute Phase 2", "status": "not_started"}
+  ],
+  "blockers": [
+    {
+      "description": "Worktree branch not merged into main — dev server running from main repo doesn't have sidebar code",
+      "type": "human_action",
+      "workaround": "cd /Users/chang/ProjectMath && git merge worktree-graceful-crafting-dusk"
+    },
+    {
+      "description": "Firebase Auth (firebase-auth branch) not yet merged — Phase 2 Firestore sync requires UID",
+      "type": "external",
+      "workaround": "Phase 2 must degrade gracefully to localStorage when auth is absent; check firebase-auth branch status before starting Phase 2"
+    }
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Merge worktree branch into main: cd /Users/chang/ProjectMath && git merge worktree-graceful-crafting-dusk",
+      "context": "All Phase 1 sidebar code lives only in the worktree branch. Dev server runs from main repo. User can't see sidebar until merged.",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {"decision": "Sidebar slots into RootLayout alongside <Outlet /> — survives route transitions", "rationale": "Sidebar must persist across navigation without remounting", "phase": "01"},
+    {"decision": "localStorage key study_plan_v1 is authoritative for Phase 1; Firestore is Phase 2", "rationale": "Keeps Phase 1 scope tight and deliverable without auth dependency", "phase": "01"},
+    {"decision": "Quest status derived from attempts API, not a separate write path", "rationale": "Reuses existing attempts infrastructure; avoids duplicate state", "phase": "01"},
+    {"decision": "Multi-part question ✓ only when ALL graded parts have is_correct=true", "rationale": "CLAUDE.md rule; one correct part should not mark the whole question done", "phase": "01"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run: cd /Users/chang/ProjectMath && git merge worktree-graceful-crafting-dusk, then restart frontend dev server. Then /gsd-plan-phase 2 to plan Firestore sync.",
+  "context_notes": "Phase 1 is fully complete and all code review bugs fixed. The branch just needs to be merged into main so the user can see the sidebar in the running app. Phase 2 (Firestore sync) depends on the firebase-auth branch being available."
+}
