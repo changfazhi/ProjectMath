@@ -1,112 +1,175 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-06-27
+**Analysis Date:** 2026-06-28
 
 ## Test Framework
 
-**Runner:** None configured.
+**Runner:** None configured. No test files found in the repository.
 
-No test runner (Jest, Vitest, Mocha, etc.) is present in either `backend/package.json` or `frontend/package.json`. No `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` files exist anywhere in the repository.
+**Test config files:** Not present (no `jest.config.*`, `vitest.config.*`, or equivalent).
 
-**Run Commands:** Not applicable — no test suite exists.
-
-## Test File Organization
-
-**Location:** Not applicable.
-
-**Naming:** Not applicable.
+**Run Commands:** Not available — no test scripts in `package.json`.
 
 ## Current State
 
-This codebase has **no automated tests of any kind:**
-- No unit tests for service logic
-- No integration tests for API routes
-- No component tests for React components
-- No end-to-end tests
-- No snapshot tests
-- No test configuration files
+This codebase has **no automated tests**. Neither the `backend/` nor the `frontend/` directory contains test files (`.test.ts`, `.test.tsx`, `.spec.ts`, `.spec.tsx`).
 
-This is a solo-developer project where correctness is currently validated manually via the running application.
+There is no test runner, assertion library, mocking framework, or coverage tooling configured.
 
-## Areas of Highest Risk (Untested Logic)
+## What Would Benefit Most from Tests
 
-The following backend service functions contain complex logic that is entirely untested. Any future test suite should prioritize these:
+Based on codebase analysis, the following areas carry the highest risk from lack of test coverage:
 
-**`backend/src/services/attemptService.ts` — answer grading pipeline:**
-- `normalizeLaTeX(s)` — strips whitespace/spacing commands, normalizes MathLive compact notation (`\frac13` → `\frac{1}{3}`)
-- `latexToMathExpr(normalized)` — converts LaTeX to mathjs-evaluable expressions
-- `tryNumericEval(raw)` — attempts numeric evaluation via mathjs; returns `null` on failure
-- `trySymbolicEval(given, correct)` — multi-point symbolic evaluation substituting prime numbers for variables; the most complex grading path
-- `checkAnswer(answerType, correctAnswer, givenAnswer, tolerance)` — dispatches to `exact`/`mcq` (string match → numeric → symbolic) or `range` (float comparison with tolerance)
+**`backend/src/services/attemptService.ts` — Answer grading logic (CRITICAL)**
+- `normalizeLaTeX()` — string normalization with many regex rules; regressions are silent
+- `latexToMathExpr()` — LaTeX → mathjs conversion; wrong conversion produces wrong grades
+- `tryNumericEval()` — numeric evaluation fallback
+- `trySymbolicEval()` — multi-point symbolic evaluation using prime substitution
+- `checkAnswer()` — dispatches across `exact`, `mcq`, `range` modes
+- These pure functions are ideal unit test targets
 
-**`backend/src/services/gradingService.ts` — Gemini photo grading:**
-- `buildGradingInstruction()` — constructs the Gemini system prompt including confidential solution
-- Structured output schema parsing (`gradable`, `parts[{label, verdict, marks_awarded}]`)
-- Junk photo detection logic (STEP 0 filtering)
+**`backend/src/services/questionService.ts` — Solution stripping**
+- `stripSolution()` — must never leak `correct_answer` or `solution_latex` to client
 
-**`backend/src/services/chatService.ts` — AI hint chatbot:**
-- `buildSystemInstruction()` — constructs Socratic tutor prompt
-- Rate limiting integration (`ChatLimitError`)
+**`backend/src/services/gradingService.ts` — AI grading pipeline**
+- Junk-image rejection logic (`gradable=false` path)
+- `GradingError` vs attempt persistence logic
 
-**`backend/src/services/spacedRepetitionService.ts` — SM-2 algorithm:**
-- `upsertSRCard()` — SM-2 spaced repetition card updates; fire-and-forget from `attemptService.ts`
+**Frontend hooks**
+- `usePracticeSession.ts` — reducer state machine covering `loading → answering → submitted → revealed → complete | error` phases
+- `useChatSession.ts` — optimistic send + rollback on error
 
-## Recommended Test Strategy (If Implementing)
+## Recommended Test Setup
 
-**Framework recommendation:** Vitest for both backend and frontend (consistent API, fast, TypeScript-native).
+**Backend (Node/TypeScript):**
+```bash
+# Install
+npm install --save-dev vitest @vitest/coverage-v8
 
-**Where to start — highest value per effort:**
+# vitest.config.ts
+import { defineConfig } from 'vitest/config'
+export default defineConfig({
+  test: { environment: 'node', include: ['src/**/*.test.ts'] }
+})
+```
 
-1. **Unit tests for `normalizeLaTeX` and `checkAnswer`** in `backend/src/services/attemptService.ts`. These are pure functions with no dependencies. A suite of 30–40 cases covering LaTeX normalization edge cases and the three answer type branches would catch most grading regressions.
+**Frontend (React/TypeScript):**
+```bash
+# Install
+npm install --save-dev vitest @vitest/coverage-v8 @testing-library/react @testing-library/user-event jsdom
 
-2. **Unit tests for `trySymbolicEval`** — this is the most complex logic in the codebase. Test commutativity, algebraic equivalences, and division-by-zero edge cases.
+# vitest.config.ts
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+export default defineConfig({
+  plugins: [react()],
+  test: { environment: 'jsdom', include: ['src/**/*.test.tsx'] }
+})
+```
 
-3. **Integration tests for core API routes** — `POST /api/attempts`, `GET /api/topics`, `GET /api/topics/:id/questions`. Mock Supabase via `vi.mock('../db/supabase.js')`.
+## Recommended Test File Placement
 
-4. **Component tests for `PracticePage` state machine** — test that `usePracticeSession` reducer transitions correctly between phases using `renderHook` from `@testing-library/react`.
+Co-locate test files with source:
+```
+backend/src/services/attemptService.ts
+backend/src/services/attemptService.test.ts   ← new
 
-**Example unit test structure (Vitest):**
+frontend/src/hooks/usePracticeSession.ts
+frontend/src/hooks/usePracticeSession.test.ts ← new
+```
+
+## Recommended Test Patterns
+
+**Pure function unit test (answer grading):**
 ```typescript
 // backend/src/services/attemptService.test.ts
 import { describe, it, expect } from 'vitest'
+// import { checkAnswer } (if exported, or test via submitAttempt mock)
 
 describe('normalizeLaTeX', () => {
-  it('strips spacing commands', () => {
-    expect(normalizeLaTeX('\\frac{1}{2}\\,')).toBe('\\frac{1}{2}')
+  it('strips whitespace and spacing commands', () => {
+    expect(normalizeLaTeX('\\frac 1 2')).toBe('\\frac12')
   })
-  it('expands compact fractions', () => {
-    expect(normalizeLaTeX('\\frac34')).toBe('\\frac{3}{4}')
+  it('lowercases output', () => {
+    expect(normalizeLaTeX('X')).toBe('x')
   })
 })
 
-describe('checkAnswer', () => {
-  it('exact: matches normalized LaTeX', () => {
+describe('checkAnswer – exact', () => {
+  it('accepts normalised-equal latex strings', () => {
     expect(checkAnswer('exact', '\\frac{1}{2}', '\\frac12', null)).toBe(true)
   })
-  it('range: accepts within tolerance', () => {
-    expect(checkAnswer('range', '3.14159', '3.14', 0.01, null)).toBe(true)
+  it('rejects wrong answer', () => {
+    expect(checkAnswer('exact', '\\frac{1}{2}', '\\frac{1}{3}', null)).toBe(false)
+  })
+})
+
+describe('checkAnswer – range', () => {
+  it('accepts value within tolerance', () => {
+    expect(checkAnswer('range', '3.14', '3.14159', 0.01)).toBe(true)
+  })
+  it('rejects value outside tolerance', () => {
+    expect(checkAnswer('range', '3.14', '3.14159', 0.001)).toBe(false)
   })
 })
 ```
 
-**Mocking pattern for Supabase:**
+**Supabase mocking pattern (backend services):**
 ```typescript
-vi.mock('../db/supabase.js', () => ({
-  supabase: {
-    from: vi.fn().mockReturnThis(),
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    single: vi.fn().resolves({ data: { id: 'uuid' }, error: null }),
-  },
-}))
+import { vi, beforeEach } from 'vitest'
+import * as supabaseModule from '../db/supabase.js'
+
+beforeEach(() => {
+  vi.spyOn(supabaseModule, 'supabase', 'get').mockReturnValue({
+    from: () => ({
+      select: () => ({ eq: () => ({ single: () => ({ data: mockQuestion, error: null }) }) }),
+      insert: () => ({ select: () => ({ single: () => ({ data: { id: 'uuid' }, error: null }) }) }),
+    }),
+  } as any)
+})
 ```
+
+**React hook test pattern:**
+```typescript
+import { renderHook, act } from '@testing-library/react'
+import { usePracticeSession } from './usePracticeSession'
+
+it('transitions from loading to answering on load success', async () => {
+  const { result } = renderHook(() => usePracticeSession('topic-id'))
+  expect(result.current.phase).toBe('loading')
+  await act(async () => { /* trigger load */ })
+  expect(result.current.phase).toBe('answering')
+})
+```
+
+## Mocking
+
+**What to mock:**
+- `supabase` client (all DB calls in backend services)
+- `fetch` / `api.*` in frontend hooks
+- `@google/genai` Gemini client (AI-dependent services)
+- Socket.IO (`io()` in `frontend/src/lib/socket.ts`)
+
+**What NOT to mock:**
+- Pure functions (`normalizeLaTeX`, `checkAnswer`, `latexToMathExpr`) — test directly
+- React reducers — test the reducer function directly with plain inputs
 
 ## Coverage
 
-**Requirements:** None enforced.
+**Requirements:** None currently enforced.
 
-**Tooling:** Not configured.
+**Suggested minimum targets (once tests added):**
+- `backend/src/services/attemptService.ts` — 90%+ (grading logic is mission-critical)
+- `backend/src/services/questionService.ts` — 80%+ (solution stripping must not leak)
+
+## Test Types
+
+**Unit Tests:** First priority — pure functions in `backend/src/services/attemptService.ts`
+
+**Integration Tests:** Second priority — route handlers against a mocked Supabase client
+
+**E2E Tests:** Not configured. Playwright or Cypress could cover the practice flow end-to-end, but is not currently in use.
 
 ---
 
-*Testing analysis: 2026-06-27*
+*Testing analysis: 2026-06-28*
