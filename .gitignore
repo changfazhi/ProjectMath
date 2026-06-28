@@ -13,3 +13,7 @@ Thumbs.db
 # Claude Code local config
 .claude/
 .mcp.json
+
+# Personal folders
+2025/
+images/
