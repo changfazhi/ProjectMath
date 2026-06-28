@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
-import { loadStoredPlan } from '../lib/studyPlan'
+import { loadStoredPlan, savePlan, todayStr } from '../lib/studyPlan'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
 
 export interface Quest extends StudyPlanItem {
@@ -23,13 +23,18 @@ export function useStudyPlan(isOpen: boolean) {
       setLoading(true)
       setError(null)
       try {
-        const { plan, isStale: stale } = loadStoredPlan()
+        let { plan, isStale: stale } = loadStoredPlan()
         if (!plan) {
-          if (!cancelled) {
-            setQuests([])
-            setIsStale(false)
+          // No local cache — fetch from server (which returns the DB-saved plan or generates one).
+          const fresh = await api.review.studyPlan()
+          if (cancelled) return
+          if (!fresh.items.length) {
+            if (!cancelled) { setQuests([]); setIsStale(false) }
+            return
           }
-          return
+          savePlan({ date: todayStr(), items: fresh.items, reasoning: fresh.reasoning })
+          plan = { date: todayStr(), items: fresh.items, reasoning: fresh.reasoning }
+          stale = false
         }
         const planQuestionIds = new Set(plan.items.map(item => item.question_id))
         const allAttempts = await api.attempts.list()
