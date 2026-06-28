@@ -175,7 +175,25 @@ Write overall_summary in 2–3 sentences: biggest strength, biggest weakness, an
 
 // Algorithmic study plan — no second Gemini call. Selects up to 10 unsolved questions
 // from the weakest topics so the student has immediate, prioritised practice.
+// The generated plan is persisted per (user_id, date) so it syncs across devices.
 export async function getPersonalisedStudyPlan(userId: string): Promise<StudyPlanResponse> {
+  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+
+  // Return today's saved plan if it exists — avoids regeneration on other devices.
+  const { data: saved } = await supabase
+    .from('study_plans')
+    .select('items, reasoning')
+    .eq('user_id', userId)
+    .eq('date', today)
+    .maybeSingle();
+
+  if (saved) {
+    return {
+      items: saved.items as StudyPlanResponse['items'],
+      reasoning: saved.reasoning as string,
+    };
+  }
+
   const statsArr = await buildTopicStats(userId);
 
   const [questionsRes, attemptsRes, topicsRes2] = await Promise.all([
@@ -233,6 +251,11 @@ export async function getPersonalisedStudyPlan(userId: string): Promise<StudyPla
   const reasoning = topWeakNames.length > 0
     ? `Focusing on your weakest areas: ${topWeakNames.join(', ')}. These have the lowest accuracy and will benefit most from targeted practice.`
     : 'Covering topics where you have the most room to improve.';
+
+  // Persist so other devices get the same plan today.
+  await supabase
+    .from('study_plans')
+    .upsert({ user_id: userId, date: today, items, reasoning }, { onConflict: 'user_id,date' });
 
   return { items, reasoning };
 }

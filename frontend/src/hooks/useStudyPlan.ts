@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { resolvePlan } from '../lib/studyPlan'
-import { useAuth } from '../contexts/AuthContext'
+import { loadStoredPlan, savePlan, todayStr } from '../lib/studyPlan'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
 
 export interface Quest extends StudyPlanItem {
@@ -58,14 +57,18 @@ export function useStudyPlan(isOpen: boolean) {
       setLoading(true)
       setError(null)
       try {
-        // Firestore-first when signed in; localStorage fallback for anonymous / offline (PERS-02/03)
-        const { plan, isStale: stale } = await resolvePlan(user?.uid ?? null)
+        let { plan, isStale: stale } = loadStoredPlan()
         if (!plan) {
-          if (!cancelled) {
-            setQuests([])
-            setIsStale(false)
+          // No local cache — fetch from server (which returns the DB-saved plan or generates one).
+          const fresh = await api.review.studyPlan()
+          if (cancelled) return
+          if (!fresh.items.length) {
+            if (!cancelled) { setQuests([]); setIsStale(false) }
+            return
           }
-          return
+          savePlan({ date: todayStr(), items: fresh.items, reasoning: fresh.reasoning })
+          plan = { date: todayStr(), items: fresh.items, reasoning: fresh.reasoning }
+          stale = false
         }
         planItemsRef.current = plan.items
         const allAttempts = await api.attempts.list()
