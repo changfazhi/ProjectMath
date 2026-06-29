@@ -168,7 +168,7 @@ export function PracticePage() {
     <div className="max-w-2xl lg:max-w-6xl mx-auto px-4 py-8 lg:flex lg:gap-6 lg:items-start">
       <div className="flex flex-col gap-6 lg:flex-1 lg:min-w-0">
       <div className="flex items-center gap-3">
-        <Link to="/" className="text-blue-600 hover:text-blue-700 text-sm">
+        <Link to="/roadmap" className="text-blue-600 hover:text-blue-700 text-sm">
           ← Topics
         </Link>
       </div>

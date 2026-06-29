@@ -1,12 +1,15 @@
 import { useRef, useState, useEffect } from 'react'
+import type { CSSProperties } from 'react'
 import type { Topic } from '../../types/api'
 import { cn } from '../../lib/utils'
-import { ProgressBar } from '../ui/ProgressBar'
 
-const NODE_W = 190
-const NODE_H = 72
+const NODE_W = 210
+const NODE_H = 100
 const CANVAS_W = 2200
 const CANVAS_H = 1700
+
+const ACCENT = '#4f46e5'
+const ACCENT_2 = '#7c3aed'
 
 // cx/cy = centre of each node
 const POSITIONS: Record<string, { cx: number; cy: number; color: string }> = {
@@ -84,14 +87,71 @@ const EDGES: [string, string][] = [
   ['Hypothesis Testing',             'Correlation and Linear Regression'],
 ]
 
-type Color = 'violet' | 'blue' | 'sky' | 'indigo' | 'emerald'
+// Each node echoes the landing-page roadmap cards: a dark card with an icon
+// tile, a thin progress bar and a status label. Status is derived from real
+// per-topic progress — no topic is ever hidden or removed.
+type Status = 'completed' | 'progress' | 'upnext' | 'locked'
 
-const colorMap: Record<Color, { border: string; bg: string; text: string; badge: string; visited: string; fill: string }> = {
-  violet:  { border: 'border-violet-400 dark:border-violet-600',   bg: 'bg-violet-50 dark:bg-violet-950/60',   text: 'text-violet-900 dark:text-violet-100',   badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300',   visited: 'ring-violet-400',  fill: 'bg-violet-500'  },
-  blue:    { border: 'border-blue-400 dark:border-blue-600',       bg: 'bg-blue-50 dark:bg-blue-950/60',       text: 'text-blue-900 dark:text-blue-100',       badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300',       visited: 'ring-blue-400',    fill: 'bg-blue-500'    },
-  sky:     { border: 'border-sky-400 dark:border-sky-600',         bg: 'bg-sky-50 dark:bg-sky-950/60',         text: 'text-sky-900 dark:text-sky-100',         badge: 'bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300',         visited: 'ring-sky-400',     fill: 'bg-sky-500'     },
-  indigo:  { border: 'border-indigo-400 dark:border-indigo-600',   bg: 'bg-indigo-50 dark:bg-indigo-950/60',   text: 'text-indigo-900 dark:text-indigo-100',   badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300',   visited: 'ring-indigo-400',  fill: 'bg-indigo-500'  },
-  emerald: { border: 'border-emerald-400 dark:border-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/60', text: 'text-emerald-900 dark:text-emerald-100', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300', visited: 'ring-emerald-400', fill: 'bg-emerald-500' },
+interface StatusStyle {
+  card: CSSProperties
+  tile: CSSProperties
+  icon: string
+  iconColor: string
+  title: string
+  sub: string
+  track: string
+  fill: CSSProperties | null
+  label: string
+  labelColor: string
+  pctColor: string
+}
+
+function statusOf(topic: Topic | null, p: { correct: number; total: number }): Status {
+  if (!topic) return 'locked'
+  if (p.total > 0 && p.correct >= p.total) return 'completed'
+  if (p.correct > 0) return 'progress'
+  return 'upnext'
+}
+
+function styleFor(status: Status): StatusStyle {
+  switch (status) {
+    case 'completed':
+      return {
+        card: { background: '#12152b', border: '1px solid rgba(16,185,129,.4)', boxShadow: '0 16px 36px -22px rgba(16,185,129,.5)' },
+        tile: { background: '#10241d', border: '1px solid rgba(16,185,129,.5)' },
+        icon: '✓', iconColor: '#34d399',
+        title: '#ffffff', sub: '#7e84ad',
+        track: '#222742', fill: { background: '#10b981' },
+        label: 'Completed', labelColor: '#34d399', pctColor: '#7e84ad',
+      }
+    case 'progress':
+      return {
+        card: { background: '#161a33', border: `1.5px solid ${ACCENT}`, boxShadow: '0 0 0 4px rgba(99,102,241,.12),0 18px 40px -20px rgba(79,70,229,.7)' },
+        tile: { background: `linear-gradient(135deg,${ACCENT},${ACCENT_2})` },
+        icon: '▸', iconColor: '#ffffff',
+        title: '#ffffff', sub: '#aab0e6',
+        track: '#222742', fill: { background: `linear-gradient(90deg,${ACCENT},${ACCENT_2})` },
+        label: 'In progress', labelColor: '#c7cbff', pctColor: '#aab0e6',
+      }
+    case 'upnext':
+      return {
+        card: { background: '#12152b', border: '1px solid #2a3160' },
+        tile: { background: '#1b2042', border: '1px solid #2f3666' },
+        icon: '▸', iconColor: '#aab0e6',
+        title: '#e7e9f7', sub: '#7e84ad',
+        track: '#222742', fill: { background: '#3a4170' },
+        label: 'Up next', labelColor: '#aab0d6', pctColor: '#7e84ad',
+      }
+    case 'locked':
+      return {
+        card: { background: '#10132a', border: '1px solid #232850', opacity: 0.62 },
+        tile: { background: '#161a33', border: '1px solid #262b4d' },
+        icon: '⌧', iconColor: '#5b6090',
+        title: '#bcc1e0', sub: '#6a6f99',
+        track: '#1c2138', fill: null,
+        label: 'Locked', labelColor: '#6a6f99', pctColor: '#54597e',
+      }
+  }
 }
 
 // Cubic Bezier that exits the source node straight down and enters the target straight down.
@@ -107,12 +167,11 @@ interface Transform { x: number; y: number; scale: number }
 
 interface Props {
   topics: Topic[]
-  visited: Set<string>
   progress: Map<string, { correct: number; total: number }>
   onTopicClick: (topic: Topic) => void
 }
 
-export function RoadmapGraph({ topics, visited, progress, onTopicClick }: Props) {
+export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Single source of truth — mirrored in a ref so event handlers never read stale values
@@ -182,7 +241,15 @@ export function RoadmapGraph({ topics, visited, progress, onTopicClick }: Props)
   return (
     <div
       ref={containerRef}
-      style={{ touchAction: 'none' }}
+      style={{
+        touchAction: 'none',
+        backgroundColor: '#0b0e20',
+        backgroundImage:
+          'radial-gradient(700px 420px at 50% -5%, rgba(99,102,241,.18), transparent 70%),' +
+          'linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),' +
+          'linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px)',
+        backgroundSize: '100% 100%, 46px 46px, 46px 46px',
+      }}
       className={cn('w-full h-full overflow-hidden', isPanning ? 'cursor-grabbing' : 'cursor-grab')}
       onMouseDown={(e) => {
         const { x, y } = tRef.current
@@ -215,6 +282,7 @@ export function RoadmapGraph({ topics, visited, progress, onTopicClick }: Props)
       }}
       onTouchEnd={() => { panStart.current = null }}
     >
+      <style>{`.rm-node{transition:transform .15s, box-shadow .15s}.rm-node:hover{transform:translateY(-3px)}`}</style>
       {/* Canvas — translate then scale from its own top-left origin */}
       <div
         style={{
@@ -228,14 +296,14 @@ export function RoadmapGraph({ topics, visited, progress, onTopicClick }: Props)
       >
         {/* Section labels */}
         <div
-          className="absolute pointer-events-none text-[10px] font-semibold uppercase tracking-widest text-violet-500 dark:text-violet-400"
-          style={{ left: 50, top: 22, width: 1600, textAlign: 'center' }}
+          className="absolute pointer-events-none text-[11px] font-bold uppercase tracking-widest"
+          style={{ left: 50, top: 22, width: 1600, textAlign: 'center', color: '#a5abe0' }}
         >
           Pure Mathematics
         </div>
         <div
-          className="absolute pointer-events-none text-[10px] font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400"
-          style={{ left: 1905, top: 22, width: NODE_W, textAlign: 'center' }}
+          className="absolute pointer-events-none text-[11px] font-bold uppercase tracking-widest"
+          style={{ left: 1905, top: 22, width: NODE_W, textAlign: 'center', color: '#34d399' }}
         >
           Statistics
         </div>
@@ -249,7 +317,7 @@ export function RoadmapGraph({ topics, visited, progress, onTopicClick }: Props)
         >
           <defs>
             <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
-              <path d="M1,1 L7,4 L1,7 Z" className="fill-slate-300 dark:fill-slate-600" />
+              <path d="M1,1 L7,4 L1,7 Z" fill="#3a4170" />
             </marker>
           </defs>
           {resolvedEdges.map((e) => (
@@ -257,61 +325,81 @@ export function RoadmapGraph({ topics, visited, progress, onTopicClick }: Props)
               key={e.id}
               d={edgePath(e.sx, e.sy, e.tx, e.ty)}
               fill="none"
-              stroke="currentColor"
+              stroke="#2a3160"
               strokeWidth="2"
-              className="text-slate-300 dark:text-slate-600"
               markerEnd="url(#arrowhead)"
             />
           ))}
         </svg>
 
-        {/* Node cards */}
+        {/* Node cards — styled like the landing-page roadmap cards */}
         {nodes.map(({ name, pos, topic }) => {
-          const color = pos.color as Color
-          const c = colorMap[color]
-          const isVisited = topic ? visited.has(topic.id) : false
           const p = topic ? (progress.get(topic.id) ?? { correct: 0, total: 0 }) : { correct: 0, total: 0 }
+          const status = statusOf(topic, p)
+          const s = styleFor(status)
+          const pct = p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0
+          const barWidth = status === 'completed' ? 100 : pct
 
           return (
             <button
               key={name}
               disabled={!topic}
               onClick={() => { if (!didPan.current && topic) onTopicClick(topic) }}
+              className={cn('rm-node absolute flex flex-col justify-center rounded-2xl text-left', topic ? 'cursor-pointer' : 'cursor-not-allowed')}
               style={{
                 left: pos.cx - NODE_W / 2,
                 top: pos.cy - NODE_H / 2,
                 width: NODE_W,
                 height: NODE_H,
+                padding: '12px 14px',
+                ...s.card,
               }}
-              className={cn(
-                'absolute flex flex-col justify-center px-5 rounded-2xl border-2 shadow-sm transition-all duration-150 text-center',
-                c.bg, c.border,
-                topic
-                  ? 'cursor-pointer hover:shadow-lg hover:scale-105 focus-visible:outline-none focus-visible:ring-2'
-                  : 'opacity-40 cursor-not-allowed',
-                isVisited && `ring-2 ring-offset-2 dark:ring-offset-slate-950 ${c.visited}`,
-              )}
             >
-              <span className={cn('text-sm font-semibold leading-tight', c.text)}>
-                {name}
-              </span>
-              <div className="flex items-center gap-1.5 mt-1.5">
-                {topic && (
-                  <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-md shrink-0', c.badge)}>
-                    {topic.level}
-                  </span>
-                )}
-                {topic && (
-                  <>
-                    <div className="flex-1 min-w-0">
-                      <ProgressBar correct={p.correct} total={p.total} fillClass={c.fill} size="sm" />
-                    </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0 tabular-nums">
-                      {p.correct}/{p.total}
-                    </span>
-                  </>
-                )}
+              {/* header row: icon tile + title + question count */}
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex-none flex items-center justify-center rounded-[10px]"
+                  style={{ width: 32, height: 32, color: s.iconColor, fontSize: 15, ...s.tile }}
+                >
+                  {s.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="font-bold leading-tight"
+                    style={{
+                      color: s.title,
+                      fontSize: 12.5,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {name}
+                  </div>
+                  <div className="mt-0.5" style={{ color: s.sub, fontSize: 10 }}>
+                    {topic ? `${p.total} question${p.total === 1 ? '' : 's'}` : 'Coming soon'}
+                  </div>
+                </div>
               </div>
+
+              {/* progress bar + status row */}
+              {status !== 'locked' && (
+                <>
+                  <div
+                    className="mt-2 overflow-hidden"
+                    style={{ height: 6, borderRadius: 99, background: s.track }}
+                  >
+                    {s.fill && (
+                      <div style={{ height: '100%', width: `${barWidth}%`, borderRadius: 99, ...s.fill }} />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5" style={{ fontSize: 10 }}>
+                    <span className="font-bold" style={{ color: s.labelColor }}>{s.label}</span>
+                    <span className="tabular-nums" style={{ color: s.pctColor }}>{barWidth}%</span>
+                  </div>
+                </>
+              )}
             </button>
           )
         })}
