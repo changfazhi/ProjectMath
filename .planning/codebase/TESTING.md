@@ -1,175 +1,151 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-06-28
+**Analysis Date:** 2026-06-29
 
 ## Test Framework
 
-**Runner:** None configured. No test files found in the repository.
+**Status: No test framework is configured.**
 
-**Test config files:** Not present (no `jest.config.*`, `vitest.config.*`, or equivalent).
+Neither `frontend/package.json` nor `backend/package.json` lists any testing framework in `devDependencies`. There is no `jest.config.*`, `vitest.config.*`, `mocha`, or any other test runner present in either package.
 
-**Run Commands:** Not available — no test scripts in `package.json`.
+## Test Files
 
-## Current State
+**Zero test files exist in this repository.**
 
-This codebase has **no automated tests**. Neither the `backend/` nor the `frontend/` directory contains test files (`.test.ts`, `.test.tsx`, `.spec.ts`, `.spec.tsx`).
+A search for `*.test.*` and `*.spec.*` files across the entire project returned no results.
 
-There is no test runner, assertion library, mocking framework, or coverage tooling configured.
+## What IS Tested (Manual / Runtime)
 
-## What Would Benefit Most from Tests
+There are no automated tests. Validation and correctness is currently ensured through:
 
-Based on codebase analysis, the following areas carry the highest risk from lack of test coverage:
+1. **TypeScript strict mode** — catches type errors at compile time (both `strict: true` on backend, strict lint rules on frontend)
+2. **Zod schema validation** — runtime validation of all API inputs; wrong shapes throw before service logic runs
+3. **Manual browser testing** — implied by the dev workflow (`npm run dev` in both `frontend/` and `backend/`)
 
-**`backend/src/services/attemptService.ts` — Answer grading logic (CRITICAL)**
-- `normalizeLaTeX()` — string normalization with many regex rules; regressions are silent
-- `latexToMathExpr()` — LaTeX → mathjs conversion; wrong conversion produces wrong grades
-- `tryNumericEval()` — numeric evaluation fallback
-- `trySymbolicEval()` — multi-point symbolic evaluation using prime substitution
-- `checkAnswer()` — dispatches across `exact`, `mcq`, `range` modes
-- These pure functions are ideal unit test targets
+## Critical Untested Paths
 
-**`backend/src/services/questionService.ts` — Solution stripping**
-- `stripSolution()` — must never leak `correct_answer` or `solution_latex` to client
+The following are the highest-risk areas with zero test coverage:
 
-**`backend/src/services/gradingService.ts` — AI grading pipeline**
-- Junk-image rejection logic (`gradable=false` path)
-- `GradingError` vs attempt persistence logic
+### Answer Grading Logic (`backend/src/services/attemptService.ts`)
+- `normalizeLaTeX(s)` — string normalization with many regex replacements; easy to break
+- `latexToMathExpr(normalized)` — LaTeX→mathjs expression conversion; brittle for edge cases
+- `tryNumericEval(raw)` — numeric evaluation via `mathjs.evaluate()`
+- `trySymbolicEval(given, correct)` — multi-point symbolic equivalence check using prime substitution
+- `checkAnswer(answerType, correctAnswer, givenAnswer, tolerance)` — dispatch across `exact`, `mcq`, `range`
 
-**Frontend hooks**
-- `usePracticeSession.ts` — reducer state machine covering `loading → answering → submitted → revealed → complete | error` phases
-- `useChatSession.ts` — optimistic send + rollback on error
+**Risk:** A bad regex in `normalizeLaTeX` or wrong operator precedence in `latexToMathExpr` silently marks correct answers wrong or wrong answers correct.
 
-## Recommended Test Setup
+### AI Grading Pipeline (`backend/src/services/gradingService.ts`)
+- Gemini vision call + structured output parsing
+- Junk-filter logic (`gradable=false` path)
+- Part-label auto-detection from photos
+- Image → Supabase Storage upload (only after grading success)
 
-**Backend (Node/TypeScript):**
-```bash
-# Install
-npm install --save-dev vitest @vitest/coverage-v8
+**Risk:** No way to replay a grading scenario in CI without a live Gemini API key.
 
-# vitest.config.ts
-import { defineConfig } from 'vitest/config'
-export default defineConfig({
-  test: { environment: 'node', include: ['src/**/*.test.ts'] }
-})
-```
+### Chat Service (`backend/src/services/chatService.ts`)
+- System instruction construction (`buildSystemInstruction()`) — injects question + solution; wrong format could leak `solution_latex`
+- Rate-limit enforcement (`ChatLimitError` → HTTP 429)
+- History rehydration path
 
-**Frontend (React/TypeScript):**
-```bash
-# Install
-npm install --save-dev vitest @vitest/coverage-v8 @testing-library/react @testing-library/user-event jsdom
+### Pair/QR Flow (`backend/src/services/pairService.ts`, `backend/src/realtime.ts`)
+- Token generation and TTL expiry
+- Socket.IO event sequencing (`pair:phone-connected` → `pair:image` → `pair:grading` → `pair:graded`)
+- Desktop ↔ phone photo transfer
 
-# vitest.config.ts
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
-export default defineConfig({
-  plugins: [react()],
-  test: { environment: 'jsdom', include: ['src/**/*.test.tsx'] }
-})
-```
+### Multi-Part Answer Reveal (`backend/src/services/attemptService.ts`)
+- `solution_latex` reveal logic — shown only when all graded parts have been submitted
+- `gradedParts` filter (parts where `correct_answer !== null`)
+- `submittedLabels` set built from existing attempts
 
-## Recommended Test File Placement
+**Risk:** A query bug here could reveal the solution too early or never.
 
-Co-locate test files with source:
-```
-backend/src/services/attemptService.ts
-backend/src/services/attemptService.test.ts   ← new
+### Frontend State Machine (`frontend/src/hooks/usePracticeSession.ts`)
+- `reducer()` — 13 action types, complex phase transitions
+- `GRADE_REJECTED` soft-error path (stays in `'answering'`, no penalty)
+- `beginExternalGrading` / `receiveGrading` (QR phone path)
 
-frontend/src/hooks/usePracticeSession.ts
-frontend/src/hooks/usePracticeSession.test.ts ← new
-```
+### Star Optimistic UI (`frontend/src/hooks/` or component)
+- Optimistic flip → server sync → revert on failure
 
-## Recommended Test Patterns
+## Test Coverage Summary
 
-**Pure function unit test (answer grading):**
+| Area | Coverage |
+|------|----------|
+| `normalizeLaTeX` / `checkAnswer` | None |
+| `submitAttempt` service | None |
+| `gradingService` | None |
+| `chatService` | None |
+| `pairService` / Socket.IO | None |
+| API route validation (Zod) | None |
+| Auth middleware (`gate()`) | None |
+| `usePracticeSession` reducer | None |
+| `renderLatex()` | None |
+| `lib/api.ts` error handling | None |
+
+## Recommended Testing Priority
+
+### Priority 1 — Unit tests for answer grading (pure functions, no I/O)
+
+These are pure functions — trivial to test with Vitest or Jest, extremely high value:
+
 ```typescript
 // backend/src/services/attemptService.test.ts
-import { describe, it, expect } from 'vitest'
-// import { checkAnswer } (if exported, or test via submitAttempt mock)
-
 describe('normalizeLaTeX', () => {
-  it('strips whitespace and spacing commands', () => {
-    expect(normalizeLaTeX('\\frac 1 2')).toBe('\\frac12')
-  })
-  it('lowercases output', () => {
-    expect(normalizeLaTeX('X')).toBe('x')
-  })
+  it('strips whitespace', () => expect(normalizeLaTeX('x + y')).toBe('x+y'))
+  it('expands compact fractions: \\frac34 → \\frac{3}{4}', ...)
+  it('lowercases output', ...)
 })
 
-describe('checkAnswer – exact', () => {
-  it('accepts normalised-equal latex strings', () => {
-    expect(checkAnswer('exact', '\\frac{1}{2}', '\\frac12', null)).toBe(true)
-  })
-  it('rejects wrong answer', () => {
-    expect(checkAnswer('exact', '\\frac{1}{2}', '\\frac{1}{3}', null)).toBe(false)
-  })
-})
-
-describe('checkAnswer – range', () => {
-  it('accepts value within tolerance', () => {
-    expect(checkAnswer('range', '3.14', '3.14159', 0.01)).toBe(true)
-  })
-  it('rejects value outside tolerance', () => {
-    expect(checkAnswer('range', '3.14', '3.14159', 0.001)).toBe(false)
-  })
+describe('checkAnswer', () => {
+  it('exact match after normalization', ...)
+  it('numeric equivalence: "1/2" vs "0.5"', ...)
+  it('symbolic equivalence: "x+y" vs "y+x"', ...)
+  it('range: within tolerance', ...)
+  it('range: outside tolerance', ...)
 })
 ```
 
-**Supabase mocking pattern (backend services):**
+### Priority 2 — Integration tests for `submitAttempt` (with Supabase mock)
+
+Mock `supabase` to return a fixture question, assert that `is_correct` and `solution_latex` are correct for single-part and multi-part scenarios.
+
+### Priority 3 — Frontend reducer unit tests
+
 ```typescript
-import { vi, beforeEach } from 'vitest'
-import * as supabaseModule from '../db/supabase.js'
-
-beforeEach(() => {
-  vi.spyOn(supabaseModule, 'supabase', 'get').mockReturnValue({
-    from: () => ({
-      select: () => ({ eq: () => ({ single: () => ({ data: mockQuestion, error: null }) }) }),
-      insert: () => ({ select: () => ({ single: () => ({ data: { id: 'uuid' }, error: null }) }) }),
-    }),
-  } as any)
+// frontend/src/hooks/usePracticeSession.test.ts
+describe('reducer', () => {
+  it('LOAD_SUCCESS initializes partStates for multi-part questions', ...)
+  it('GRADE_REJECTED stays in answering phase', ...)
+  it('PART_SUBMIT_DONE transitions to revealed when all parts done', ...)
 })
 ```
 
-**React hook test pattern:**
+### Priority 4 — Route-level integration tests (supertest)
+
+Test Zod validation rejection, auth middleware 401/402, and happy-path responses with mocked services.
+
+## Setting Up Tests (Recommended Stack)
+
+**Backend:** Vitest (compatible with ESM/NodeNext without extra config)
+```bash
+cd backend && npm install -D vitest
+```
+```json
+// backend/package.json scripts
+"test": "vitest run",
+"test:watch": "vitest"
+```
+
+**Frontend:** Vitest + `@testing-library/react`
+```bash
+cd frontend && npm install -D vitest @testing-library/react @testing-library/user-event jsdom
+```
+Add to `frontend/vite.config.ts`:
 ```typescript
-import { renderHook, act } from '@testing-library/react'
-import { usePracticeSession } from './usePracticeSession'
-
-it('transitions from loading to answering on load success', async () => {
-  const { result } = renderHook(() => usePracticeSession('topic-id'))
-  expect(result.current.phase).toBe('loading')
-  await act(async () => { /* trigger load */ })
-  expect(result.current.phase).toBe('answering')
-})
+test: { environment: 'jsdom', globals: true }
 ```
-
-## Mocking
-
-**What to mock:**
-- `supabase` client (all DB calls in backend services)
-- `fetch` / `api.*` in frontend hooks
-- `@google/genai` Gemini client (AI-dependent services)
-- Socket.IO (`io()` in `frontend/src/lib/socket.ts`)
-
-**What NOT to mock:**
-- Pure functions (`normalizeLaTeX`, `checkAnswer`, `latexToMathExpr`) — test directly
-- React reducers — test the reducer function directly with plain inputs
-
-## Coverage
-
-**Requirements:** None currently enforced.
-
-**Suggested minimum targets (once tests added):**
-- `backend/src/services/attemptService.ts` — 90%+ (grading logic is mission-critical)
-- `backend/src/services/questionService.ts` — 80%+ (solution stripping must not leak)
-
-## Test Types
-
-**Unit Tests:** First priority — pure functions in `backend/src/services/attemptService.ts`
-
-**Integration Tests:** Second priority — route handlers against a mocked Supabase client
-
-**E2E Tests:** Not configured. Playwright or Cypress could cover the practice flow end-to-end, but is not currently in use.
 
 ---
 
-*Testing analysis: 2026-06-28*
+*Testing analysis: 2026-06-29*

@@ -1,216 +1,230 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-06-28
+**Analysis Date:** 2026-06-29
 
-## Naming Patterns
+## TypeScript Configuration
 
-**Files:**
-- React components: PascalCase `.tsx` (e.g., `QuestionCard.tsx`, `MathField.tsx`)
-- Hooks: camelCase with `use` prefix, `.ts` (e.g., `usePracticeSession.ts`, `useChatSession.ts`)
-- Services: camelCase suffix `Service`, `.ts` (e.g., `attemptService.ts`, `gradingService.ts`)
-- Routes: camelCase noun-only, `.ts` (e.g., `attempts.ts`, `topics.ts`)
-- Utilities/libs: camelCase, `.ts` (e.g., `api.ts`, `session.ts`, `renderLatex.tsx`)
-- Type files: `index.ts` (backend: `src/types/index.ts`), `api.ts` (frontend: `src/types/api.ts`)
+**Backend** (`backend/tsconfig.json`):
+- `strict: true`
+- `module: NodeNext`, `moduleResolution: NodeNext`
+- All backend imports use the `.js` extension even for `.ts` source files (NodeNext requirement)
+  - Example: `import { supabase } from '../db/supabase.js'`
+- `target: ES2022`, `esModuleInterop: true`
+- No `any` — the CLAUDE.md explicitly prohibits it. Cast using `as Error`, `as unknown`, etc.
 
-**Functions:**
-- camelCase everywhere: `submitAttempt`, `normalizeLaTeX`, `checkAnswer`, `getNextQuestion`
-- Boolean-returning helpers use verb prefix: `checkAnswer`, `tryNumericEval`, `trySymbolicEval`
-- Service functions exported as named exports (no default class)
-- React hooks: `use` prefix, exported as named exports
+**Frontend** (`frontend/tsconfig.app.json`):
+- `moduleResolution: bundler` (no extensions needed on imports)
+- `verbatimModuleSyntax: true` — use `import type` for type-only imports
+- `noUnusedLocals: true`, `noUnusedParameters: true`
+- `noFallthroughCasesInSwitch: true`
+- Linting: `typescript-eslint` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh`
 
-**Variables:**
-- camelCase for local variables and parameters
-- SCREAMING_SNAKE_CASE for module-level constants: `FEATURE_TIERS`, `DELIMITERS`
-- `_` prefix for intentionally unused destructured variables: `const { correct_answer: _ca, solution_latex: _sl, ...pub } = q`
+## Backend Layering
 
-**Types/Interfaces:**
-- Backend: `src/types/index.ts` — single source of truth
-- Frontend: `src/types/api.ts` — mirrors backend types (client-safe subset)
-- Interfaces use PascalCase: `QuestionPublic`, `SubmitAttemptBody`, `GradeResponse`
-- Type aliases for unions: `MathLevel = 'H1' | 'H2'`, `Difficulty = 1 | 2 | 3`
-- `Public` suffix for client-safe variants: `QuestionPublic`, `QuestionPartPublic`, `ChatMessagePublic`
-- Derived types use `Omit`/`Pick`/`&` rather than duplication: `QuestionPublic = Omit<Question, 'correct_answer' | 'solution_latex' | 'parts'> & { parts: ... }`
+Strict three-layer architecture — never skip layers:
 
-## Code Style
-
-**Formatting:**
-- Backend: semicolons required, 2-space indent (TypeScript strict mode)
-- Frontend: no semicolons (except in JSX returns), 2-space indent — inferred from ESLint config
-- Both: single quotes for strings
-
-**Linting:**
-- Frontend: ESLint flat config (`frontend/eslint.config.js`) — `@typescript-eslint/recommended` + `eslint-plugin-react-hooks` + `eslint-plugin-react-refresh`
-- Backend: TypeScript strict mode (`"strict": true` in `backend/tsconfig.json`)
-- No `any` types permitted in backend (strict TS)
-
-**TypeScript Settings (backend):**
-- `target: ES2022`, `module: NodeNext`, `moduleResolution: NodeNext`
-- All imports require `.js` extension (NodeNext resolution): `import { supabase } from '../db/supabase.js'`
-
-## Import Organization
-
-**Backend order:**
-1. Node built-ins (`import http from 'node:http'`)
-2. Third-party packages (`import express from 'express'`, `import { z } from 'zod'`)
-3. Internal imports (`import { supabase } from '../db/supabase.js'`)
-4. Type imports (`import type { ... } from '../types/index.js'`)
-
-**Frontend order:**
-1. React and react-router-dom
-2. Third-party packages
-3. Internal contexts/providers
-4. Internal components
-5. Internal hooks
-6. Internal lib utilities
-7. Internal types
-
-**Path Aliases:**
-- None configured. All imports use relative paths.
-
-## Import Extensions
-
-**Backend:** `.js` extension required on all local imports (NodeNext module resolution). Example:
-```typescript
-import { submitAttempt } from '../services/attemptService.js';
-import type { Attempt } from '../types/index.js';
+```
+Route handler  (backend/src/routes/*.ts)
+   ↓
+Service layer  (backend/src/services/*Service.ts)
+   ↓
+DB layer       (backend/src/db/supabase.ts, backend/src/db/gemini.ts)
 ```
 
-**Frontend:** No extension on `.ts`/`.tsx` imports (Vite handles resolution).
+- Routes are thin: parse + validate request, call one service function, respond.
+- Services own all business logic. Never call `supabase` from a route file.
+- DB modules export configured clients only (`supabase`, `gemini`).
 
-## Error Handling
-
-**Backend routes pattern:**
+**Route pattern** (`backend/src/routes/attempts.ts`):
 ```typescript
 router.post('/', ...gate('practice'), async (req, res) => {
   try {
-    const body = submitSchema.parse(req.body);  // Zod validation
-    const result = await service(req.user!.uid, body);
-    res.status(201).json(result);
+    const body = submitSchema.parse(req.body)        // Zod parse
+    const result = await submitAttempt(req.user!.uid, body)
+    res.status(201).json(result)
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid request body', details: err.issues });
-      return;
+      res.status(400).json({ error: 'Invalid request body', details: err.issues })
+      return
     }
     if ((err as Error).message.includes('not found')) {
-      res.status(404).json({ error: (err as Error).message });
-      return;
+      res.status(404).json({ error: (err as Error).message })
+      return
     }
-    res.status(500).json({ error: (err as Error).message });
+    res.status(500).json({ error: (err as Error).message })
   }
-});
+})
 ```
 
-**Backend services pattern:**
-- Services throw `new Error(message)` on failure
-- Supabase errors: `if (error) throw new Error(error.message)`
-- "Not found" conveyed via `return null` or `throw new Error('X not found')`
+## Zod Validation
 
-**Frontend API pattern (`lib/api.ts`):**
-- All fetch via `request<T>()` helper — throws `Error` on non-2xx
+Every route validates inputs with Zod before passing to the service layer.
+
+- `req.body` → declare a named schema (e.g., `submitSchema`), call `.parse(req.body)`
+- `req.query` → inline: `z.string().uuid().parse(req.query.question_id)` or via schema
+- ZodError caught in the route's catch block → HTTP 400 with `details: err.issues`
+- No validation in service layer — services assume pre-validated inputs
+
+## Authentication & Auth Middleware
+
+`backend/src/middleware/auth.ts` exports `requireAuth` and `gate(feature)`.
+
+- `gate(feature)` returns `[requireAuth, tierCheck]` as a `RequestHandler[]` array
+- Routes spread it: `router.get('/', ...gate('practice'), handler)`
+- Authenticated user is on `req.user!.uid` (Supabase user `id`, not Firebase UID)
+- Tier on `req.user!.tier` — `'free' | 'paid'`
+- Feature-tier mapping: `backend/src/config/featureTiers.ts`
+
+## Error Handling Patterns
+
+**Backend:**
+- Service functions throw `new Error(message)` on failure
+- Supabase errors: `if (error) throw new Error(error.message)`
+- Route catches classify by error message string (`.includes('not found')`) or instance type
+- Non-critical async: fire-and-forget with `.catch(() => {})`:
+  ```typescript
+  upsertSRCard(...).catch(() => { /* non-critical */ })
+  ```
+
+**Frontend:**
+- `frontend/src/lib/api.ts` `request()` centralizes all fetch calls
 - 401 → calls `_callbacks.onUnauthorized()` then throws
 - 402 → calls `_callbacks.onPaymentRequired()` then throws
-- Callers (hooks) store error in local state; components render from state
+- Non-ok responses: reads JSON body for `error` field, falls back to `res.statusText`
+- Components never call `fetch` directly — always through `api.*`
 
-**Fire-and-forget non-critical operations:**
+## Frontend API Pattern
+
+All HTTP calls go through `frontend/src/lib/api.ts`:
+
 ```typescript
-upsertSRCard(...).catch(() => {
-  // Non-critical; SR state will self-correct on next attempt.
-});
+export const api = {
+  topics: { list, get, questions, concepts, progress, accuracy },
+  questions: { next, get, solution },
+  attempts: { submit, list },
+  stars: { toggle, list, listAll },
+  streaks: { get },
+  chat: { history, send },
+  grade: { submit, history },
+  pair: { create, context, uploadPhoto, done },
+  review: { corrections, weakTopics, speedDrills, spaced, random, diagnosis, studyPlan },
+}
 ```
 
-## Validation
+Two base helpers:
+- `request<T>(path, init?)` — JSON requests, injects `Content-Type: application/json` + auth header
+- `requestFormData<T>(path, fd)` — multipart, injects auth header only (no Content-Type)
 
-**Backend: Zod everywhere.**
-- Schema defined inline or above the route handler
-- `schema.parse(req.body)` — throws `ZodError` on failure
-- Query params also validated: `z.string().uuid().parse(req.query.question_id)`
-- Example: `backend/src/routes/attempts.ts`
+Both helpers call `auth.currentUser?.getIdToken()` from Firebase to get the Bearer token.
 
-**Frontend:** No form validation library. Input constraints via TypeScript types and controlled component state.
+## Custom Hook Patterns
 
-## Authentication
+Hooks live in `frontend/src/hooks/`:
 
-**Pattern:** `gate(featureName)` middleware array spread onto routes:
+| Hook | Pattern |
+|------|---------|
+| `usePracticeSession.ts` | `useReducer` state machine + `useCallback` actions |
+| `useChatSession.ts` | Optimistic send with rollback on error |
+| `usePairSocket.ts` | Socket.IO event listeners → calls into practice session |
+| `useTopics.ts`, `useTopicsProgress.ts` | `useState` + `useEffect` data fetch |
+| `useFeature.ts` | Reads `useAuth().tier` to check feature access |
+| `useVisitedTopics.ts` | `localStorage`-backed Set |
+| `useStudyPlan.ts` | Study plan fetch + sync |
+
+**State machine pattern** (`usePracticeSession.ts`):
+- `useReducer` with explicit `PracticeState` type and discriminated union `Action` type
+- Phase progression: `'loading' → 'answering' → 'submitted' → 'revealed' → 'complete' | 'error'`
+- Phase `'answering'` returns to itself for `GRADE_REJECTED` (soft error, no penalty)
+
+## Naming Conventions
+
+**Files:**
+- React components: `PascalCase.tsx` (e.g., `QuestionCard.tsx`, `ChatPanel.tsx`)
+- Hooks: `camelCase` prefixed `use` (e.g., `usePracticeSession.ts`)
+- Backend routes: `camelCase` domain noun (e.g., `attempts.ts`, `chat.ts`)
+- Backend services: `camelCase` + `Service` suffix (e.g., `attemptService.ts`)
+
+**Functions:**
+- React components: `PascalCase`
+- Custom hooks: `useCamelCase`
+- Service functions: camelCase verb-noun (e.g., `submitAttempt`, `getAttemptsBySession`)
+- Utilities: camelCase verb-noun (e.g., `normalizeLaTeX`, `renderLatex`, `formatTime`)
+
+**Types/Interfaces:**
+- `PascalCase` throughout (e.g., `QuestionPublic`, `SubmitAttemptResponse`, `PracticePhase`)
+- Frontend types in `frontend/src/types/api.ts` mirror backend types in `backend/src/types/index.ts`
+
+**Constants:**
+- `UPPER_SNAKE_CASE` for module-level constants (e.g., `FEATURE_TIERS`, `DELIMITERS`)
+
+## LaTeX Rendering
+
+Three rendering primitives — choose based on context:
+
+| Primitive | When to Use | Source |
+|-----------|-------------|--------|
+| `renderLatex(source)` | Mixed text + math content (question prompts, AI chat replies, grading feedback). Splits on `\(...\)` (inline) and `\[...\]` (block) delimiters. Returns `ReactNode[]`. | `frontend/src/lib/renderLatex.tsx` |
+| `<Latex>{rawLatex}</Latex>` | Pure LaTeX, inline display (keyboard button labels, correct answer display) | `frontend/src/components/math/Latex.tsx` |
+| `<LatexBlock>{rawLatex}</LatexBlock>` | Pure LaTeX, block/display-mode (used internally by `renderLatex()`) | `frontend/src/components/math/LatexBlock.tsx` |
+
+**Usage locations for `renderLatex()`:**
+- `QuestionCard.tsx` — `question.prompt_latex`
+- `MultiPartQuestion.tsx` — `part.prompt_latex`
+- `ChatPanel.tsx` — AI reply content
+- `GradingResult.tsx` — part summaries, error descriptions, hints, overall feedback
+- `McqInput.tsx` — MCQ option text
+- `PracticePage.tsx` — solution reveal blocks
+
+**Rule:** Never pass raw LaTeX to plain `<span>` or string interpolation.
+
+## State Placement
+
+| State Type | Location |
+|------------|----------|
+| Auth (user, tier, loading) | `AuthContext` in `frontend/src/contexts/AuthContext.tsx` |
+| Practice session (question, phase, results) | `usePracticeSession` hook |
+| Chat messages | `useChatSession` hook |
+| Study plan | `useStudyPlan` hook |
+| Visited topics (cross-session) | `useVisitedTopics` — `localStorage`-backed |
+| UI toggles local to one component | `useState` in that component |
+
+## Styling Pattern
+
+- Tailwind CSS utility classes throughout
+- Class merging via `cn(...classes)` from `frontend/src/lib/utils.ts`:
+  ```typescript
+  export function cn(...classes: (string | undefined | false | null)[]): string {
+    return classes.filter(Boolean).join(' ')
+  }
+  ```
+  (Custom — no `clsx` or `tailwind-merge` dependency)
+- Responsive breakpoints: `lg:hidden` / `hidden lg:flex` for mobile/desktop splits
+
+## Import Style
+
+**Backend:** Always use `.js` extension on relative imports:
 ```typescript
-router.post('/', ...gate('practice'), async (req, res) => { ... });
+import { supabase } from '../db/supabase.js'
+import type { Attempt } from '../types/index.js'
 ```
-- `gate()` composes `[requireAuth, tierCheck]` — both are `RequestHandler[]`
-- `req.user!` (non-null assertion) safe only after `gate()` middleware
-- Feature tiers in `backend/src/config/featureTiers.ts`
 
-## Database Access
-
-**Rule: Never call `supabase` from a route file.** All DB access goes through service functions.
-- DB client: `backend/src/db/supabase.ts`
-- Pattern: `const { data, error } = await supabase.from('table').select(...)` → check error → return typed data
-
-## Logging
-
-**Framework:** `console.log` / `console.error` — no structured logging library.
-
-**Patterns:**
-- Backend startup: `console.log(\`Math Trainer backend running on http://localhost:${PORT}\`)`
-- No per-request logging
-- Silent swallow of non-critical async errors with inline comment explaining why
-
-## Comments
-
-**When to comment:**
-- Non-obvious business logic (answer normalization, symbolic evaluation)
-- Fire-and-forget with rationale: `// Non-critical; SR state will self-correct on next attempt.`
-- Clarifying notes on constraints: `// Atomic upsert — safe under concurrent first-logins.`
-- Section headers within long files using `// ── Header ──────────────────────`
-
-**JSDoc/TSDoc:** Not used. Types are self-documenting via TypeScript interfaces.
-
-## React Component Design
-
-**Export style:** Named exports for all components:
+**Frontend:** No extensions, no path aliases — plain relative imports:
 ```typescript
-export function QuestionCard({ ... }: Props) { ... }
+import { api } from '../lib/api'
+import type { QuestionPublic } from '../types/api'
 ```
 
-**Props interface:** Inline or above component, PascalCase name matching component:
-```typescript
-interface Props { ... }
-export function ComponentName({ prop1, prop2 }: Props) { ... }
-```
+Use `import type` (not bare `import`) for type-only imports (enforced by `verbatimModuleSyntax`).
 
-**State management:** `useReducer` for complex multi-phase state (`usePracticeSession.ts`), `useState` for simple local state. No global state library.
+## Deviations from Typical React/Express Conventions
 
-**Context pattern:**
-- `createContext<Type | null>(null)` with non-null assertion in hook
-- Hook exported: `export function useAuth(): AuthContextValue`
-- Hook throws if used outside provider: `if (!ctx) throw new Error('useAuth must be used inside AuthProvider')`
-- Example: `frontend/src/contexts/AuthContext.tsx`, `frontend/src/contexts/ThemeContext.tsx`
-
-## API Client Pattern
-
-All HTTP calls go through the namespaced `api` object in `frontend/src/lib/api.ts`:
-```typescript
-api.attempts.submit({ question_id, answer_given })
-api.topics.list()
-api.grade.submit(questionId, images, timeTakenS)
-```
-Never call `fetch()` directly in components or hooks — always use `api.*`.
-
-## Tailwind Usage
-
-Use `cn()` from `frontend/src/lib/utils.ts` for conditional class merging:
-```typescript
-import { cn } from '../lib/utils'
-className={cn('base-class', isActive && 'active-class', disabled && 'opacity-50')}
-```
-
-## Math Rendering
-
-Three utilities, each for a different context:
-- `renderLatex(source)` — mixed text + math with `\(...\)` / `\[...\]` delimiters → returns `ReactNode[]`
-- `<Latex>{rawLatex}</Latex>` — pure LaTeX inline
-- `<LatexBlock>{rawLatex}</LatexBlock>` — pure LaTeX block display
-
-Never pass raw LaTeX to `renderLatex()` and never use `renderLatex()` for pure-LaTeX strings.
+1. **No session_id in headers** — Firebase UID resolved to Supabase `users.id` is used as session key, available as `req.user!.uid` after the `gate()` middleware.
+2. **`gate()` returns a handler array** — spread with `...gate('feature')` in route definitions, not used as a single middleware argument.
+3. **`useReducer` for practice state** — chosen over multiple `useState` to make the state machine explicit and prevent impossible states.
+4. **StrictMode double-invoke rule** — never guard effects with a `firstLoad` ref; use idempotent `loadSpecific(id)` / `loadNext()` instead.
+5. **Fire-and-forget spaced repetition** — `upsertSRCard()` called without `await`, errors swallowed, deliberately non-blocking.
+6. **Error classification by string match** — `(err as Error).message.includes('not found')` instead of custom error classes.
 
 ---
 
-*Convention analysis: 2026-06-28*
+*Convention analysis: 2026-06-29*
