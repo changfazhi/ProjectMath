@@ -12,11 +12,15 @@ interface Props {
   onChange: (latex: string) => void
   disabled?: boolean
   className?: string
+  // Optional LaTeX to seed the field with once, on mount (e.g. an AI transcription to edit).
+  initialValue?: string
 }
 
 export const MathField = forwardRef<MathFieldHandle, Props>(
-  ({ onChange, disabled = false, className }, ref) => {
+  ({ onChange, disabled = false, className, initialValue }, ref) => {
     const elRef = useRef<MathfieldElement>(null)
+    // Captured once so the seed only applies on mount and never clobbers later edits.
+    const initialValueRef = useRef(initialValue)
 
     useImperativeHandle(ref, () => ({
       insert(latex: string) {
@@ -73,6 +77,12 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
           .ML__toolbar { display: none !important; }
         `
         shadow.appendChild(style)
+      }
+
+      // Seed the field once (setting .value does not dispatch an 'input' event, so onChange
+      // stays quiet and the parent's "unchanged" baseline holds until the student actually edits).
+      if (initialValueRef.current !== undefined) {
+        mf.value = initialValueRef.current
       }
 
       // Try immediately, then retry once the element has initialised
