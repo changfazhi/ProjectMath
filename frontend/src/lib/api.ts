@@ -174,6 +174,17 @@ export const api = {
       return requestFormData<GradeResponse>('/api/grade', fd)
     },
 
+    // Re-grade the student's corrected LaTeX transcription (no photos).
+    regradeText: (questionId: string, transcriptionLatex: string, timeTakenS?: number) =>
+      request<GradeResponse>('/api/grade/text', {
+        method: 'POST',
+        body: JSON.stringify({
+          question_id: questionId,
+          transcription_latex: transcriptionLatex,
+          time_taken_s: timeTakenS,
+        }),
+      }),
+
     history: (questionId: string) =>
       request<Grading[]>(`/api/grade?question_id=${questionId}`),
   },

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { loadStoredPlan, savePlan, todayStr } from '../lib/studyPlan'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
@@ -9,6 +10,7 @@ export interface Quest extends StudyPlanItem {
 }
 
 export function useStudyPlan(isOpen: boolean) {
+  const location = useLocation()
   const [quests, setQuests] = useState<Quest[]>([])
   const [isStale, setIsStale] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -74,7 +76,7 @@ export function useStudyPlan(isOpen: boolean) {
     return () => {
       cancelled = true
     }
-  }, [isOpen])
+  }, [isOpen, location.key])
 
   const correctCount = quests.filter(q => q.status === 'correct').length
   const total = quests.length

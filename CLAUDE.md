@@ -33,6 +33,7 @@ Run in order in the Supabase SQL Editor:
 14. `014_hci_prelim_2025.sql` — 23 HCI H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–13, Paper 2 Q1–10)
 15. `015_acjc_prelim_2025.sql` — 24 ACJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–12, Paper 2 Q1–12)
 16. `016_cjc_prelim_2025.sql` — 22 CJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–11, Paper 2 Q1–11)
+17. `017_grading_transcription.sql` — adds `transcription_latex TEXT` to `gradings` (editable AI transcription of handwriting)
 
 **After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
 
@@ -74,7 +75,8 @@ Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). 
 | GET | `/api/chat?session_id=UUID&question_id=UUID` | AI hint chat history for a question |
 | POST | `/api/chat` | Send a message → Socratic hint `{ reply, history }` (Gemini proxy, IP rate-limited) |
 | GET | `/api/grade?session_id=UUID&question_id=UUID` | Past photo gradings for a question |
-| POST | `/api/grade` | **multipart/form-data** (`images[]`, `session_id`, `question_id`, `time_taken_s?`) → AI grade of handwritten solution (Gemini vision, IP rate-limited) |
+| POST | `/api/grade` | **multipart/form-data** (`images[]`, `session_id`, `question_id`, `time_taken_s?`) → AI grade of handwritten solution (Gemini vision, IP rate-limited). Response includes `transcription_latex` (what the AI read) |
+| POST | `/api/grade/text` | JSON `{ question_id, transcription_latex, time_taken_s? }` → re-grade the student's corrected LaTeX transcription (no photos, same rate limit as `/api/grade`) |
 | POST | `/api/pair` | Create a phone-upload pairing → `{ token, mobile_path, expires_at }` |
 | GET | `/api/pair/:token` | Mobile page context (secret-free); fires `pair:phone-connected` |
 | POST | `/api/pair/:token/photo` | **multipart** single `image` → streams to desktop via `pair:image` |
@@ -113,7 +115,8 @@ A Socratic tutor that gives progressive hints (never the final answer) for the q
 Students photograph **handwritten** working; Gemini grades it against the stored model solution (it is an *examiner*, not a solver). Primary answer flow on `PracticePage`; typed/MathLive input remains a "Type instead" fallback.
 
 - **Pipeline:** `routes/grade.ts` → `services/gradingService.ts` → Gemini (`db/gemini.ts`). Images arrive as `multipart/form-data` (`multer`), sent to Gemini as base64 `inlineData`, and uploaded to the private `solution-uploads` bucket **only after** grading succeeds.
-- **Structured output** (`responseSchema`, deterministic): `{ gradable, rejection_reason, ignored_images[{index,reason}], parts[{label, verdict, marks_awarded, marks_total, errors[{step,description}], hints[], summary}], overall_feedback }`.
+- **Structured output** (`responseSchema`, deterministic): `{ gradable, rejection_reason, ignored_images[{index,reason}], parts[{label, verdict, marks_awarded, marks_total, errors[{step,description}], hints[], summary}], overall_feedback, transcription_latex }`.
+- **Editable transcription + re-grade:** Gemini also transcribes the handwriting verbatim into `transcription_latex`. The frontend `TranscriptionEditor` shows it as editable LaTeX (textarea + live `renderLatex()` preview) next to the feedback; if the scan was wrong the student edits it and re-grades via `POST /api/grade/text` → `gradeTranscription()` (text-only, no photos, `image_paths: []`). Both entry points share `runGrading()` in `gradingService.ts`; `buildGradingInstruction(question, mode)` swaps photo/text framing. The phone-upload flow grades on the phone but the editor/re-grade happens on the desktop (the desktop receives the full `GradeResponse` with `transcription_latex` over Socket.IO).
 - **Grading rules** (`buildGradingInstruction()`): credit valid alternative methods; sketches need labelled intercepts + asymptote equations + stationary points + correct shape; "hence" parts must use earlier results; auto-detect which part each photo covers; pin every error to the step. Confidential `solution_latex` injected for reference only.
 - **Junk filtering (STEP 0):** photos are numbered (`Photo N:`); blanks/objects/unrelated photos go in `ignored_images`. If nothing relevant remains → `gradable=false` → `GradingError` (HTTP 400 / `pair:error`) with no stored image, `gradings` row, or attempt. Frontend shows a soft `GRADE_REJECTED` (stay on the question to retake), not the global error screen.
 - **Persistence:** one `gradings` row per submission (images + feedback; future "mistake log" via `WHERE is_correct=false`) + one `attempts` row per graded part (correct = full marks) so streaks/progress/roadmap ✓ keep working.

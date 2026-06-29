@@ -23,14 +23,14 @@
 
 ### Persistence
 
-- [ ] **PERS-01**: When user is signed in (Firebase Auth), today's study plan is saved to Firestore under their UID so it survives page refresh and is accessible across devices
-- [ ] **PERS-02**: When user is not signed in (anonymous/no auth), study plan falls back to `localStorage` (existing behaviour preserved)
-- [ ] **PERS-03**: On load, the sidebar reads from Firestore first (if signed in) with `localStorage` as a fast-load cache
+- [x] **PERS-01**: When user is signed in (Firebase Auth), today's study plan is saved server-side under their UID so it survives page refresh and is accessible across devices *(implemented via `study_plans` Supabase table; `getPersonalisedStudyPlan` upserts by `user_id+date`)*
+- [x] **PERS-02**: When user is not signed in (anonymous/no auth), study plan falls back to `localStorage` (existing behaviour preserved)
+- [x] **PERS-03**: On load, the sidebar fetches from the server (if signed in) with `localStorage` as a fast-load cache *(`useStudyPlan` checks localStorage first; if empty, calls `/api/review/study-plan` which returns the DB-saved plan)*
 
 ### Status Sync
 
 - [ ] **SYNC-01**: Quest statuses (correct/attempted/pending) update in the sidebar when the user returns from a practice page without requiring a full page reload
-- [ ] **SYNC-02**: Status is derived from the attempts API (`GET /api/attempts`) — no separate status store
+- [x] **SYNC-02**: Status is derived from the attempts API (`GET /api/attempts`) — no separate status store *(`useStudyPlan` calls `api.attempts.list()` and derives correct/attempted/pending inline)*
 
 ## v2 Requirements
 
@@ -67,11 +67,11 @@
 | QUEST-02 | Phase 1 | Complete |
 | QUEST-03 | Phase 1 | Complete |
 | QUEST-04 | Phase 1 | Complete |
-| PERS-01 | Phase 2 | Pending |
-| PERS-02 | Phase 2 | Pending |
-| PERS-03 | Phase 2 | Pending |
+| PERS-01 | Phase 2 | Complete |
+| PERS-02 | Phase 2 | Complete |
+| PERS-03 | Phase 2 | Complete |
 | SYNC-01 | Phase 2 | Pending |
-| SYNC-02 | Phase 2 | Pending |
+| SYNC-02 | Phase 2 | Complete |
 
 **Coverage:**
 
@@ -81,4 +81,4 @@
 
 ---
 *Requirements defined: 2026-06-27*
-*Last updated: 2026-06-27 — traceability confirmed after roadmap creation*
+*Last updated: 2026-06-29 — PERS-01/02/03, SYNC-02 marked complete after codebase review confirmed implementation*

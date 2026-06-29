@@ -38,7 +38,7 @@ function PartCard({ part }: { part: GradingPartResult }) {
           <ul className="flex flex-col gap-1.5">
             {part.errors.map((e, i) => (
               <li key={i} className="text-sm text-slate-700 dark:text-slate-300">
-                <span className="font-medium text-slate-900 dark:text-slate-100">{e.step}: </span>
+                <span className="font-medium text-slate-900 dark:text-slate-100">{renderLatex(e.step)}: </span>
                 {renderLatex(e.description)}
               </li>
             ))}

@@ -214,7 +214,7 @@ export async function getAttemptsBySession(
 ): Promise<Attempt[]> {
   let query = supabase
     .from('attempts')
-    .select('*')
+    .select('*, questions(name)')
     .eq('session_id', sessionId)
     .order('attempted_at', { ascending: false });
 
@@ -224,5 +224,13 @@ export async function getAttemptsBySession(
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return data as Attempt[];
+
+  // Flatten the embedded question name onto each attempt row.
+  return (data ?? []).map((row) => {
+    const { questions, ...rest } = row as Record<string, unknown> & {
+      questions: { name: string | null } | { name: string | null }[] | null;
+    };
+    const q = Array.isArray(questions) ? questions[0] : questions;
+    return { ...rest, question_name: q?.name ?? null } as Attempt;
+  });
 }

@@ -1,5 +1,4 @@
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom'
-import { ThemeProvider } from './contexts/ThemeContext'
 import { Header } from './components/layout/Header'
 import { StudyPlanSidebar } from './components/layout/StudyPlanSidebar'
 import { HomePage } from './pages/HomePage'
@@ -10,6 +9,7 @@ import { StarredPage } from './pages/StarredPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { StudyPlanPage } from './pages/StudyPlanPage'
 import { MobileUploadPage } from './pages/MobileUploadPage'
+import { LandingPage } from './pages/LandingPage'
 
 function RootLayout() {
   return (
@@ -28,11 +28,13 @@ function RootLayout() {
 const router = createBrowserRouter([
   // Lightweight phone upload page — standalone, no header/nav chrome.
   { path: '/m/:token', element: <MobileUploadPage /> },
+  // Marketing landing page is the entry point — standalone nav/footer chrome.
+  { path: '/', element: <LandingPage /> },
+  // Main app — the roadmap lives at /roadmap; shares the header + study-plan sidebar.
   {
-    path: '/',
     element: <RootLayout />,
     children: [
-      { index: true, element: <HomePage /> },
+      { path: 'roadmap', element: <HomePage /> },
       { path: 'practice/:topicId', element: <PracticePage /> },
       { path: 'history', element: <HistoryPage /> },
       { path: 'stats', element: <StatsPage /> },
@@ -44,9 +46,5 @@ const router = createBrowserRouter([
 ])
 
 export default function App() {
-  return (
-    <ThemeProvider>
-      <RouterProvider router={router} />
-    </ThemeProvider>
-  )
+  return <RouterProvider router={router} />
 }

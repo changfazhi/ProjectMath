@@ -4,7 +4,8 @@ import { api } from '../lib/api'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
-import { todayStr, savePlan, loadStoredPlan } from '../lib/studyPlan'
+import { todayStr, persistPlan, resolvePlan } from '../lib/studyPlan'
+import { useAuth } from '../contexts/AuthContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -101,14 +102,17 @@ function QuestRow({
 
 export function StudyPlanPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [quests, setQuests] = useState<Quest[]>([])
   const [reasoning, setReasoning] = useState('')
 
+  // Re-run when auth settles so signed-in users hydrate from Firestore on new devices
   useEffect(() => {
     loadPlan()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid])
 
   async function loadPlan() {
     setLoading(true)
@@ -117,7 +121,7 @@ export function StudyPlanPage() {
       let items: StudyPlanItem[]
       let planReasoning: string
 
-      const { plan: stored, isStale } = loadStoredPlan()
+      const { plan: stored, isStale } = await resolvePlan(user?.uid ?? null)
       if (stored && !isStale) {
         items = stored.items
         planReasoning = stored.reasoning
@@ -130,7 +134,7 @@ export function StudyPlanPage() {
         }
         items = fresh.items
         planReasoning = fresh.reasoning
-        savePlan({ date: todayStr(), items, reasoning: planReasoning })
+        await persistPlan(user?.uid ?? null, { date: todayStr(), items, reasoning: planReasoning })
       }
 
       // Check attempt status for each question

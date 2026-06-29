@@ -3,7 +3,12 @@ import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
-import { gradeSolution, getGradingsForQuestion, GradingError } from '../services/gradingService.js';
+import {
+  gradeSolution,
+  gradeTranscription,
+  getGradingsForQuestion,
+  GradingError,
+} from '../services/gradingService.js';
 
 const router = Router();
 
@@ -32,6 +37,12 @@ const gradeLimiter = rateLimit({
 
 const bodySchema = z.object({
   question_id: z.string().uuid(),
+  time_taken_s: z.coerce.number().int().positive().optional(),
+});
+
+const textBodySchema = z.object({
+  question_id: z.string().uuid(),
+  transcription_latex: z.string().min(1),
   time_taken_s: z.coerce.number().int().positive().optional(),
 });
 
@@ -77,6 +88,31 @@ router.post('/', ...gate('photoGrading'), gradeLimiter, upload.array('images', M
     }
     // multer errors (file too large / too many / bad type) surface as plain Errors
     if (err instanceof Error && /file too large|too many files|unsupported file type/i.test(err.message)) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/grade/text — re-grade from the student's (edited) typed LaTeX, after they correct a
+// mis-scanned photo. No images; grades the corrected text only. Same rate limit as photo grading.
+router.post('/text', ...gate('photoGrading'), gradeLimiter, async (req, res) => {
+  try {
+    const { question_id, transcription_latex, time_taken_s } = textBodySchema.parse(req.body);
+    const result = await gradeTranscription({
+      userId: req.user!.uid,
+      question_id,
+      transcription_latex,
+      time_taken_s,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid request body', details: err.issues });
+      return;
+    }
+    if (err instanceof GradingError) {
       res.status(400).json({ error: err.message });
       return;
     }
