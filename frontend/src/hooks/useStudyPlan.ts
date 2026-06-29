@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
 import { loadStoredPlan, savePlan, todayStr } from '../lib/studyPlan'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
@@ -32,7 +33,7 @@ function computeStatuses(items: StudyPlanItem[], attempts: { question_id: string
 }
 
 export function useStudyPlan(isOpen: boolean) {
-  const { user, loading: authLoading } = useAuth()
+  const location = useLocation()
   const [quests, setQuests] = useState<Quest[]>([])
   const [isStale, setIsStale] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -88,57 +89,7 @@ export function useStudyPlan(isOpen: boolean) {
     return () => {
       cancelled = true
     }
-  // Re-run when sidebar opens, when user signs in/out, or when auth finishes loading
-  }, [isOpen, user?.uid, authLoading])
-
-  // Status-only refresh: re-query attempts against cached plan items (no Firestore call).
-  // Runs on window focus / visibilitychange to reflect practice completed on other tabs (SYNC-01).
-  useEffect(() => {
-    if (!isOpen || refreshKey === 0) return
-    const cachedItems = planItemsRef.current
-    if (!cachedItems || cachedItems.length === 0) return
-
-    let cancelled = false
-
-    async function refreshStatuses() {
-      try {
-        const allAttempts = await api.attempts.list()
-        if (cancelled) return
-        setQuests(computeStatuses(cachedItems!, allAttempts))
-      } catch {
-        // Silent fail — cached statuses remain visible
-      }
-    }
-
-    refreshStatuses()
-    return () => {
-      cancelled = true
-    }
-  }, [isOpen, refreshKey])
-
-  // Register focus/visibilitychange listeners while the sidebar is open (SYNC-01).
-  // Status is computed only — no setDoc/updateDoc/localStorage status write (SYNC-02).
-  useEffect(() => {
-    if (!isOpen) return
-
-    function onFocus() {
-      setRefreshKey(k => k + 1)
-    }
-
-    function onVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        setRefreshKey(k => k + 1)
-      }
-    }
-
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-
-    return () => {
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [isOpen])
+  }, [isOpen, location.key])
 
   const correctCount = quests.filter(q => q.status === 'correct').length
   const total = quests.length
