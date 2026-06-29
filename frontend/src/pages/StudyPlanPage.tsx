@@ -3,41 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
-import type { StudyPlanItem } from '../types/api'
-
-// ── Persistence ───────────────────────────────────────────────────────────────
-
-interface StoredPlan {
-  date: string
-  items: StudyPlanItem[]
-  reasoning: string
-}
-
-const PLAN_KEY = 'study_plan_v1'
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function loadStoredPlan(): StoredPlan | null {
-  try {
-    const raw = localStorage.getItem(PLAN_KEY)
-    if (!raw) return null
-    const p = JSON.parse(raw) as StoredPlan
-    if (p.date !== todayStr()) return null
-    return p
-  } catch {
-    return null
-  }
-}
-
-function savePlan(plan: StoredPlan) {
-  localStorage.setItem(PLAN_KEY, JSON.stringify(plan))
-}
+import type { StudyPlanItem, QuestStatus } from '../types/api'
+import { todayStr, persistPlan, resolvePlan } from '../lib/studyPlan'
+import { useAuth } from '../contexts/AuthContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type QuestStatus = 'correct' | 'attempted' | 'pending'
 
 interface Quest extends StudyPlanItem {
   status: QuestStatus
@@ -132,14 +102,17 @@ function QuestRow({
 
 export function StudyPlanPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [quests, setQuests] = useState<Quest[]>([])
   const [reasoning, setReasoning] = useState('')
 
+  // Re-run when auth settles so signed-in users hydrate from Firestore on new devices
   useEffect(() => {
     loadPlan()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid])
 
   async function loadPlan() {
     setLoading(true)
@@ -148,8 +121,8 @@ export function StudyPlanPage() {
       let items: StudyPlanItem[]
       let planReasoning: string
 
-      const stored = loadStoredPlan()
-      if (stored) {
+      const { plan: stored, isStale } = await resolvePlan(user?.uid ?? null)
+      if (stored && !isStale) {
         items = stored.items
         planReasoning = stored.reasoning
       } else {
@@ -161,7 +134,7 @@ export function StudyPlanPage() {
         }
         items = fresh.items
         planReasoning = fresh.reasoning
-        savePlan({ date: todayStr(), items, reasoning: planReasoning })
+        await persistPlan(user?.uid ?? null, { date: todayStr(), items, reasoning: planReasoning })
       }
 
       // Check attempt status for each question

@@ -73,8 +73,9 @@ async function buildTopicStats(userId: string): Promise<TopicStat[]> {
   const questions = questionsRes.data as { id: string; topic_id: string }[];
   const attempts = attemptsRes.data as { question_id: string; is_correct: boolean }[];
 
-  if (attempts.length < 5) {
-    throw new Error('Attempt at least 5 questions to unlock the Weakness Diagnostic.');
+  const uniqueQuestionsAttempted = new Set(attempts.map(a => a.question_id)).size;
+  if (uniqueQuestionsAttempted < 5) {
+    throw new Error('Attempt at least 5 unique questions to unlock the Weakness Diagnostic.');
   }
 
   const qTopicMap = new Map<string, string>();

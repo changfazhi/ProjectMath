@@ -328,6 +328,94 @@ To change a feature's access level, edit **both**:
 
 ---
 
+## Weakness Diagnostic & Study Plan Flow
+
+### Unlock gate
+
+Both the Weakness Diagnostic and the Personalised Study Plan require **≥ 5 unique questions attempted** before they unlock. The check lives in `backend/src/services/diagnosticService.ts → buildTopicStats()`:
+
+```typescript
+const uniqueQuestionsAttempted = new Set(attempts.map(a => a.question_id)).size
+if (uniqueQuestionsAttempted < 5) throw new Error('Attempt at least 5 unique questions…')
+```
+
+`buildTopicStats` is called by both `getWeaknessDiagnosis` and `getPersonalisedStudyPlan`, so the gate is enforced at both endpoints. The backend returns HTTP 403 for the diagnosis endpoint and HTTP 500 (with the same message) for the study-plan endpoint when below the threshold.
+
+The frontend `ReviewPage` mirrors this gate: it reads `streaks.uniqueQuestionsAttempted` (returned by `GET /api/streaks`) and renders the Weakness Diagnostic card in a locked, non-interactive state until the count reaches 5. The lock message counts down: "N to go". `uniqueQuestionsAttempted` is a dedicated field on `StreakStats` (distinct from `totalAttempts`) so retrying the same question multiple times does not count toward the threshold.
+
+### Weakness Diagnostic flow
+
+```
+ReviewPage → handleDiagnosis() → api.review.diagnosis()
+  → GET /api/review/diagnosis  (routes/review.ts, gate('review'))
+  → getWeaknessDiagnosis(uid)  (services/diagnosticService.ts)
+      buildTopicStats(uid)      — 3 Supabase queries (topics, questions, attempts)
+      Gemini API                — classifies topics as weak/moderate/strong + ai_insight per topic
+  → DiagnosisResult displayed inline on ReviewPage (no navigation)
+```
+
+The diagnosis result is ephemeral — it is never persisted. Re-clicking the button calls Gemini again. The "Today's Personalised Study Plan" CTA is only rendered after `diagState === 'shown'`, so the plan button is unreachable until a successful diagnosis.
+
+### Study Plan generation & pre-fetch pattern
+
+The study plan is generated **algorithmically** (no second Gemini call). Generation happens inside `handleStudyPlan()` on `ReviewPage`, not on `StudyPlanPage`. This pre-fetch pattern means the loading spinner shows on the page the user is already looking at, and `StudyPlanPage` renders instantly from cache.
+
+```
+ReviewPage → handleStudyPlan()
+  1. Check localStorage for today's plan (PLAN_KEY = 'study_plan_v1', date = en-CA string)
+  2. If absent → api.review.studyPlan()
+       → GET /api/review/study-plan  (gate('review'))
+       → getPersonalisedStudyPlan(uid)  (diagnosticService.ts)
+           buildTopicStats(uid)  — same 3 Supabase queries as diagnosis
+           3 more Supabase queries (all questions, attempts, topic names)
+           Select up to 10 unsolved questions from weakest topics (algorithmic)
+       → { items, reasoning }
+  3. savePlan(planData)                          — synchronous localStorage write
+  4. savePlanRemote(uid, planData).catch(() => {}) — background Firestore write (fire-and-forget)
+  5. navigate('/study-plan')
+
+StudyPlanPage mounts → loadPlan()
+  → resolvePlan(uid)  [localStorage-first — see below]
+  → plan found in localStorage immediately (no network wait)
+  → api.attempts.list()  — derive correct/attempted/pending per quest
+  → render quest list
+```
+
+If the user navigates directly to `/study-plan` without going through ReviewPage (e.g. bookmarked URL), `StudyPlanPage` falls through to calling `api.review.studyPlan()` itself via the same fallback path.
+
+### Plan storage: `resolvePlan` — localStorage-first
+
+`frontend/src/lib/studyPlan.ts → resolvePlan(uid)` uses a **localStorage-first** strategy for today's plan:
+
+```
+resolvePlan(uid)
+  1. loadStoredPlan()  — synchronous read of 'study_plan_v1'
+  2. If plan exists AND date == today → return immediately (no Firestore call)
+  3. Else (miss or stale) → try Firestore with 5-second timeout
+       loadRemotePlan(uid) races Promise.race([getDoc(...), 5s timeout])
+       On hit → savePlan(remote) + return remote
+       On miss or timeout/error → return whatever localStorage held (may be null)
+```
+
+The localStorage fast-path eliminates all Firestore latency on the same device. Firestore is only queried when localStorage has no plan for today (cross-device scenario: user opens on a second device). The 5-second timeout prevents Firestore connectivity issues from causing indefinite loading.
+
+> **Note:** Firestore is used only for study plan cross-device persistence. The main database is Supabase. If the Firebase project does not have a Firestore database provisioned, all `getDoc`/`setDoc` calls fail silently and the plan is localStorage-only (single device). Supabase (attempts, stars, streaks, history) syncs across devices via the backend as normal.
+
+### `useStudyPlan` hook — two-effect architecture
+
+The sidebar hook (`frontend/src/hooks/useStudyPlan.ts`) separates plan loading from status refreshing to avoid a Firestore call on every window focus:
+
+| Effect | Trigger | What it does |
+|--------|---------|--------------|
+| **Full load** | `isOpen` becomes true, `user.uid` changes, or `authLoading` settles | `resolvePlan` (may hit Firestore) + `api.attempts.list()`. Populates `planItemsRef` cache. |
+| **Status refresh** | `refreshKey` increments (window focus / tab visibility) | `api.attempts.list()` only — no Firestore. Recomputes correct/attempted/pending against cached `planItemsRef`. |
+
+When the sidebar closes, `planItemsRef.current` is reset to `null` so the next open triggers a full load (picks up any new plan generated since last open).
+
+Status is always **derived** from the attempt list — never written to localStorage or Firestore (`SYNC-02` requirement).
+
+---
+
 ## Error Handling
 
 **Backend:** services throw typed errors (e.g., `GradingError`, `ChatLimitError`); routes catch and map to HTTP status codes. Zod parse failures return 400. Auth failures return 401 (missing/invalid token) or 402 (insufficient tier).
@@ -358,4 +446,4 @@ To change a feature's access level, edit **both**:
 
 ---
 
-*Architecture analysis: 2026-06-26 — updated 2026-06-26 to reflect Firebase Auth + feature gating; merged with frontend architecture detail from main*
+*Architecture analysis: 2026-06-26 — updated 2026-06-26 to reflect Firebase Auth + feature gating; merged with frontend architecture detail from main. Updated 2026-06-28: Weakness Diagnostic & Study Plan flow documented (unique-question threshold, localStorage-first resolvePlan, pre-fetch pattern, two-effect useStudyPlan hook).*

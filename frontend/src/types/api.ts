@@ -112,6 +112,7 @@ export interface StreakStats {
   totalAttempts: number
   totalSolved: number
   totalQuestions: number
+  uniqueQuestionsAttempted: number
   dailyActivity: DailyActivity[]
 }
 
@@ -219,6 +220,8 @@ export interface DiagnosisResult {
   overall_summary: string
   generated_at: string
 }
+
+export type QuestStatus = 'correct' | 'attempted' | 'pending'
 
 export interface StudyPlanItem {
   question_id: string

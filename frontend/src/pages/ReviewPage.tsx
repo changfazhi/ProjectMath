@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
-import type { DiagnosisResult, TopicDiagnosis } from '../types/api'
+import { useAuth } from '../contexts/AuthContext'
+import { savePlan, savePlanRemote, todayStr, PLAN_KEY, type StoredPlan } from '../lib/studyPlan'
+import type { DiagnosisResult, ReviewItem, TopicDiagnosis } from '../types/api'
 
 // ── Queue helpers ─────────────────────────────────────────────────────────────
 
@@ -120,11 +122,12 @@ type DiagState = 'idle' | 'loading' | 'shown' | 'error'
 
 export function ReviewPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   // ── Page meta ──────────────────────────────────────────────────────────────
   const [metaLoaded, setMetaLoaded] = useState(false)
   const [spacedDueCount, setSpacedDueCount] = useState(0)
-  const [totalAttempts, setTotalAttempts] = useState(0)
+  const [uniqueQuestionsAttempted, setUniqueQuestionsAttempted] = useState(0)
 
   useEffect(() => {
     Promise.all([
@@ -133,7 +136,7 @@ export function ReviewPage() {
     ])
       .then(([spaced, streaks]) => {
         setSpacedDueCount(spaced.items.length)
-        setTotalAttempts(streaks.totalAttempts)
+        setUniqueQuestionsAttempted(streaks.uniqueQuestionsAttempted)
       })
       .catch(() => {
         /* non-critical — defaults to 0 */
@@ -203,7 +206,7 @@ export function ReviewPage() {
 
   // ── Weakness Diagnostic card ───────────────────────────────────────────────
   const UNLOCK_THRESHOLD = 5
-  const eligible = metaLoaded && totalAttempts >= UNLOCK_THRESHOLD
+  const eligible = metaLoaded && uniqueQuestionsAttempted >= UNLOCK_THRESHOLD
 
   const [diagState, setDiagState] = useState<DiagState>('idle')
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null)
@@ -232,16 +235,30 @@ export function ReviewPage() {
     setStudyPlanLoading(true)
     setStudyPlanError(null)
     try {
-      // Clear stale plan so StudyPlanPage fetches fresh if date changed
-      const stored = localStorage.getItem('study_plan_v1')
-      if (stored) {
-        const parsed = JSON.parse(stored) as { date: string }
-        const today = new Date().toISOString().slice(0, 10)
-        if (parsed.date !== today) localStorage.removeItem('study_plan_v1')
+      const today = todayStr()
+
+      // Check whether today's plan is already cached in localStorage
+      let hasTodayPlan = false
+      const localRaw = localStorage.getItem(PLAN_KEY)
+      if (localRaw) {
+        try {
+          hasTodayPlan = (JSON.parse(localRaw) as { date: string }).date === today
+        } catch {
+          localStorage.removeItem(PLAN_KEY)
+        }
       }
+
+      if (!hasTodayPlan) {
+        // Fetch the plan here (spinner is already showing) so StudyPlanPage renders instantly.
+        const fresh = await api.review.studyPlan()
+        const planData: StoredPlan = { date: today, items: fresh.items, reasoning: fresh.reasoning }
+        savePlan(planData)                                        // sync — localStorage is immediate
+        if (user?.uid) savePlanRemote(user.uid, planData).catch(() => {}) // background Firestore write
+      }
+
       navigate('/study-plan')
-    } catch {
-      setStudyPlanError('Could not open study plan.')
+    } catch (err) {
+      setStudyPlanError((err as Error).message)
       setStudyPlanLoading(false)
     }
   }
@@ -343,7 +360,7 @@ export function ReviewPage() {
             </p>
             <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
               {metaLoaded
-                ? `Attempt ${UNLOCK_THRESHOLD} questions to unlock — ${UNLOCK_THRESHOLD - totalAttempts} to go`
+                ? `Attempt ${UNLOCK_THRESHOLD} unique questions to unlock — ${UNLOCK_THRESHOLD - uniqueQuestionsAttempted} to go`
                 : 'Checking eligibility…'}
             </p>
           </div>

@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { Header } from './components/layout/Header'
+import { StudyPlanSidebar } from './components/layout/StudyPlanSidebar'
 import { HomePage } from './pages/HomePage'
 import { PracticePage } from './pages/PracticePage'
 import { HistoryPage } from './pages/HistoryPage'
@@ -14,9 +15,12 @@ function RootLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 overflow-hidden flex flex-col">
-        <Outlet />
-      </main>
+      <div className="relative flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden flex flex-col">
+          <Outlet />
+        </main>
+        <StudyPlanSidebar />
+      </div>
     </div>
   )
 }

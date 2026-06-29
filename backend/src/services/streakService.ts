@@ -28,6 +28,7 @@ export interface StreakStats {
   totalAttempts: number;
   totalSolved: number;
   totalQuestions: number;
+  uniqueQuestionsAttempted: number;
   dailyActivity: DailyActivity[];
 }
 
@@ -49,7 +50,7 @@ export async function getStreakStats(userId: string): Promise<StreakStats> {
   const totalQuestions = countResult.count ?? 0;
 
   if (attempts.length === 0) {
-    return { currentStreak: 0, bestStreak: 0, totalAttempts: 0, totalSolved: 0, totalQuestions, dailyActivity: [] };
+    return { currentStreak: 0, bestStreak: 0, totalAttempts: 0, totalSolved: 0, totalQuestions, uniqueQuestionsAttempted: 0, dailyActivity: [] };
   }
 
   const dailyMap = new Map<string, { correctCount: number; attemptCount: number }>();
@@ -103,12 +104,15 @@ export async function getStreakStats(userId: string): Promise<StreakStats> {
     bestStreak = Math.max(bestStreak, currentRun);
   }
 
+  const uniqueQuestionsAttempted = new Set(attempts.map(a => a.question_id as string)).size;
+
   return {
     currentStreak,
     bestStreak,
     totalAttempts: attempts.length,
     totalSolved: solvedQuestions.size,
     totalQuestions,
+    uniqueQuestionsAttempted,
     dailyActivity,
   };
 }
