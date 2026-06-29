@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react'
+import { useEffect, useRef, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -53,7 +53,7 @@ const MARKUP = `
         <a href="#pricing" class="pm-hov-accent">Pricing</a>
       </div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:18px">
-        <a href="#" data-login style="font-weight:600;font-size:15px;color:#3d4264;cursor:pointer" class="pm-hov-accent">Log in</a>
+        __AUTH_LINK__
         <a href="/roadmap" class="pm-hov-navcta" style="display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:11px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;box-shadow:0 8px 18px -6px var(--accent);transition:transform .15s,box-shadow .15s">Start free</a>
       </div>
     </nav>
@@ -75,14 +75,15 @@ const MARKUP = `
           <a href="/roadmap" class="pm-hov-cta" style="display:inline-flex;align-items:center;gap:9px;padding:15px 28px;border-radius:13px;background:var(--accent);color:#fff;font-weight:700;font-size:17px;box-shadow:0 12px 26px -8px var(--accent);transition:transform .15s,box-shadow .15s">Explore the roadmap &rarr;</a>
           <a href="#features" class="pm-hov-ghost" style="display:inline-flex;align-items:center;gap:9px;padding:15px 26px;border-radius:13px;background:#fff;border:1px solid #e1e4f0;color:#1f2342;font-weight:700;font-size:17px;transition:transform .15s,border-color .15s">See the AI tools</a>
         </div>
-        <div style="display:flex;align-items:center;gap:16px;margin-top:34px">
-          <div style="display:flex">
-            <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:3px solid #f6f7fc;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px">RT</div>
-            <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#06b6d4);border:3px solid #f6f7fc;margin-left:-12px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px">DL</div>
-            <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#f97316);border:3px solid #f6f7fc;margin-left:-12px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px">PN</div>
-            <div style="width:40px;height:40px;border-radius:50%;background:#11142b;border:3px solid #f6f7fc;margin-left:-12px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12.5px">+9k</div>
+        <div style="margin-top:34px">
+          <div style="font-size:13px;color:#8a90ab;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Sourced from real 2025 JC Prelim &amp; A-Level papers</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">ASRJC</span>
+            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">DHS</span>
+            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">HCI</span>
+            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">ACJC</span>
+            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">CJC</span>
           </div>
-          <div style="font-size:14px;color:#52567a"><span style="color:#f59e0b;font-weight:700">&#9733; 4.9</span> &nbsp;from 9,000+ JC students</div>
         </div>
       </div>
       <!-- right visual -->
@@ -121,10 +122,10 @@ const MARKUP = `
   <!-- STATS -->
   <section style="background:#fff;border-bottom:1px solid #eef0f7">
     <div style="max-width:1180px;margin:0 auto;padding:34px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center">
-      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">9,000+</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">JC1 &amp; JC2 students</div></div>
-      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">1.2M+</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">questions solved</div></div>
-      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">120+</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">guided lessons</div></div>
-      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">4.9&#9733;</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">average rating</div></div>
+      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">200+</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">rigorously filtered problems</div></div>
+      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">24</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">H2 topics covered</div></div>
+      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">9758</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">A-Level H2 syllabus</div></div>
+      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">100%</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">exam-grade questions</div></div>
     </div>
   </section>
 
@@ -218,8 +219,49 @@ const MARKUP = `
     </div>
   </section>
 
+  <!-- SPACED REPETITION -->
+  <section style="background:#fff">
+    <div style="max-width:1180px;margin:0 auto;padding:88px 24px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
+      <!-- left: copy -->
+      <div>
+        <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Spaced repetition</div>
+        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Remember the gotchas,<br>not just the topic.</h2>
+        <p style="font-size:18px;line-height:1.6;color:#52567a;max-width:520px;margin:18px 0 0">Getting a question right once isn't the same as remembering it in November. ProjectMath runs a proven <b>SM-2</b> spaced-repetition schedule: every question you slip on comes back at <b>expanding intervals</b> &mdash; just before you'd forget it &mdash; until the trick and the concept behind it are locked in.</p>
+        <ul style="list-style:none;padding:0;margin:26px 0 0;display:flex;flex-direction:column;gap:13px">
+          <li style="display:flex;gap:11px;font-size:15.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Wrong answers are automatically queued for review</li>
+          <li style="display:flex;gap:11px;font-size:15.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Each correct recall pushes the next review further out</li>
+          <li style="display:flex;gap:11px;font-size:15.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>A daily "due" queue tells you exactly what to revisit</li>
+        </ul>
+      </div>
+      <!-- right: interval ladder -->
+      <div style="position:relative">
+        <div style="background:#f6f7fc;border:1px solid #ebedf6;border-radius:22px;box-shadow:0 26px 54px -26px rgba(28,32,68,.4);padding:26px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+            <span style="font-weight:700;font-size:14px;color:#1c2042">Review schedule</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;font-size:12.5px">3 due today</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:13px;background:#fff;border:1px solid #ebedf6;border-radius:13px;padding:13px 15px">
+              <div style="width:40px;height:40px;border-radius:11px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;font-size:15px">1d</div>
+              <div style="font-size:14.5px;color:#2c3050;font-weight:600">First recall &mdash; the day after you got it wrong</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:13px;background:#fff;border:1px solid #ebedf6;border-radius:13px;padding:13px 15px">
+              <div style="width:40px;height:40px;border-radius:11px;background:#6366f1;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;font-size:15px">3d</div>
+              <div style="font-size:14.5px;color:#2c3050;font-weight:600">Still solid? The gap widens</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:13px;background:#fff;border:1px solid #ebedf6;border-radius:13px;padding:13px 15px">
+              <div style="width:40px;height:40px;border-radius:11px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;font-size:15px">7d</div>
+              <div style="font-size:14.5px;color:#2c3050;font-weight:600">A week later, then two&hellip;</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:11px;justify-content:center;padding-top:4px;color:#8a90ab;font-weight:700;font-size:13px">14d &rarr; 30d &rarr; mastered</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- FEATURES -->
-  <section id="features" style="background:#fff">
+  <section id="features" style="background:#fff;border-top:1px solid #eef0f7">
     <div style="max-width:1180px;margin:0 auto;padding:88px 24px 30px;text-align:center">
       <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">AI tools</div>
       <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:44px;line-height:1.08;letter-spacing:-.02em;margin:14px 0 0">Two tools that mark like a tutor</h2>
@@ -293,37 +335,28 @@ const MARKUP = `
     </div>
   </section>
 
-  <!-- TESTIMONIALS -->
+  <!-- WHY PROJECTMATH -->
   <section style="background:#f6f7fc;border-top:1px solid #eef0f7;border-bottom:1px solid #eef0f7">
     <div style="max-width:1180px;margin:0 auto;padding:80px 24px">
       <div style="text-align:center;max-width:560px;margin:0 auto">
-        <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Loved by JC students</div>
-        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">From shaky to solid</h2>
+        <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Why ProjectMath</div>
+        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Quality over quantity</h2>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px">
-        <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:24px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
-          <div style="color:#f59e0b;font-size:15px;letter-spacing:2px">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-          <p style="font-size:15.5px;line-height:1.6;color:#2c3050;margin:14px 0 20px">"The roadmap finally made functions click. The AI scan caught presentation marks my own teacher missed &mdash; went from a C to an A in one term."</p>
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">RT</div>
-            <div><div style="font-weight:700;font-size:14.5px">Rachel Tan</div><div style="font-size:12.5px;color:#8a90ab">RJC &middot; JC2</div></div>
-          </div>
+        <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:26px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
+          <div style="width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:22px">&#128221;</div>
+          <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;margin:18px 0 8px">Straight from the exam</h3>
+          <p style="font-size:15px;line-height:1.6;color:#52567a;margin:0">Every question is taken from real A-Level and 2025 JC Prelim papers (9758) &mdash; the exact style and rigour you'll meet on the day.</p>
         </div>
-        <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:24px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
-          <div style="color:#f59e0b;font-size:15px;letter-spacing:2px">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-          <p style="font-size:15.5px;line-height:1.6;color:#2c3050;margin:14px 0 20px">"I used to just stare at hard questions. Now the AI tutor nudges me one step at a time and I actually figure it out myself. Game changer for JC1."</p>
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#06b6d4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">DL</div>
-            <div><div style="font-weight:700;font-size:14.5px">Daniel Lim</div><div style="font-size:12.5px;color:#8a90ab">Hwa Chong &middot; JC1</div></div>
-          </div>
+        <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:26px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
+          <div style="width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:22px">&#10003;</div>
+          <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;margin:18px 0 8px">200+, hand-filtered</h3>
+          <p style="font-size:15px;line-height:1.6;color:#52567a;margin:0">A rigorously curated library &mdash; no filler, no AI-generated padding. If a problem doesn't teach something worth knowing, it doesn't make the cut.</p>
         </div>
-        <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:24px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
-          <div style="color:#f59e0b;font-size:15px;letter-spacing:2px">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-          <p style="font-size:15.5px;line-height:1.6;color:#2c3050;margin:14px 0 20px">"The weakness diagnosis told me exactly what to drill before prelims. My daily plan kept me consistent &mdash; no more wasting nights on the wrong topics."</p>
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#f97316);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">PN</div>
-            <div><div style="font-weight:700;font-size:14.5px">Priya Nair</div><div style="font-size:12.5px;color:#8a90ab">VJC &middot; JC2</div></div>
-          </div>
+        <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:26px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
+          <div style="width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:22px">&#8635;</div>
+          <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;margin:18px 0 8px">Built to stick</h3>
+          <p style="font-size:15px;line-height:1.6;color:#52567a;margin:0">SM-2 spaced repetition resurfaces the questions you got wrong at the right moment, so the gotchas and concepts don't quietly fade before exams.</p>
         </div>
       </div>
     </div>
@@ -386,7 +419,7 @@ const MARKUP = `
       <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:44px 44px;pointer-events:none"></div>
       <div style="position:relative">
         <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:46px;line-height:1.08;letter-spacing:-.02em;margin:0">Your H2 Math A starts<br>at the first node.</h2>
-        <p style="font-size:18px;color:#e6e6ff;margin:18px auto 0;max-width:520px">Join 9,000+ JC students learning the smarter way &mdash; free to start, no card needed.</p>
+        <p style="font-size:18px;color:#e6e6ff;margin:18px auto 0;max-width:520px">Work through 200+ exam-grade problems with an AI tutor and spaced review that makes them stick &mdash; free to start, no card needed.</p>
         <a href="/roadmap" class="pm-hov-lift" style="display:inline-flex;align-items:center;gap:9px;margin-top:30px;padding:16px 34px;border-radius:14px;background:#fff;color:var(--accent-ink);font-weight:800;font-size:17px;transition:transform .15s">Start free today &rarr;</a>
       </div>
     </div>
@@ -441,7 +474,19 @@ const MARKUP = `
 
 export function LandingPage() {
   const navigate = useNavigate()
-  const { openLoginModal } = useAuth()
+  const { user, loading, openLoginModal } = useAuth()
+
+  // Redirect into the app only on the login *transition* (logged-out → logged-in), e.g. right after
+  // signing in via the modal here, or landing on `/` directly while already authenticated. We must
+  // NOT redirect when an already-signed-in user navigates here on purpose (clicking the ProjectMath
+  // logo from the app) — in that case the component mounts with `user` already set, so there's no
+  // transition and they can view the landing page. (replace: Back won't bounce between / and /roadmap.)
+  const prevUserRef = useRef(user)
+  useEffect(() => {
+    const justLoggedIn = prevUserRef.current == null && user != null
+    prevUserRef.current = user
+    if (!loading && justLoggedIn) navigate('/roadmap', { replace: true })
+  }, [user, loading, navigate])
 
   // Clicks inside the static markup are delegated here:
   //  - the "Log in" link (data-login) opens the auth modal
@@ -466,10 +511,16 @@ export function LandingPage() {
     }
   }
 
+  // The nav auth link swaps with auth state: "Log in" (opens the modal) when signed out, "Go to
+  // roadmap" (routes via the href="/roadmap" branch of handleClick) when signed in.
+  const authLink = user
+    ? '<a href="/roadmap" style="font-weight:600;font-size:15px;color:#3d4264;cursor:pointer" class="pm-hov-accent">Go to roadmap</a>'
+    : '<a href="#" data-login style="font-weight:600;font-size:15px;color:#3d4264;cursor:pointer" class="pm-hov-accent">Log in</a>'
+
   return (
     <div className="pm-landing">
       <style>{STYLES}</style>
-      <div onClick={handleClick} dangerouslySetInnerHTML={{ __html: MARKUP }} />
+      <div onClick={handleClick} dangerouslySetInnerHTML={{ __html: MARKUP.replace('__AUTH_LINK__', authLink) }} />
     </div>
   )
 }
