@@ -50,6 +50,7 @@ export interface Attempt {
   id: string
   session_id: string
   question_id: string
+  question_name: string | null
   answer_given: string
   is_correct: boolean
   time_taken_s: number | null
@@ -163,6 +164,7 @@ export interface GradeResponse {
   overall_feedback: string | null
   ignored_images: GradingIgnoredImage[]
   solution_latex: string
+  transcription_latex: string // Gemini's transcription of the working — editable for re-grade
   created_at: string
 }
 
@@ -176,6 +178,7 @@ export interface Grading {
   is_correct: boolean
   parts: GradingPartResult[]
   overall_feedback: string | null
+  transcription_latex: string | null
   created_at: string
 }
 

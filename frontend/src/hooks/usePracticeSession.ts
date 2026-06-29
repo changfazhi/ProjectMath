@@ -286,6 +286,22 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     [state.question, state.questionStartTime],
   )
 
+  // Re-grade the student's corrected transcription (text only). On success the new grade replaces
+  // the previous one in-place (still `revealed`). We deliberately do NOT flip the phase while it runs
+  // and let the error propagate, so the editor can own its loading/error state and the existing grade
+  // stays on screen if the re-grade fails.
+  const regradeTranscription = useCallback(
+    async (transcriptionLatex: string) => {
+      if (!state.question || !transcriptionLatex.trim()) return
+      const timeTaken = state.questionStartTime
+        ? Math.max(1, Math.round((Date.now() - state.questionStartTime) / 1000))
+        : undefined
+      const grading = await api.grade.regradeText(state.question.id, transcriptionLatex, timeTaken)
+      dispatch({ type: 'GRADE_SUCCESS', grading })
+    },
+    [state.question, state.questionStartTime],
+  )
+
   // Grading driven by an external channel (the "upload via phone" socket flow). These reuse
   // the same actions as a local photo upload so the result lands in the same `revealed` state.
   const beginExternalGrading = useCallback(() => {
@@ -320,6 +336,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     submitAnswer,
     submitPart,
     submitPhotos,
+    regradeTranscription,
     beginExternalGrading,
     receiveGrading,
     rejectExternalGrading,

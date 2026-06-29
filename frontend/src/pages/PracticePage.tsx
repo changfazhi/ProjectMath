@@ -9,6 +9,7 @@ import { AnswerInput } from '../components/question/AnswerInput'
 import { MultiPartQuestion } from '../components/question/MultiPartQuestion'
 import { PhotoAnswer } from '../components/question/PhotoAnswer'
 import { GradingResult } from '../components/question/GradingResult'
+import { TranscriptionEditor } from '../components/question/TranscriptionEditor'
 import { SolutionReveal } from '../components/question/SolutionReveal'
 import { StatsBar } from '../components/progress/StatsBar'
 import { Badge } from '../components/ui/Badge'
@@ -34,7 +35,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'question', label: 'Question' },
   { id: 'attempts', label: 'Attempts' },
   { id: 'solution', label: 'Solution' },
-  { id: 'hints', label: 'Hints' },
+  { id: 'hints', label: 'Tutor' },
 ]
 
 const DIFFICULTIES: { label: string; value: Difficulty | undefined }[] = [
@@ -341,8 +342,15 @@ export function PracticePage() {
             {revealed && (
               <Card>
                 {session.gradingResult && (
-                  <div className="mb-4">
+                  <div className="mb-4 flex flex-col gap-4">
                     <GradingResult grading={session.gradingResult} />
+                    {session.gradingResult.transcription_latex && (
+                      <TranscriptionEditor
+                        key={session.gradingResult.grading_id}
+                        initialLatex={session.gradingResult.transcription_latex}
+                        onRegrade={session.regradeTranscription}
+                      />
+                    )}
                   </div>
                 )}
                 {session.result && (

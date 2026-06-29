@@ -68,6 +68,7 @@ export interface Attempt {
   id: string;
   session_id: string;
   question_id: string;
+  question_name: string | null;
   answer_given: string;
   is_correct: boolean;
   time_taken_s: number | null;
@@ -154,6 +155,9 @@ export interface GradingAiOutput {
   ignored_images: GradingIgnoredImage[];
   parts: GradingPartResult[];
   overall_feedback: string;
+  // Faithful LaTeX transcription of the student's handwritten working + answer, so the
+  // student can review/correct mis-scans and re-grade. Mixed text+math with \( \) / \[ \].
+  transcription_latex: string;
 }
 
 export interface Grading {
@@ -166,6 +170,7 @@ export interface Grading {
   is_correct: boolean;
   parts: GradingPartResult[];
   overall_feedback: string | null;
+  transcription_latex: string | null; // null for rows graded before this feature existed
   created_at: string;
 }
 
@@ -181,6 +186,14 @@ export interface GradeSolutionParams {
   time_taken_s?: number;
 }
 
+// Re-grade from the student's (edited) typed LaTeX instead of photos.
+export interface GradeTranscriptionParams {
+  userId: string;
+  question_id: string;
+  transcription_latex: string;
+  time_taken_s?: number;
+}
+
 export interface GradeResponse {
   grading_id: string;
   parts: GradingPartResult[];
@@ -190,6 +203,7 @@ export interface GradeResponse {
   overall_feedback: string | null;
   ignored_images: GradingIgnoredImage[];
   solution_latex: string;
+  transcription_latex: string;
   created_at: string;
 }
 

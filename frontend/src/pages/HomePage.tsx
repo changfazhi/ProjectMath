@@ -51,14 +51,19 @@ export function HomePage() {
           and watch the map fill in.
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2">
-          <LegendDot color="#10b981" label="Completed" />
-          <LegendDot color="#4f46e5" label="In progress" />
+          <LegendDot color="#38bdf8" label="Pure Mathematics" />
+          <LegendDot color="#34d399" label="Statistics" />
           <LegendDot color="#3a4170" label="Up next" />
         </div>
       </div>
 
       {/* Roadmap — fills all remaining height, no scrollbars */}
-      <div className="flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0">
+        {/* Soft fade blends the dark header into the grid/glow canvas */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-20"
+          style={{ background: 'linear-gradient(to bottom, #0b0e20, transparent)' }}
+        />
         {loading && (
           <div className="flex justify-center py-16">
             <Spinner size="lg" />

@@ -8,8 +8,22 @@ const NODE_H = 100
 const CANVAS_W = 2200
 const CANVAS_H = 1700
 
-const ACCENT = '#4f46e5'
-const ACCENT_2 = '#7c3aed'
+// Section accents — nodes are coloured by which tree they belong to (Pure Math
+// vs Statistics), not by status. Status stays legible via icon + label + glow.
+interface Accent { main: string; second: string; glow: string; label: string }
+const PURE_MATH_ACCENT: Accent = {
+  main: '#38bdf8', second: '#0ea5e9',
+  glow: '0 0 0 4px rgba(56,189,248,.12),0 18px 40px -20px rgba(14,165,233,.7)',
+  label: '#bae6fd',
+}
+const STATS_ACCENT: Accent = {
+  main: '#34d399', second: '#10b981',
+  glow: '0 0 0 4px rgba(52,211,153,.12),0 18px 40px -20px rgba(16,185,129,.6)',
+  label: '#a7f3d0',
+}
+
+// Centre the initial view on the Pure Math tree (trunk ~660, branches 200→1500).
+const PURE_MATH_CENTER_X = 800
 
 // cx/cy = centre of each node
 const POSITIONS: Record<string, { cx: number; cy: number; color: string }> = {
@@ -113,25 +127,25 @@ function statusOf(topic: Topic | null, p: { correct: number; total: number }): S
   return 'upnext'
 }
 
-function styleFor(status: Status): StatusStyle {
+function styleFor(status: Status, accent: Accent): StatusStyle {
   switch (status) {
     case 'completed':
       return {
-        card: { background: '#12152b', border: '1px solid rgba(16,185,129,.4)', boxShadow: '0 16px 36px -22px rgba(16,185,129,.5)' },
-        tile: { background: '#10241d', border: '1px solid rgba(16,185,129,.5)' },
-        icon: '✓', iconColor: '#34d399',
+        card: { background: '#12152b', border: `1px solid ${accent.main}66`, boxShadow: accent.glow },
+        tile: { background: `linear-gradient(135deg,${accent.main},${accent.second})` },
+        icon: '✓', iconColor: '#ffffff',
         title: '#ffffff', sub: '#7e84ad',
-        track: '#222742', fill: { background: '#10b981' },
-        label: 'Completed', labelColor: '#34d399', pctColor: '#7e84ad',
+        track: '#222742', fill: { background: accent.second },
+        label: 'Completed', labelColor: accent.label, pctColor: '#7e84ad',
       }
     case 'progress':
       return {
-        card: { background: '#161a33', border: `1.5px solid ${ACCENT}`, boxShadow: '0 0 0 4px rgba(99,102,241,.12),0 18px 40px -20px rgba(79,70,229,.7)' },
-        tile: { background: `linear-gradient(135deg,${ACCENT},${ACCENT_2})` },
+        card: { background: '#161a33', border: `1.5px solid ${accent.main}`, boxShadow: accent.glow },
+        tile: { background: `linear-gradient(135deg,${accent.main},${accent.second})` },
         icon: '▸', iconColor: '#ffffff',
         title: '#ffffff', sub: '#aab0e6',
-        track: '#222742', fill: { background: `linear-gradient(90deg,${ACCENT},${ACCENT_2})` },
-        label: 'In progress', labelColor: '#c7cbff', pctColor: '#aab0e6',
+        track: '#222742', fill: { background: `linear-gradient(90deg,${accent.main},${accent.second})` },
+        label: 'In progress', labelColor: accent.label, pctColor: '#aab0e6',
       }
     case 'upnext':
       return {
@@ -187,7 +201,7 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    applyT({ x: Math.max(0, (el.clientWidth - CANVAS_W) / 2), y: 40, scale: 1 })
+    applyT({ x: el.clientWidth / 2 - PURE_MATH_CENTER_X, y: 40, scale: 1 })
   }, [])
 
   // Wheel → zoom toward cursor (must be non-passive to call e.preventDefault())
@@ -336,7 +350,8 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
         {nodes.map(({ name, pos, topic }) => {
           const p = topic ? (progress.get(topic.id) ?? { correct: 0, total: 0 }) : { correct: 0, total: 0 }
           const status = statusOf(topic, p)
-          const s = styleFor(status)
+          const accent = pos.color === 'emerald' ? STATS_ACCENT : PURE_MATH_ACCENT
+          const s = styleFor(status, accent)
           const pct = p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0
           const barWidth = status === 'completed' ? 100 : pct
 
