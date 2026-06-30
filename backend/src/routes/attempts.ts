@@ -9,6 +9,7 @@ const submitSchema = z.object({
   question_id: z.string().uuid(),
   part_label: z.string().min(1).optional(),
   answer_given: z.string().min(1),
+  field_answers: z.array(z.object({ key: z.string(), value: z.string() })).optional(),
   time_taken_s: z.number().int().positive().optional(),
 });
 

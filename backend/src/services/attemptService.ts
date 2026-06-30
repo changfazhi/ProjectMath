@@ -133,11 +133,23 @@ export async function submitAttempt(userId: string, body: SubmitAttemptBody): Pr
     // Multi-part: find the specific part
     const part = question.parts?.find((p: QuestionPart) => p.label === body.part_label);
     if (!part) throw new Error(`Part "${body.part_label}" not found on question ${body.question_id}`);
-    if (!part.correct_answer || !part.answer_type) {
-      throw new Error(`Part "${body.part_label}" is a show-that part and cannot be submitted`);
+
+    if (part.answers && part.answers.length > 0) {
+      // Multi-box part: grade each field independently; correct only if all match.
+      const submitted = new Map((body.field_answers ?? []).map((f) => [f.key, f.value]));
+      isCorrect = part.answers.every((field) => {
+        const given = submitted.get(field.key);
+        if (given === undefined) return false;
+        return checkAnswer(field.answer_type, field.correct_answer, given, field.tolerance);
+      });
+      correctAnswer = part.answers.map((field) => `${field.label} = ${field.correct_answer}`).join(',\\ ');
+    } else {
+      if (!part.correct_answer || !part.answer_type) {
+        throw new Error(`Part "${body.part_label}" is a show-that part and cannot be submitted`);
+      }
+      isCorrect = checkAnswer(part.answer_type, part.correct_answer, body.answer_given, part.tolerance);
+      correctAnswer = part.correct_answer;
     }
-    isCorrect = checkAnswer(part.answer_type, part.correct_answer, body.answer_given, part.tolerance);
-    correctAnswer = part.correct_answer;
   } else {
     // Single-answer question
     if (!question.answer_type) {

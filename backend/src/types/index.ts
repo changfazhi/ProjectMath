@@ -3,6 +3,18 @@ export type Difficulty = 1 | 2 | 3;
 export type AnswerType = 'exact' | 'mcq' | 'range';
 export type AttemptStatus = 'not_attempted' | 'attempted' | 'correct';
 
+// One graded input box. A part with several of these renders multiple boxes
+// (e.g. "find a, b and c") that are graded independently.
+export interface PartAnswerField {
+  key: string;          // stable identifier used to match the submitted value
+  label: string;        // shown beside the box, e.g. "a", "|p|", "arg(p)"
+  correct_answer: string;
+  answer_type: AnswerType;
+  tolerance: number | null;
+}
+
+export type PartAnswerFieldPublic = Omit<PartAnswerField, 'correct_answer'>;
+
 export interface QuestionPart {
   label: string;
   prompt_latex: string;
@@ -10,9 +22,15 @@ export interface QuestionPart {
   answer_type: AnswerType | null;
   tolerance: number | null;
   marks?: number | null;
+  // When present, this part renders one box per field instead of a single box.
+  // The part-level answer_type/correct_answer stay non-null sentinels so the
+  // existing "graded part" / "reveal when all done" logic still counts it.
+  answers?: PartAnswerField[] | null;
 }
 
-export type QuestionPartPublic = Omit<QuestionPart, 'correct_answer'>;
+export type QuestionPartPublic = Omit<QuestionPart, 'correct_answer' | 'answers'> & {
+  answers?: PartAnswerFieldPublic[] | null;
+};
 
 export interface Topic {
   id: string;
@@ -79,6 +97,8 @@ export interface SubmitAttemptBody {
   question_id: string;
   part_label?: string;
   answer_given: string;
+  // For multi-box parts: the per-field values keyed by PartAnswerField.key.
+  field_answers?: { key: string; value: string }[];
   time_taken_s?: number;
 }
 
