@@ -1,396 +1,151 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-06-26
+**Analysis Date:** 2026-06-29
 
 ## Test Framework
 
-**Current Status:** No testing framework installed or configured.
+**Status: No test framework is configured.**
 
-**Runner:** None (no jest, vitest, or other test runner in package.json)
+Neither `frontend/package.json` nor `backend/package.json` lists any testing framework in `devDependencies`. There is no `jest.config.*`, `vitest.config.*`, `mocha`, or any other test runner present in either package.
 
-**Assertion Library:** None (would use native Node assert or a library like Vitest)
+## Test Files
 
-**Run Commands:**
+**Zero test files exist in this repository.**
+
+A search for `*.test.*` and `*.spec.*` files across the entire project returned no results.
+
+## What IS Tested (Manual / Runtime)
+
+There are no automated tests. Validation and correctness is currently ensured through:
+
+1. **TypeScript strict mode** — catches type errors at compile time (both `strict: true` on backend, strict lint rules on frontend)
+2. **Zod schema validation** — runtime validation of all API inputs; wrong shapes throw before service logic runs
+3. **Manual browser testing** — implied by the dev workflow (`npm run dev` in both `frontend/` and `backend/`)
+
+## Critical Untested Paths
+
+The following are the highest-risk areas with zero test coverage:
+
+### Answer Grading Logic (`backend/src/services/attemptService.ts`)
+- `normalizeLaTeX(s)` — string normalization with many regex replacements; easy to break
+- `latexToMathExpr(normalized)` — LaTeX→mathjs expression conversion; brittle for edge cases
+- `tryNumericEval(raw)` — numeric evaluation via `mathjs.evaluate()`
+- `trySymbolicEval(given, correct)` — multi-point symbolic equivalence check using prime substitution
+- `checkAnswer(answerType, correctAnswer, givenAnswer, tolerance)` — dispatch across `exact`, `mcq`, `range`
+
+**Risk:** A bad regex in `normalizeLaTeX` or wrong operator precedence in `latexToMathExpr` silently marks correct answers wrong or wrong answers correct.
+
+### AI Grading Pipeline (`backend/src/services/gradingService.ts`)
+- Gemini vision call + structured output parsing
+- Junk-filter logic (`gradable=false` path)
+- Part-label auto-detection from photos
+- Image → Supabase Storage upload (only after grading success)
+
+**Risk:** No way to replay a grading scenario in CI without a live Gemini API key.
+
+### Chat Service (`backend/src/services/chatService.ts`)
+- System instruction construction (`buildSystemInstruction()`) — injects question + solution; wrong format could leak `solution_latex`
+- Rate-limit enforcement (`ChatLimitError` → HTTP 429)
+- History rehydration path
+
+### Pair/QR Flow (`backend/src/services/pairService.ts`, `backend/src/realtime.ts`)
+- Token generation and TTL expiry
+- Socket.IO event sequencing (`pair:phone-connected` → `pair:image` → `pair:grading` → `pair:graded`)
+- Desktop ↔ phone photo transfer
+
+### Multi-Part Answer Reveal (`backend/src/services/attemptService.ts`)
+- `solution_latex` reveal logic — shown only when all graded parts have been submitted
+- `gradedParts` filter (parts where `correct_answer !== null`)
+- `submittedLabels` set built from existing attempts
+
+**Risk:** A query bug here could reveal the solution too early or never.
+
+### Frontend State Machine (`frontend/src/hooks/usePracticeSession.ts`)
+- `reducer()` — 13 action types, complex phase transitions
+- `GRADE_REJECTED` soft-error path (stays in `'answering'`, no penalty)
+- `beginExternalGrading` / `receiveGrading` (QR phone path)
+
+### Star Optimistic UI (`frontend/src/hooks/` or component)
+- Optimistic flip → server sync → revert on failure
+
+## Test Coverage Summary
+
+| Area | Coverage |
+|------|----------|
+| `normalizeLaTeX` / `checkAnswer` | None |
+| `submitAttempt` service | None |
+| `gradingService` | None |
+| `chatService` | None |
+| `pairService` / Socket.IO | None |
+| API route validation (Zod) | None |
+| Auth middleware (`gate()`) | None |
+| `usePracticeSession` reducer | None |
+| `renderLatex()` | None |
+| `lib/api.ts` error handling | None |
+
+## Recommended Testing Priority
+
+### Priority 1 — Unit tests for answer grading (pure functions, no I/O)
+
+These are pure functions — trivial to test with Vitest or Jest, extremely high value:
+
+```typescript
+// backend/src/services/attemptService.test.ts
+describe('normalizeLaTeX', () => {
+  it('strips whitespace', () => expect(normalizeLaTeX('x + y')).toBe('x+y'))
+  it('expands compact fractions: \\frac34 → \\frac{3}{4}', ...)
+  it('lowercases output', ...)
+})
+
+describe('checkAnswer', () => {
+  it('exact match after normalization', ...)
+  it('numeric equivalence: "1/2" vs "0.5"', ...)
+  it('symbolic equivalence: "x+y" vs "y+x"', ...)
+  it('range: within tolerance', ...)
+  it('range: outside tolerance', ...)
+})
+```
+
+### Priority 2 — Integration tests for `submitAttempt` (with Supabase mock)
+
+Mock `supabase` to return a fixture question, assert that `is_correct` and `solution_latex` are correct for single-part and multi-part scenarios.
+
+### Priority 3 — Frontend reducer unit tests
+
+```typescript
+// frontend/src/hooks/usePracticeSession.test.ts
+describe('reducer', () => {
+  it('LOAD_SUCCESS initializes partStates for multi-part questions', ...)
+  it('GRADE_REJECTED stays in answering phase', ...)
+  it('PART_SUBMIT_DONE transitions to revealed when all parts done', ...)
+})
+```
+
+### Priority 4 — Route-level integration tests (supertest)
+
+Test Zod validation rejection, auth middleware 401/402, and happy-path responses with mocked services.
+
+## Setting Up Tests (Recommended Stack)
+
+**Backend:** Vitest (compatible with ESM/NodeNext without extra config)
 ```bash
-# Currently unavailable:
-# npm run test              # Run all tests
-# npm run test:watch       # Watch mode
-# npm run test:coverage    # Coverage report
+cd backend && npm install -D vitest
 ```
-
-## Test File Organization
-
-**Recommended Pattern (for future implementation):**
-- **Location:** Co-located with source files
-- **Naming:** `[module].test.ts` or `[module].spec.ts`
-  - Example: `src/services/attemptService.ts` → `src/services/attemptService.test.ts`
-  - React components: `Button.tsx` → `Button.test.tsx`
-
-**Suggested Directory Structure:**
-```
-backend/src/
-├── services/
-│   ├── attemptService.ts
-│   ├── attemptService.test.ts      ← test alongside source
-│   ├── gradingService.ts
-│   └── gradingService.test.ts
-├── routes/
-│   ├── attempts.ts
-│   └── attempts.test.ts
-└── db/
-    └── supabase.ts
-    
-frontend/src/
-├── components/
-│   ├── ui/
-│   │   ├── Button.tsx
-│   │   └── Button.test.tsx
-│   └── question/
-│       ├── AnswerInput.tsx
-│       └── AnswerInput.test.tsx
-└── hooks/
-    ├── useChatSession.ts
-    └── useChatSession.test.ts
-```
-
-## Test Structure (Recommended)
-
-**Suite Organization:**
-```typescript
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-
-describe('attemptService.submitAttempt()', () => {
-  let mockDb: any
-  
-  beforeEach(() => {
-    // Setup: initialize mocks
-    mockDb = createMockSupabase()
-  })
-  
-  afterEach(() => {
-    // Teardown: clean resources
-    vi.clearAllMocks()
-  })
-  
-  it('returns correct_answer and solution_latex on successful submit', async () => {
-    const result = await submitAttempt({ /* test data */ })
-    expect(result).toHaveProperty('attempt_id')
-    expect(result).toHaveProperty('is_correct', true)
-  })
-  
-  it('throws error if question not found', async () => {
-    await expect(
-      submitAttempt({ question_id: 'nonexistent' })
-    ).rejects.toThrow('Question nonexistent not found')
-  })
-})
-```
-
-**Patterns:**
-- **Setup:** `beforeEach()` for fresh fixtures per test
-- **Teardown:** `afterEach()` for mock cleanup
-- **Assertion:** `expect(actual).toBe(expected)` or `expect(fn).rejects.toThrow()`
-
-## Mocking (Recommended Framework: Vitest)
-
-**Framework:** Vitest (newer, better TypeScript support, drop-in Jest replacement)
-
-**Patterns:**
-
-**Mock Supabase Client:**
-```typescript
-import { vi } from 'vitest'
-
-const mockSupabase = {
-  from: vi.fn().mockReturnValue({
-    insert: vi.fn().mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        single: vi.fn().mockResolvedValue({
-          data: { id: 'test-uuid' },
-          error: null,
-        }),
-      }),
-    }),
-  }),
-}
-
-// Mock at module level
-vi.mock('../db/supabase', () => ({
-  supabase: mockSupabase,
-}))
-```
-
-**Mock Express Request/Response:**
-```typescript
-import { vi } from 'vitest'
-
-const mockReq = {
-  body: { session_id: 'uuid', question_id: 'uuid' },
-  query: {},
-  files: [],
-} as unknown as Express.Request
-
-const mockRes = {
-  status: vi.fn().mockReturnThis(),
-  json: vi.fn().mockReturnThis(),
-} as unknown as Express.Response
-```
-
-**Mock Gemini API:**
-```typescript
-const mockGemini = {
-  generateContent: vi.fn().mockResolvedValue({
-    response: {
-      text: () => JSON.stringify({
-        gradable: true,
-        parts: [{ label: 'a', verdict: 'correct' }],
-        // ...
-      }),
-    },
-  }),
-}
-
-vi.mock('../db/gemini', () => ({
-  getGemini: () => mockGemini,
-}))
-```
-
-**What to Mock:**
-- Database client (`supabase`) — always mock in unit tests
-- External APIs (`Gemini`, `Google genai`) — mock to avoid billable API calls
-- Express request/response objects in route tests
-- Date/time (`vi.useFakeTimers()` for streak logic)
-
-**What NOT to Mock:**
-- Utility functions like `normalizeLaTeX()` — test them directly
-- Type checking — TypeScript compiler handles this
-- Core JavaScript functions (Array methods, etc.)
-
-## Fixtures and Factories
-
-**Test Data (Recommended):**
-
-**Factory Pattern for Questions:**
-```typescript
-function createMockQuestion(overrides?: Partial<Question>): Question {
-  return {
-    id: 'q-uuid-001',
-    topic_id: 'aaaa0001-0000-0000-0000-000000000000',
-    difficulty: 2,
-    name: 'Sample question',
-    prompt_latex: 'Find $x$ if $2x = 4$',
-    answer_type: 'exact',
-    correct_answer: '2',
-    tolerance: null,
-    mcq_options: null,
-    parts: null,
-    solution_latex: 'Dividing both sides by 2: $x = 2$',
-    marks: 3,
-    source: 'ASRJC Prelim 2025',
-    created_at: '2025-01-01T00:00:00Z',
-    ...overrides,
-  }
-}
-```
-
-**Factory for Multi-Part Questions:**
-```typescript
-function createMockMultiPartQuestion(): Question {
-  return createMockQuestion({
-    answer_type: null,
-    correct_answer: '',
-    parts: [
-      {
-        label: 'a',
-        prompt_latex: 'Part (a) question',
-        correct_answer: 'x = 2',
-        answer_type: 'exact',
-        tolerance: null,
-        marks: 3,
-      },
-      {
-        label: 'b',
-        prompt_latex: 'Hence find $y$',
-        correct_answer: 'y = 4',
-        answer_type: 'exact',
-        tolerance: null,
-        marks: 2,
-      },
-    ],
-  })
-}
-```
-
-**Location:**
-- Store in a `src/__tests__/fixtures/` or `src/__tests__/factories/` directory
-- Or co-locate in the same test file for simpler tests
-- Export factories for reuse across test suites
-
-## Coverage
-
-**Requirements:** Not enforced currently.
-
-**Recommended (for future):**
-- Minimum 70% coverage for business logic (services)
-- Minimum 50% coverage for routes (many conditional error paths)
-- Component coverage less critical (more brittle); focus on hooks
-
-**View Coverage:**
-```bash
-# With Vitest:
-npm run test:coverage
-
-# Outputs HTML report in coverage/index.html
-```
-
-## Test Types
-
-**Unit Tests:**
-- **Scope:** Individual functions and classes
-- **Approach (Backend):**
-  - Test `attemptService.ts` functions: `checkAnswer()`, `normalizeLaTeX()`, `submitAttempt()`
-  - Mock Supabase, test business logic in isolation
-  - Example: `checkAnswer('exact', '2', '2')` → `true`
-  
-- **Approach (Frontend):**
-  - Test hooks: `usePracticeSession()`, `useChatSession()`
-  - Mock `api.*`, test state transitions
-  - Use `renderHook` from Vitest + React Testing Library
-
-**Integration Tests:**
-- **Scope:** Route + service + database
-- **Approach:**
-  - Test full request path: `POST /api/attempts` → validation → service → response
-  - Use in-memory SQLite or test database for real schema testing
-  - Verify Zod validation catches bad inputs
-
-**E2E Tests:**
-- **Framework:** Not implemented; would use Playwright or Cypress
-- **Scope:** Full user workflows (login via QR → upload photo → grade)
-- **Recommended:** Only critical paths (happy path + major error cases)
-
-## Common Patterns
-
-**Async Testing (with Vitest):**
-```typescript
-it('submits attempt and returns result', async () => {
-  const result = await submitAttempt(body)
-  expect(result.is_correct).toBe(true)
-})
-
-// With promises
-it('fetches questions', () => {
-  return api.topics.questions('topic-id', 'session-id')
-    .then(qs => {
-      expect(qs).toHaveLength(5)
-    })
-})
-```
-
-**Error Testing:**
-```typescript
-it('throws on missing question', async () => {
-  await expect(
-    submitAttempt({ ...body, question_id: 'missing' })
-  ).rejects.toThrow('not found')
-})
-
-// Specific error type
-it('catches ZodError from invalid body', () => {
-  expect(() => {
-    submitSchema.parse({ session_id: 'not-a-uuid' })
-  }).toThrow(z.ZodError)
-})
-```
-
-**React Hook Testing (with Testing Library + Vitest):**
-```typescript
-import { renderHook, waitFor } from '@testing-library/react'
-import { usePracticeSession } from './usePracticeSession'
-
-it('loads question on mount', async () => {
-  const { result } = renderHook(() => usePracticeSession())
-  
-  await waitFor(() => {
-    expect(result.current.question).toBeDefined()
-  })
-})
-
-it('submits answer and updates state', async () => {
-  const { result } = renderHook(() => usePracticeSession())
-  
-  act(() => {
-    result.current.submitAnswer('2')
-  })
-  
-  await waitFor(() => {
-    expect(result.current.isCorrect).toBe(true)
-  })
-})
-```
-
-**Component Testing (render + user interaction):**
-```typescript
-import { render, screen } from '@testing-library/react'
-import { Button } from './Button'
-
-it('renders button with children', () => {
-  render(<Button>Click me</Button>)
-  expect(screen.getByText('Click me')).toBeInTheDocument()
-})
-
-it('disables button when loading', () => {
-  render(<Button loading>Submit</Button>)
-  expect(screen.getByRole('button')).toBeDisabled()
-})
-```
-
-## Recommended Setup (For Future)
-
-**Install:**
-```bash
-npm install --save-dev vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event
-npm install --save-dev @vitest/ui  # for UI runner
-```
-
-**Backend `vitest.config.ts`:**
-```typescript
-import { defineConfig } from 'vitest/config'
-
-export default defineConfig({
-  test: {
-    environment: 'node',
-    globals: true,
-  },
-})
-```
-
-**Frontend `vitest.config.ts`:**
-```typescript
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['src/__tests__/setup.ts'],
-  },
-})
-```
-
-**Add to `package.json` scripts:**
 ```json
-{
-  "scripts": {
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
-  }
-}
+// backend/package.json scripts
+"test": "vitest run",
+"test:watch": "vitest"
+```
+
+**Frontend:** Vitest + `@testing-library/react`
+```bash
+cd frontend && npm install -D vitest @testing-library/react @testing-library/user-event jsdom
+```
+Add to `frontend/vite.config.ts`:
+```typescript
+test: { environment: 'jsdom', globals: true }
 ```
 
 ---
 
-*Testing analysis: 2026-06-26*
+*Testing analysis: 2026-06-29*

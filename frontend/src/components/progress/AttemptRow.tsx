@@ -1,5 +1,6 @@
 import type { Attempt } from '../../types/api'
 import { Badge } from '../ui/Badge'
+import { Latex } from '../math/Latex'
 import { formatTime } from '../../lib/utils'
 
 interface Props {
@@ -13,11 +14,11 @@ export function AttemptRow({ attempt }: Props) {
       <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
         {date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </td>
-      <td className="py-3 px-4 text-sm font-mono text-slate-500 dark:text-slate-400 max-w-[140px] truncate">
-        {attempt.question_id.slice(0, 8)}…
+      <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300 max-w-[220px] truncate">
+        {attempt.question_name ?? `${attempt.question_id.slice(0, 8)}…`}
       </td>
-      <td className="py-3 px-4 text-sm font-mono text-slate-700 dark:text-slate-300">
-        {attempt.answer_given}
+      <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300">
+        {attempt.answer_given ? <Latex>{attempt.answer_given}</Latex> : '—'}
       </td>
       <td className="py-3 px-4">
         <Badge variant={attempt.is_correct ? 'success' : 'danger'}>

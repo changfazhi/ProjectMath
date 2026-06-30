@@ -51,9 +51,10 @@ export function StudyPlanSidebar() {
       <button
         ref={triggerRef}
         onClick={() => setIsOpen(o => !o)}
-        aria-label={isOpen ? 'Close study plan' : 'Open study plan'}
+        aria-label={isOpen ? 'Close quest log' : 'Open quest log'}
         aria-expanded={isOpen}
-        className="fixed left-0 top-1/2 -translate-y-1/2 z-50 w-10 h-20 rounded-r-2xl bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-400 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
+        className="fixed left-0 top-1/2 -translate-y-1/2 z-50 w-10 h-20 rounded-r-2xl flex items-center justify-center text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 transition-transform hover:translate-x-0.5"
+        style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', boxShadow: '0 10px 26px -10px rgba(79,70,229,.8)' }}
       >
         {isOpen ? (
           <svg className="w-5 h-5 text-white" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
@@ -106,7 +107,7 @@ export function StudyPlanSidebar() {
             <p className="text-base font-semibold text-slate-800 dark:text-slate-100 mb-2">
               {correctCount} / {total} complete
             </p>
-            <ProgressBar correct={correctCount} total={total} fillClass="bg-blue-500" size="sm" />
+            <ProgressBar correct={correctCount} total={total} fillClass="bg-indigo-500" size="sm" />
           </div>
         )}
 

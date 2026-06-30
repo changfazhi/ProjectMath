@@ -1,291 +1,298 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-06-26
+**Analysis Date:** 2026-06-29
 
 ## Directory Layout
 
 ```
-frontend/
-├── src/
-│   ├── main.tsx                    # React root entry; renders App
-│   ├── App.tsx                     # Router setup; RootLayout
-│   ├── App.css                     # Global styles
-│   ├── index.css                   # Tailwind imports
-│   │
-│   ├── pages/                      # Route handlers
-│   │   ├── HomePage.tsx            # Roadmap + topic drawer (/)
-│   │   ├── PracticePage.tsx        # Question answering (/practice/:topicId)
-│   │   ├── HistoryPage.tsx         # Past attempts (/history)
-│   │   ├── StarredPage.tsx         # Bookmarked questions (/starred)
-│   │   ├── StatsPage.tsx           # Streak heatmap & analytics (/stats)
-│   │   ├── ReviewPage.tsx          # Spaced-repetition queue (/review)
-│   │   └── MobileUploadPage.tsx    # Phone upload target (/m/:token)
-│   │
-│   ├── hooks/                      # State + data fetching
-│   │   ├── usePracticeSession.ts   # Practice state machine (reducer)
-│   │   ├── useTopics.ts            # Fetch all topics + loading
-│   │   ├── useTopicsProgress.ts    # Per-topic completion stats
-│   │   ├── useTopicQuestions.ts    # Questions in a topic
-│   │   ├── useChatSession.ts       # AI hint chat messages
-│   │   ├── usePairSocket.ts        # Phone pairing socket listener
-│   │   ├── useAttemptHistory.ts    # Past attempts for a question
-│   │   ├── useConcepts.ts          # Topic prerequisite concepts
-│   │   └── useVisitedTopics.ts     # Track visited topics in localStorage
-│   │
-│   ├── components/
-│   │   ├── ui/                     # Reusable primitives
-│   │   │   ├── Button.tsx          # Base button component
-│   │   │   ├── Card.tsx            # Card wrapper
-│   │   │   ├── Badge.tsx           # Status/label badge
-│   │   │   ├── Spinner.tsx         # Loading spinner
-│   │   │   ├── ErrorMessage.tsx    # Error display
-│   │   │   ├── ProgressBar.tsx     # Progress bar
-│   │   │   └── StreakNotification.tsx # Modal for streak milestone
-│   │   │
-│   │   ├── layout/
-│   │   │   └── Header.tsx          # Top nav bar (logo, settings)
-│   │   │
-│   │   ├── topic/                  # Topic-related UI
-│   │   │   ├── RoadmapGraph.tsx    # SVG pan/zoom tree layout
-│   │   │   ├── TopicDrawer.tsx     # Right slide-out panel
-│   │   │   ├── TopicCard.tsx       # Individual topic node
-│   │   │   ├── TopicGrid.tsx       # Grid layout for topics
-│   │   │   ├── ConceptsList.tsx    # Prerequisite concepts
-│   │   │   ├── QuestionTable.tsx   # Questions in topic (table)
-│   │   │   └── AccuracyTable.tsx   # Topic accuracy stats
-│   │   │
-│   │   ├── question/               # Question-answering UI
-│   │   │   ├── QuestionCard.tsx    # Question prompt display
-│   │   │   ├── QuestionHeader.tsx  # Question title + metadata
-│   │   │   ├── AnswerInput.tsx     # Router for answer type
-│   │   │   ├── ExactInput.tsx      # LaTeX answer box (MathLive)
-│   │   │   ├── RangeInput.tsx      # Numerical range answer
-│   │   │   ├── McqInput.tsx        # Multiple-choice
-│   │   │   ├── PhotoAnswer.tsx     # Camera/photo upload
-│   │   │   ├── MultiPartQuestion.tsx # Per-part sub-questions
-│   │   │   ├── GradingResult.tsx   # Grading outcome (photo)
-│   │   │   └── SolutionReveal.tsx  # Model solution display
-│   │   │
-│   │   ├── math/                   # Math input & rendering
-│   │   │   ├── Latex.tsx           # KaTeX inline renderer
-│   │   │   ├── LatexBlock.tsx      # KaTeX block renderer
-│   │   │   ├── MathField.tsx       # MathLive editor wrapper
-│   │   │   └── MathKeyboard.tsx    # Symbol panel for MathLive
-│   │   │
-│   │   ├── chat/
-│   │   │   └── ChatPanel.tsx       # AI hint chatbot UI
-│   │   │
-│   │   ├── progress/
-│   │   │   ├── StatsBar.tsx        # Session streak/count display
-│   │   │   └── AttemptRow.tsx      # Past attempt list item
-│   │   │
-│   │   └── pair/
-│   │       └── QrPairModal.tsx     # QR modal for phone pairing
-│   │
-│   ├── lib/                        # Utilities & cross-cutting
-│   │   ├── api.ts                  # Fetch wrapper & domains
-│   │   ├── socket.ts               # Socket.IO singleton
-│   │   ├── session.ts              # UUID session ID (localStorage)
-│   │   ├── renderLatex.tsx         # Parse mixed text+math
-│   │   └── utils.ts                # Tailwind cn(), formatTime()
-│   │
-│   ├── contexts/
-│   │   └── ThemeContext.tsx        # Light/dark mode context
-│   │
-│   ├── types/
-│   │   ├── api.ts                  # API response types (mirrors backend)
-│   │   └── mathlive.d.ts           # MathLive type definitions
-│   │
-│   └── assets/                     # Static assets (icons, images)
-│       └── [files]
+ProjectMath/
+├── backend/                    # Express + TypeScript API server
+│   ├── src/
+│   │   ├── index.ts            # Entry point: Express app, router mounts, http.Server, Socket.IO init
+│   │   ├── realtime.ts         # Socket.IO setup; emitToPair() helper
+│   │   ├── config/
+│   │   │   └── featureTiers.ts # Maps feature name → 'free'|'paid'
+│   │   ├── db/
+│   │   │   ├── supabase.ts     # Supabase JS client singleton
+│   │   │   ├── firebase.ts     # Firebase Admin SDK lazy-init
+│   │   │   └── gemini.ts       # @google/genai client factory + GEMINI_MODEL constant
+│   │   ├── middleware/
+│   │   │   └── auth.ts         # requireAuth (JWT verify + user upsert), gate(feature)
+│   │   ├── routes/
+│   │   │   ├── topics.ts       # GET /api/topics, /api/topics/:id, /api/topics/progress, /accuracy
+│   │   │   ├── questions.ts    # GET /api/topics/:id/questions, /next, /api/questions/:id, /solution
+│   │   │   ├── concepts.ts     # GET /api/topics/:id/concepts
+│   │   │   ├── attempts.ts     # POST /api/attempts, GET /api/attempts
+│   │   │   ├── stars.ts        # POST /api/stars, GET /api/stars, GET /api/stars/all
+│   │   │   ├── streaks.ts      # GET /api/streaks
+│   │   │   ├── chat.ts         # GET /api/chat, POST /api/chat
+│   │   │   ├── grade.ts        # GET /api/grade, POST /api/grade (multipart)
+│   │   │   ├── pair.ts         # POST /api/pair, GET /api/pair/:token, POST /api/pair/:token/photo, /done
+│   │   │   └── review.ts       # GET /api/review/corrections, /weak-topics, /speed-drills, /spaced, /random, /diagnosis, /study-plan
+│   │   ├── services/
+│   │   │   ├── attemptService.ts      # Answer grading logic (exact/range/mcq/symbolic eval)
+│   │   │   ├── chatService.ts         # AI hint chatbot; Gemini proxy; message persistence
+│   │   │   ├── conceptService.ts      # Topic concept queries
+│   │   │   ├── diagnosticService.ts   # Weakness diagnosis for study plan
+│   │   │   ├── gradingService.ts      # Photo AI grading; Gemini vision; image upload
+│   │   │   ├── pairService.ts         # Ephemeral in-memory pairing session store
+│   │   │   ├── questionService.ts     # Question fetch (with/without solution); next unanswered
+│   │   │   ├── reviewService.ts       # Review queue builders (corrections, speed drills, spaced, etc.)
+│   │   │   ├── spacedRepetitionService.ts  # SR card upsert after each attempt
+│   │   │   ├── starService.ts         # Star toggle and list
+│   │   │   ├── streakService.ts       # Streak computation + heatmap data
+│   │   │   └── topicService.ts        # Topic list, single topic, progress stats, accuracy
+│   │   └── types/
+│   │       └── index.ts        # All backend TypeScript types (shared source of truth)
+│   ├── supabase/
+│   │   └── migrations/         # 001–019 SQL migration files (run in Supabase SQL Editor)
+│   ├── .env.example
+│   ├── package.json
+│   └── tsconfig.json
 │
-├── index.html                      # Entry HTML; mounts #root
-├── vite.config.ts                  # Vite dev server + proxy config
-├── tsconfig.json                   # TypeScript config (base)
-├── tsconfig.app.json               # App-specific TS config
-├── tsconfig.node.json              # Node TS config (Vite, etc.)
-├── eslint.config.js                # ESLint rules
-├── package.json                    # Dependencies & scripts
-├── package-lock.json               # Lockfile
-├── public/                         # Static files (served by Vite)
-└── .planning/codebase/             # This documentation
+├── frontend/                   # React 19 + Vite + Tailwind + KaTeX SPA
+│   ├── src/
+│   │   ├── main.tsx            # React root; mounts <AuthProvider><App /></AuthProvider>
+│   │   ├── App.tsx             # Router definition; RootLayout; route tree
+│   │   ├── index.css           # Tailwind directives + global styles
+│   │   ├── App.css             # App-level overrides
+│   │   ├── contexts/
+│   │   │   └── AuthContext.tsx # Firebase Auth state; tier; login/upgrade modal orchestration
+│   │   ├── hooks/
+│   │   │   ├── usePracticeSession.ts  # Practice state machine (useReducer); answer submission
+│   │   │   ├── usePairSocket.ts       # Socket.IO pairing subscription
+│   │   │   ├── useChatSession.ts      # AI chatbot send + history
+│   │   │   ├── useStudyPlan.ts        # Daily study plan fetch + localStorage cache
+│   │   │   ├── useTopics.ts           # Topic list fetch
+│   │   │   ├── useTopicsProgress.ts   # Per-topic completion stats
+│   │   │   ├── useTopicQuestions.ts   # Questions for a topic with attempt status
+│   │   │   ├── useConcepts.ts         # Prerequisite concepts for a topic
+│   │   │   ├── useAttemptHistory.ts   # Session attempt list
+│   │   │   ├── useFeature.ts          # Feature-tier gate check
+│   │   │   └── useVisitedTopics.ts    # Tracks which topics have been opened
+│   │   ├── lib/
+│   │   │   ├── api.ts          # All HTTP calls; Bearer token injection; 401/402 callbacks
+│   │   │   ├── firebase.ts     # Firebase client SDK init (VITE_FIREBASE_* env vars)
+│   │   │   ├── socket.ts       # Socket.IO singleton (same-origin io())
+│   │   │   ├── studyPlan.ts    # localStorage study plan cache helpers
+│   │   │   ├── renderLatex.tsx # Mixed text+math rendering (\(...\) / \[...\])
+│   │   │   └── utils.ts        # cn() (clsx + tailwind-merge), formatTime, etc.
+│   │   ├── components/
+│   │   │   ├── chat/
+│   │   │   │   └── ChatPanel.tsx          # AI hint chat UI; renders on desktop as side rail, mobile as Hints tab
+│   │   │   ├── layout/
+│   │   │   │   ├── Header.tsx             # Top nav bar; user avatar/auth; streak indicator
+│   │   │   │   └── StudyPlanSidebar.tsx   # Collapsible right sidebar; study plan quests
+│   │   │   ├── math/
+│   │   │   │   ├── Latex.tsx              # Inline KaTeX render (pure LaTeX strings)
+│   │   │   │   ├── LatexBlock.tsx         # Block KaTeX render
+│   │   │   │   ├── MathField.tsx          # MathLive <math-field> wrapper; exposes insert/getValue/focus
+│   │   │   │   └── MathKeyboard.tsx       # 10-group symbol keyboard; onMouseDown to avoid focus steal
+│   │   │   ├── pair/
+│   │   │   │   └── QrPairModal.tsx        # QR code modal for phone upload pairing
+│   │   │   ├── progress/
+│   │   │   │   ├── AttemptRow.tsx         # Single attempt row in history list
+│   │   │   │   └── StatsBar.tsx           # Session correct/total + streak count display
+│   │   │   ├── question/
+│   │   │   │   ├── AnswerInput.tsx        # Selects ExactInput/RangeInput/McqInput based on answer_type
+│   │   │   │   ├── ExactInput.tsx         # MathField + MathKeyboard for LaTeX answers
+│   │   │   │   ├── GradingResult.tsx      # Photo grading result display (per-part verdicts, feedback)
+│   │   │   │   ├── McqInput.tsx           # Multiple-choice option buttons
+│   │   │   │   ├── MultiPartQuestion.tsx  # Renders per-part answer boxes for multi-part questions
+│   │   │   │   ├── PhotoAnswer.tsx        # Camera capture + file upload; preview grid; submit button
+│   │   │   │   ├── QuestionCard.tsx       # Question prompt display (LaTeX rendered)
+│   │   │   │   ├── QuestionHeader.tsx     # Topic breadcrumb + question name + difficulty badge
+│   │   │   │   ├── RangeInput.tsx         # Numerical input for range-type answers
+│   │   │   │   └── SolutionReveal.tsx     # Solution LaTeX + per-part correct answers after reveal
+│   │   │   ├── sidebar/
+│   │   │   │   └── QuestItem.tsx          # Single quest row in StudyPlanSidebar
+│   │   │   ├── topic/
+│   │   │   │   ├── AccuracyTable.tsx      # Per-topic accuracy stats table
+│   │   │   │   ├── ConceptsList.tsx       # Prerequisite concepts list in TopicDrawer
+│   │   │   │   ├── QuestionTable.tsx      # Question list with attempt status in TopicDrawer
+│   │   │   │   ├── RoadmapGraph.tsx       # Pan/zoom prerequisite graph (HomePage)
+│   │   │   │   ├── TopicCard.tsx          # Topic card for grid view
+│   │   │   │   ├── TopicDrawer.tsx        # Right panel; concepts + question list; opens from roadmap node click
+│   │   │   │   └── TopicGrid.tsx          # Grid of TopicCards
+│   │   │   └── ui/
+│   │   │       ├── Badge.tsx              # Difficulty/status badge
+│   │   │       ├── Button.tsx             # Styled button primitive
+│   │   │       ├── Card.tsx               # Container card primitive
+│   │   │       ├── ErrorMessage.tsx       # Error display
+│   │   │       ├── ProgressBar.tsx        # Topic completion progress bar
+│   │   │       ├── Spinner.tsx            # Loading spinner
+│   │   │       └── StreakNotification.tsx # Modal that fires once per day on first correct answer
+│   │   ├── components/ (root-level)
+│   │   │   ├── LoginModal.tsx             # Email/password + Google sign-in modal
+│   │   │   └── UpgradeModal.tsx           # Subscription upgrade prompt modal
+│   │   ├── pages/
+│   │   │   ├── LandingPage.tsx     # Marketing landing page at route /
+│   │   │   ├── HomePage.tsx        # Roadmap graph at /roadmap
+│   │   │   ├── PracticePage.tsx    # Main practice interface at /practice/:topicId
+│   │   │   ├── HistoryPage.tsx     # Attempt history at /history
+│   │   │   ├── StatsPage.tsx       # Streak cards + heatmap at /stats
+│   │   │   ├── StarredPage.tsx     # Bookmarked questions at /starred
+│   │   │   ├── ReviewPage.tsx      # Spaced repetition / review queue at /review
+│   │   │   ├── StudyPlanPage.tsx   # Study plan detail view at /study-plan
+│   │   │   └── MobileUploadPage.tsx # Standalone phone upload at /m/:token (no RootLayout)
+│   │   └── types/
+│   │       ├── api.ts              # Client-side type mirror of backend/src/types/index.ts
+│   │       └── mathlive.d.ts       # MathLive Web Component type declarations
+│   ├── public/
+│   │   ├── favicon.svg
+│   │   └── icons.svg
+│   ├── .env.example
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package.json
+│   ├── postcss.config.js
+│   └── vite.config.ts (proxies /api/* and /socket.io → localhost:3001)
+│
+├── .planning/
+│   ├── codebase/               # Codebase map documents (this file)
+│   └── phases/                 # Phase plans and summaries
+├── 2025/                       # Exam PDFs by school (gitignored)
+├── images/                     # (gitignored)
+├── CLAUDE.md                   # Project guide for Claude Code
+├── dev.js                      # Convenience script to run backend + frontend concurrently
+└── package.json                # Root package (npm run setup, npm run dev)
 ```
 
-## Directory Purposes
+## Frontend Routes
 
-**`src/pages/`:**
-- Purpose: Route handlers mapped 1:1 to paths in React Router
-- Contains: One `.tsx` per route (HomePage, PracticePage, etc.)
-- Key files: `PracticePage.tsx` (largest, ~300 lines); handles all question flow UI
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/` | `LandingPage` | Marketing landing page; standalone layout (no Header/Sidebar) |
+| `/roadmap` | `HomePage` via `RootLayout` | Pan/zoom prerequisite graph; `TopicDrawer` on node click |
+| `/practice/:topicId` | `PracticePage` via `RootLayout` | Practice session; `?question_id=<uuid>` loads specific question |
+| `/history` | `HistoryPage` via `RootLayout` | Full attempt history list |
+| `/stats` | `StatsPage` via `RootLayout` | Streak cards + GitHub-style heatmap |
+| `/starred` | `StarredPage` via `RootLayout` | All starred questions with latest attempt |
+| `/review` | `ReviewPage` via `RootLayout` | Spaced repetition / review queue |
+| `/study-plan` | `StudyPlanPage` via `RootLayout` | Detailed study plan view |
+| `/m/:token` | `MobileUploadPage` | Phone photo upload; standalone (no RootLayout) |
 
-**`src/hooks/`:**
-- Purpose: Encapsulate data fetching, state machines, side effects
-- Contains: Custom hooks; no React components
-- Key files: `usePracticeSession.ts` (reducer-based state machine); `useTopics.ts`, `useChatSession.ts` (data fetching)
-- Pattern: Return object with state + methods; cleanup functions in useEffect
+`RootLayout` renders `<Header>` + `<StudyPlanSidebar>` + `<Outlet>`.
 
-**`src/components/ui/`:**
-- Purpose: Reusable, domain-agnostic UI primitives
-- Contains: Button, Card, Badge, Spinner, ErrorMessage, ProgressBar, StreakNotification
-- Dependencies: None except React; accept className for Tailwind customization
+## Backend Route Files and Endpoints
 
-**`src/components/topic/`:**
-- Purpose: Topic navigation and visualization
-- Contains: RoadmapGraph (complex SVG), TopicDrawer (panel), ConceptsList, QuestionTable, AccuracyTable
-- Key file: `RoadmapGraph.tsx` — hardcoded node positions and edges; rendered as SVG canvas
+| File | Endpoints |
+|------|-----------|
+| `routes/topics.ts` | `GET /api/topics?level=H2`, `GET /api/topics/:id`, `GET /api/topics/progress`, `GET /api/topics/accuracy` |
+| `routes/questions.ts` | `GET /api/topics/:id/questions`, `GET /api/topics/:id/next?difficulty=N`, `GET /api/questions/:id`, `GET /api/questions/:id/solution` |
+| `routes/concepts.ts` | `GET /api/topics/:id/concepts` |
+| `routes/attempts.ts` | `POST /api/attempts`, `GET /api/attempts?question_id=UUID` |
+| `routes/stars.ts` | `POST /api/stars`, `GET /api/stars?topic_id=UUID`, `GET /api/stars/all` |
+| `routes/streaks.ts` | `GET /api/streaks` |
+| `routes/chat.ts` | `GET /api/chat?question_id=UUID`, `POST /api/chat` |
+| `routes/grade.ts` | `GET /api/grade?question_id=UUID`, `POST /api/grade` (multipart/form-data) |
+| `routes/pair.ts` | `POST /api/pair`, `GET /api/pair/:token`, `POST /api/pair/:token/photo`, `POST /api/pair/:token/done` |
+| `routes/review.ts` | `GET /api/review/corrections`, `/weak-topics`, `/speed-drills`, `/spaced`, `/random`, `/diagnosis`, `/study-plan` |
 
-**`src/components/question/`:**
-- Purpose: Question answering UI
-- Contains: QuestionCard (prompt), AnswerInput (dispatcher), ExactInput (MathLive), PhotoAnswer (camera), MultiPartQuestion, GradingResult, SolutionReveal
-- Pattern: Leaf components accept single responsibility; parent (PracticePage) composes them
+All endpoints except `/health` and `/api/pair/:token` (mobile page context) require auth via `gate()`.
 
-**`src/components/math/`:**
-- Purpose: Math rendering and input
-- Contains: Latex (KaTeX inline), LatexBlock (KaTeX display), MathField (MathLive wrapper), MathKeyboard (symbol grid)
-- Key file: `MathField.tsx` — wraps `<math-field>` web component; exposes insert(), getValue(), focus()
+## Where Types Are Defined
 
-**`src/lib/api.ts`:**
-- Purpose: Single entry point for all backend communication
-- Contains: `request()` and `requestFormData()` wrappers; namespaced domains (topics, questions, attempts, stars, chat, grade, pair, review)
-- Pattern: `api.topics.list()`, `api.attempts.submit()`, `api.chat.send()`, etc.
+**Backend canonical types:** `backend/src/types/index.ts`
+- All domain types: `Topic`, `Question`, `QuestionPart`, `Attempt`, `Grading`, `ChatMessage`, `PairSession`, etc.
+- Public variants (client-safe, secrets stripped): `QuestionPublic`, `QuestionPartPublic`, `ChatMessagePublic`
+- Response types: `SubmitAttemptResponse`, `GradeResponse`, `CreatePairResponse`, `StudyPlanResponse`
 
-**`src/lib/socket.ts`:**
-- Purpose: Singleton Socket.IO connection
-- Contains: `getSocket()` — returns shared connection; auto-connect
-- Used by: `usePairSocket()` hook for phone pairing real-time events
+**Frontend type mirror:** `frontend/src/types/api.ts`
+- Mirrors backend public types; kept in sync manually
+- Additional frontend-only types: `QuestStatus`, `StudyPlanItem`, `Quest` (in `hooks/useStudyPlan.ts`)
 
-**`src/lib/session.ts`:**
-- Purpose: Session UUID management
-- Contains: `getSessionId()` (get or create UUID v4 in localStorage), `clearSession()`
-- Pattern: Simple singleton utilities
+**MathLive types:** `frontend/src/types/mathlive.d.ts` — Web Component ambient declaration
 
-**`src/lib/renderLatex.tsx`:**
-- Purpose: Parse mixed text+LaTeX; convert to JSX
-- Splits by `\(...\)` (inline) and `\[...\]` (block) delimiters
-- Returns ReactNode[] for composition into larger UI
+## Key Files
 
-**`src/contexts/ThemeContext.tsx`:**
-- Purpose: Global theme state (light/dark)
-- Contains: `ThemeProvider`, `useTheme()`
-- Pattern: Simple React Context; reads/writes `localStorage.getItem('math_trainer_theme')`
-
-**`src/types/api.ts`:**
-- Purpose: TypeScript interfaces for all API responses
-- Contains: `QuestionPublic`, `Attempt`, `ChatMessage`, `GradingResult`, `GradeResponse`, etc.
-- Pattern: 1:1 mirror of backend data models
-
-## Key File Locations
-
-**Entry Points:**
-- `src/main.tsx` — React DOM mount
-- `src/App.tsx` — Router & theme setup
-- `index.html` — HTML shell with `<div id="root">`
-
-**Configuration:**
-- `vite.config.ts` — Dev server (port 5173), API proxy, Socket.IO proxy
-- `tsconfig.json` — TypeScript strict mode, lib ES2020
-- `eslint.config.js` — ESLint rules (React, React Hooks)
-- `package.json` — Dependencies (React 19, Vite, KaTeX, MathLive, Tailwind, Socket.IO)
-
-**Core Logic:**
-- `src/hooks/usePracticeSession.ts` — Practice state machine (reducer, 337 lines)
-- `src/lib/api.ts` — REST wrapper & domain grouping (206 lines)
-- `src/components/topic/RoadmapGraph.tsx` — SVG tree visualization (hardcoded layout)
-
-**Testing:**
-- No test files found; no test framework configured
+| File | Role |
+|------|------|
+| `backend/src/index.ts` | Backend entry point; all router mounts |
+| `backend/src/middleware/auth.ts` | Firebase JWT verification + tier gating |
+| `backend/src/realtime.ts` | Socket.IO init; `emitToPair()` |
+| `backend/src/services/attemptService.ts` | Core answer grading logic |
+| `backend/src/services/gradingService.ts` | Photo AI grading pipeline |
+| `backend/src/services/chatService.ts` | AI chatbot proxy + Socratic prompt |
+| `backend/src/config/featureTiers.ts` | Feature access control table |
+| `backend/src/types/index.ts` | All backend types |
+| `frontend/src/main.tsx` | React root; `AuthProvider` wraps everything |
+| `frontend/src/App.tsx` | Route tree definition |
+| `frontend/src/lib/api.ts` | All HTTP calls; auth token injection |
+| `frontend/src/lib/firebase.ts` | Firebase client SDK init |
+| `frontend/src/contexts/AuthContext.tsx` | Global auth state |
+| `frontend/src/hooks/usePracticeSession.ts` | Practice state machine |
+| `frontend/src/hooks/usePairSocket.ts` | Socket.IO pairing events |
+| `frontend/src/types/api.ts` | Frontend type mirror |
 
 ## Naming Conventions
 
 **Files:**
-- Components: `PascalCase.tsx` (e.g., `QuestionCard.tsx`)
-- Hooks: `useCarmelCase.ts` (e.g., `usePracticeSession.ts`)
-- Utilities: `camelCase.ts` or `.tsx` (e.g., `api.ts`, `renderLatex.tsx`)
-- Types: `api.ts` (grouped in one file; not distributed)
+- React components: PascalCase (`PracticePage.tsx`, `ChatPanel.tsx`)
+- Hooks: camelCase prefixed with `use` (`usePracticeSession.ts`)
+- Lib/utilities: camelCase (`api.ts`, `renderLatex.tsx`, `studyPlan.ts`)
+- Backend routes/services: camelCase (`attemptService.ts`, `chatService.ts`)
+- SQL migrations: zero-padded number + description (`001_initial_schema.sql`)
 
 **Directories:**
-- Feature/domain-based (e.g., `components/topic/`, `components/question/`)
-- Grouped by responsibility (e.g., `hooks/`, `lib/`, `contexts/`)
-- No index re-exports (direct imports)
-
-**Variables & Functions:**
-- camelCase for variables, functions
-- PascalCase for React components, classes, types
-- UPPER_SNAKE_CASE for constants (e.g., `SESSION_KEY`, `NODE_W`, `POSITIONS`)
+- Frontend: lowercase, domain-grouped (`components/question/`, `hooks/`, `lib/`, `pages/`)
+- Backend: lowercase, role-grouped (`routes/`, `services/`, `db/`, `middleware/`, `config/`)
 
 ## Where to Add New Code
 
-**New Feature (e.g., new answer type, new page):**
+**New API endpoint:**
+1. Route handler → `backend/src/routes/<domain>.ts` (new file or add to existing)
+2. Business logic → `backend/src/services/<domain>Service.ts`
+3. Mount in `backend/src/index.ts`
+4. Add types to `backend/src/types/index.ts`
+5. Add client method to `frontend/src/lib/api.ts`
+6. Mirror types in `frontend/src/types/api.ts`
 
-1. **New page route:**
-   - Create file in `src/pages/NewPage.tsx`
-   - Add route in `src/App.tsx` router config
-   - If it needs data, create hook in `src/hooks/useNewPageData.ts`
+**New frontend page:**
+1. Page component → `frontend/src/pages/<Name>Page.tsx`
+2. Add route in `frontend/src/App.tsx` (inside `RootLayout` children or standalone)
+3. Add nav link in `frontend/src/components/layout/Header.tsx` if needed
 
-2. **New API endpoint:**
-   - Add domain group in `src/lib/api.ts` (e.g., `api.newFeature = { ... }`)
-   - Define response types in `src/types/api.ts`
-   - Call from hooks, never directly from components
+**New data-fetching hook:**
+1. Hook → `frontend/src/hooks/use<Feature>.ts`
+2. Uses `api.*` from `frontend/src/lib/api.ts`
 
-3. **New component:**
-   - Place in appropriate subdirectory of `src/components/`
-   - If UI primitive → `src/components/ui/`
-   - If domain-specific → `src/components/{domain}/`
-   - Keep props simple; use hooks for complex state
+**New UI component:**
+1. Generic primitive → `frontend/src/components/ui/`
+2. Domain-specific → `frontend/src/components/<domain>/`
 
-4. **New state/logic:**
-   - Create hook in `src/hooks/useNewFeature.ts`
-   - Use `useReducer` for state machines; simple `useState` for leaf state
-   - Export both state and methods (e.g., return `{ ...state, loadData, submitAnswer }`)
-   - Add cleanup logic in useEffect return
+**New database table:**
+1. Write migration → `backend/supabase/migrations/<NNN>_<description>.sql`
+2. Include `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
+3. Run in Supabase SQL Editor
+4. Add types to `backend/src/types/index.ts`
 
-5. **New utility:**
-   - Small helpers → `src/lib/utils.ts`
-   - Domain-specific (e.g., LaTeX normalization) → new file in `src/lib/`
-   - Cross-component rendering → `src/lib/renderLatex.tsx` (already handles mixed text+math)
-
-**New Component/Module:**
-- Location depends on purpose:
-  - UI primitives → `src/components/ui/`
-  - Topic functionality → `src/components/topic/`
-  - Question UI → `src/components/question/`
-  - Math rendering/input → `src/components/math/`
-  - Real-time features → `src/components/pair/`, `src/components/chat/`
-  - Progress/stats → `src/components/progress/`
-
-**Utilities & Helpers:**
-- Shared utilities → `src/lib/` as separate files or extend `utils.ts`
-- LaTeX-related → integrate into `renderLatex.tsx` or create `src/lib/latex.ts`
-- Session/auth → extend `src/lib/session.ts`
-- API wrapper → add domain group to `src/lib/api.ts`
+**New feature gating:**
+1. Add entry to `backend/src/config/featureTiers.ts`
+2. Use `gate('featureName')` in route handlers instead of `requireAuth`
 
 ## Special Directories
 
-**`src/assets/`:**
-- Purpose: Static imports (icons, images, fonts)
-- Generated: No
+**`backend/supabase/migrations/`:**
+- Purpose: SQL migration files applied sequentially in Supabase SQL Editor
+- Generated: No (hand-written)
 - Committed: Yes
+- Naming: `<NNN>_<description>.sql`; currently 001–019
 
-**`public/`:**
-- Purpose: Files served as-is by Vite; `/` in URL maps to `public/`
+**`frontend/public/`:**
+- Purpose: Static assets served as-is; `favicon.svg`, `icons.svg`
 - Generated: No
-- Committed: Yes (typically favicons, robots.txt)
 
-**`.planning/codebase/`:**
-- Purpose: Architecture & structure documentation
-- Generated: Yes (by `/gsd-map-codebase`)
+**`2025/`:**
+- Purpose: Exam PDFs organized by school (ACJC, ASRJC, CJC, DHS, HCI, etc.)
+- Generated: No
+- Committed: No (gitignored)
+
+**`.planning/`:**
+- Purpose: GSD workflow artifacts (codebase maps, phase plans, summaries)
+- Generated: Partially (by GSD tools)
 - Committed: Yes
-
-**`node_modules/`:**
-- Purpose: Installed dependencies
-- Generated: Yes
-- Committed: No (in .gitignore)
-
-**`dist/`:**
-- Purpose: Built output (Vite)
-- Generated: Yes (`npm run build`)
-- Committed: No (in .gitignore)
 
 ---
 
-*Structure analysis: 2026-06-26*
+*Structure analysis: 2026-06-29*

@@ -1,228 +1,208 @@
 # External Integrations
 
-**Analysis Date:** 2026-06-26
+**Analysis Date:** 2026-06-29
 
-## APIs & External Services
+## Firebase (Auth)
 
-**AI Chatbot (Socratic Hints):**
-- Google Gemini API (`gemini-2.5-flash` model)
-  - SDK: `@google/genai` 2.9.0
-  - Auth: `GEMINI_API_KEY` (backend-only, via `backend/src/db/gemini.ts`)
-  - Endpoint: `POST /api/chat` → proxy to Gemini
-  - Implementation: `backend/src/services/chatService.ts` → `backend/src/db/gemini.ts`
-  - Rate limiting: `CHAT_RATE_LIMIT_PER_MIN` (default 15/min, IP-keyed) + `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40 per question)
-  - Behavior: Socratic tutor that gives progressive hints, never the final answer; reference `solution_latex` injected server-side only
+**What it does:** User authentication — ID token issuance (client), token verification (server), and user upsert into Supabase on first login.
 
-**Photo-Based AI Grading (Vision):**
-- Google Gemini API (same `gemini-2.5-flash` model, structured output)
-  - SDK: `@google/genai` 2.9.0
-  - Auth: `GEMINI_API_KEY` (reuses backend-only key)
-  - Endpoint: `POST /api/grade` → multipart upload (images) → Gemini vision grading
-  - Implementation: `backend/src/services/gradingService.ts` → `backend/src/db/gemini.ts`
-  - Rate limiting: `GRADE_RATE_LIMIT_PER_MIN` (default 5/min, IP-keyed)
-  - File limits: `GRADE_MAX_IMAGES` (default 5 images), `GRADE_MAX_IMAGE_MB` (default 8 MB per image)
-  - Structured output: Deterministic JSON schema with `gradable`, `parts[{label, verdict, marks_awarded, marks_total, errors, hints, summary}]`, `overall_feedback`
-  - Junk filtering: Auto-ignores blank/unrelated/object photos in `ignored_images`
+**Client SDK (`firebase` 12.15.0):**
+- File: `frontend/src/lib/firebase.ts`
+- Initializes app with `initializeApp(firebaseConfig)` and exports `auth = getAuth(app)`
+- Config drawn from Vite env vars: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`
+- Features used: Auth only (no Firestore, no Storage on the client)
 
-## Data Storage
+**Admin SDK (`firebase-admin` 14.1.0):**
+- File: `backend/src/db/firebase.ts` — lazy singleton via `getFirebaseAdmin()`
+- Initialized with `cert({ projectId, clientEmail, privateKey })` from env vars: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
+- Used exclusively in `backend/src/middleware/auth.ts` → `getAuth(getFirebaseAdmin()).verifyIdToken(token)`
 
-**Primary Database:**
-- Supabase (PostgreSQL)
-  - Connection: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`
-  - Client: `@supabase/supabase-js` 2.45.0 (via `backend/src/db/supabase.ts`)
-  - Tables: `topics`, `questions`, `attempts`, `stars`, `chat_messages`, `gradings`, `topic_concepts`, `starred_questions` (view)
-  - Schema: Multi-part questions supported via `parts JSONB` column (array of `{label, prompt_latex, answer_type, tolerance, marks}`)
-  - Migrations: 16 SQL migration files in `backend/migrations/` (001–016, covering schema, 24 topics, 5 schools of prelim questions)
+**Auth middleware (`backend/src/middleware/auth.ts`):**
+- `requireAuth` — verifies `Authorization: Bearer <idToken>`, resolves/upserts user into Supabase `users` table, attaches `req.user = { uid: supabase_uuid, tier }`
+- `gate(feature)` — composes `requireAuth` + tier check against `backend/src/config/featureTiers.ts`
+- Tier is read from the decoded token's `tier` custom claim; defaults to `'free'`
+- All tiers currently set to `'free'` in `featureTiers.ts` (gating infrastructure exists but not enforced)
 
-**File Storage:**
-- Supabase Storage (`solution-uploads` bucket)
-  - Location: `backend/src/services/gradingService.ts`
-  - Purpose: Stores graded handwritten solution images after successful AI grading
-  - Access: Private bucket, indexed by `session_id`, `question_id`, `grading_id`
-
-**Session Storage (Frontend):**
-- Browser `localStorage`
-  - Key: `session_id` (UUID v4)
-  - Persists across browser sessions (no auth, anonymous tracking)
-
-## Authentication & Identity
-
-**Auth Provider:**
-- None (anonymous session-based)
-  - Implementation: `frontend/src/lib/session.ts` generates/stores UUID v4 in `localStorage`
-  - Backend: All endpoints accept `session_id` as a query parameter or request body field
-  - No user accounts, no login required
-
-## Monitoring & Observability
-
-**Error Tracking:**
-- Not detected (no Sentry, Rollbar, or similar)
-- Backend throws typed errors (`ChatLimitError`, `GradingError`) mapped to HTTP status codes in routes
-
-**Logs:**
-- Console output only
-  - Backend: `console.log()` on startup; errors via `console.error()` (no structured logging)
-  - Frontend: Browser DevTools console (no error boundary reporting)
-
-## CI/CD & Deployment
-
-**Hosting:**
-- Not specified in codebase (no GitHub Actions, Docker config, or deployment scripts)
-- Assumed manual or external CI/CD
-
-**Dev Setup:**
-- Local monorepo: `npm run setup` → install both backend & frontend
-- Dev server: `npm run dev` (root) → spawns backend (`npm run dev` in `backend/`) + frontend (`npm run dev` in `frontend/`) concurrently via `dev.js`
-- Backend: TSX watch mode (`tsx watch src/index.ts`), port 3001
-- Frontend: Vite dev server, port 5173, `server.host: true` for LAN access
-
-## Environment Configuration
-
-**Required Environment Variables (Backend .env):**
-```
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
-GEMINI_API_KEY=your-gemini-key-here
-PORT=3001 (optional, default 3001)
-GEMINI_MODEL=gemini-2.5-flash (optional)
-CHAT_RATE_LIMIT_PER_MIN=15 (optional)
-CHAT_MAX_MESSAGES_PER_QUESTION=40 (optional)
-GRADE_RATE_LIMIT_PER_MIN=5 (optional)
-GRADE_MAX_IMAGES=5 (optional)
-GRADE_MAX_IMAGE_MB=8 (optional)
-PAIR_TTL_MIN=10 (optional)
-PAIR_RATE_LIMIT_PER_MIN=30 (optional)
-```
-
-**Secrets Location:**
-- Backend `.env` file (never committed, listed in `.gitignore`)
-- Supabase project settings (cloud-hosted)
-- Google Cloud API credentials (external)
-- Never exposed to frontend via `fetch()` or environment variables
-
-## Webhooks & Callbacks
-
-**Incoming Webhooks:**
-- None detected
-
-**Outgoing Webhooks:**
-- None detected (Gemini API is request-response only)
-
-**Real-Time Events (Socket.IO):**
-- `pair:subscribe` — desktop joins a token room
-- `pair:unsubscribe` — desktop leaves a token room
-- `pair:phone-connected` — emitted when phone connects to a pairing token
-- `pair:image` — emitted when phone uploads a photo
-- `pair:grading` → `pair:graded` — emitted after photo grading completes
-- `pair:error` — emitted if grading fails
-- Implementation: `backend/src/realtime.ts` (Socket.IO server), `backend/src/routes/pair.ts` (pairing token lifecycle)
-
-## API Endpoints
-
-| Method | Path | Authentication | Purpose |
-|--------|------|---|---|
-| GET | `/api/topics` | Session ID (optional) | List all topics (optionally filtered by `?level=H2`) |
-| GET | `/api/topics/:id` | None | Get single topic |
-| GET | `/api/topics/:id/questions` | Session ID | Get questions for a topic with attempt status |
-| GET | `/api/topics/:id/next` | Session ID + Difficulty filter | Get next unanswered question |
-| GET | `/api/topics/:id/concepts` | None | Get prerequisite concepts for a topic |
-| GET | `/api/topics/progress` | Session ID | Per-topic completion stats (correct/total) |
-| GET | `/api/topics/accuracy` | Session ID | Per-topic accuracy metrics (questions_solved, attempts, etc.) |
-| GET | `/api/questions/:id` | None | Get single question (no answer/solution stripped) |
-| GET | `/api/questions/:id/solution` | None | Get solution LaTeX after submission |
-| POST | `/api/attempts` | Session ID | Submit answer → graded against `correct_answer` |
-| GET | `/api/attempts` | Session ID | Get session attempt history (optionally filtered by `?question_id=`) |
-| POST | `/api/stars` | Session ID | Toggle star on a question |
-| GET | `/api/stars` | Session ID + Topic ID | Get starred question IDs for a topic |
-| GET | `/api/stars/all` | Session ID | Get all starred questions with latest attempt |
-| GET | `/api/streaks` | Session ID | Get current/best streak + daily activity heatmap data |
-| GET | `/api/chat` | Session ID + Question ID | Get chat message history for a question |
-| POST | `/api/chat` | Session ID + Question ID | Send message → Socratic hint via Gemini |
-| GET | `/api/grade` | Session ID + Question ID | Get past photo gradings for a question |
-| POST | `/api/grade` | Session ID + Question ID | **multipart** (`images[]`) → AI grade via Gemini vision |
-| POST | `/api/pair` | Session ID + Question ID | Create phone-upload pairing → `{token, mobile_path, expires_at}` |
-| GET | `/api/pair/:token` | Token (URL param) | Mobile page context; fires `pair:phone-connected` |
-| POST | `/api/pair/:token/photo` | Token (URL param) | **multipart** single `image` → streams to desktop via `pair:image` |
-| POST | `/api/pair/:token/done` | Token (URL param) | Grade collected photos → `pair:grading`/`pair:graded`/`pair:error` |
-| GET | `/api/review/corrections` | Session ID | Get questions the student got wrong (for review) |
-| GET | `/api/review/weak-topics` | Session ID | Get topics with low accuracy (for review) |
-| GET | `/api/review/speed-drills` | Session ID | Get recently attempted questions (for speed practice) |
-| GET | `/api/review/spaced` | Session ID | Get previously correct questions due for spaced repetition |
-| GET | `/api/review/random` | None | Get random questions (for mixed practice) |
-| GET | `/health` | None | Health check endpoint |
-
-## Request/Response Examples
-
-**Submit Answer (Multi-Part):**
-```json
-POST /api/attempts
-{
-  "session_id": "uuid",
-  "question_id": "uuid",
-  "part_label": "a",           // For multi-part questions
-  "answer_given": "\\frac{x}{5}",
-  "time_taken_s": 120
-}
-
-Response:
-{
-  "attempt_id": "uuid",
-  "is_correct": true,
-  "correct_answer": "\\frac{x}{5}",
-  "solution_latex": null    // Only non-null after all graded parts submitted
-}
-```
-
-**Grade Photos:**
-```
-POST /api/grade
-multipart/form-data:
-  images: [File, File, ...]
-  session_id: "uuid"
-  question_id: "uuid"
-  time_taken_s?: 180
-
-Response (Structured via Gemini JSON schema):
-{
-  "gradable": true,
-  "rejection_reason": "",
-  "ignored_images": [],
-  "parts": [
-    {
-      "label": "a",
-      "verdict": "correct",
-      "marks_awarded": 2,
-      "marks_total": 2,
-      "errors": [],
-      "hints": ["Check intercepts on both axes"],
-      "summary": "Correct sketch with labelled intercepts."
-    }
-  ],
-  "overall_feedback": "Well done! All parts correct."
-}
-```
-
-**Phone Upload Pairing:**
-```
-POST /api/pair
-{
-  "session_id": "uuid",
-  "question_id": "uuid"
-}
-
-Response:
-{
-  "token": "32-byte base64url string (unguessable)",
-  "mobile_path": "/m/{token}",
-  "expires_at": "2026-06-26T12:15:00Z"
-}
-
-Phone opens: https://desktop.local:5173/m/{token}
-→ Snaps photos → Sends to: POST /api/pair/{token}/photo
-→ Desktop receives via: socket.on('pair:image', ...)
-→ Submits grading: POST /api/pair/{token}/done
-```
+**Secrets location:** `backend/.env` (never committed)
 
 ---
 
-*Integration audit: 2026-06-26*
+## Supabase (Postgres)
+
+**What it does:** Primary persistent store for all application data. Accessed exclusively from the backend via the service role key (bypasses RLS).
+
+**Client:** `@supabase/supabase-js` 2.45.0
+- File: `backend/src/db/supabase.ts` — singleton `supabase = createClient(url, key)`
+- Auth: service role key (`SUPABASE_SERVICE_ROLE_KEY`) — full access, no RLS
+- Never imported into frontend; all access is through the backend API
+
+**Tables (via SQL migrations run in Supabase SQL Editor):**
+
+| Table | Migration | Purpose |
+|---|---|---|
+| `questions` | 001 + 008 | Questions with optional `parts JSONB` for multi-part |
+| `attempts` | 001 + 008 | Per-part answer submissions with `part_label` |
+| `topics` | 001 | 24 H2 Math topics |
+| `topic_concepts` | 003 | Prerequisite concepts per topic |
+| `starred_questions` | 004 | User-starred questions keyed by `session_id` |
+| `chat_messages` | 011 | AI hint chat history keyed by `session_id + question_id` |
+| `gradings` | 013 | Photo grading results (images + Gemini feedback JSON) |
+| `users` | (auth middleware) | Firebase UID ↔ Supabase UUID mapping; upserted on login |
+
+**Storage bucket:**
+- `solution-uploads` — private bucket created in migration 013; graded photos stored here after successful grading
+
+**DB access layer:** `backend/src/db/` contains one file per table (`attempts.ts`, `chat.ts`, `concepts.ts`, `grade.ts`, `questions.ts`, `stars.ts`, `streaks.ts`, `topics.ts`, `review.ts`). Route handlers call services which call these DB modules — routes never import `supabase` directly.
+
+**Secrets location:** `backend/.env` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+
+---
+
+## Gemini API (Google AI)
+
+**What it does:** Powers two AI features — Socratic hint chatbot and photo-based handwritten solution grading.
+
+**SDK:** `@google/genai` 2.9.0
+- File: `backend/src/db/gemini.ts` — lazy singleton `getGemini()` returning `GoogleGenAI` instance
+- Model: `gemini-2.5-flash` (default); overridable via `GEMINI_MODEL` env var
+- Auth: `GEMINI_API_KEY` in `backend/.env`; never exposed to browser
+
+**Hint chatbot (`/api/chat`):**
+- Route: `backend/src/routes/chat.ts`
+- Service: `backend/src/services/chatService.ts`
+- System instruction built by `buildSystemInstruction()` — injects question + parts + reference `solution_latex` (server-only, marked confidential); instructs model to give one small Socratic hint at a time, never the answer
+- History persisted in `chat_messages` table; `GET /api/chat` rehydrates
+- Rate limiting: `CHAT_RATE_LIMIT_PER_MIN` (default 15/min, IP-keyed); `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40) → `ChatLimitError` → HTTP 429
+
+**Photo grading (`/api/grade`):**
+- Route: `backend/src/routes/grade.ts`
+- Service: `backend/src/services/gradingService.ts`
+- System instruction built by `buildGradingInstruction()` — injects model solution; instructs Gemini to act as examiner, not solver; credits valid alternative methods
+- Images sent as base64 `inlineData` via `@google/genai` multimodal API
+- Structured output via `responseSchema` (deterministic JSON): `{ gradable, rejection_reason, ignored_images, parts[{label, verdict, marks_awarded, marks_total, errors, hints, summary}], overall_feedback }`
+- Junk filtering (STEP 0): blanks/unrelated images → `ignored_images`; if nothing gradable → `gradable=false` → HTTP 400 with no stored data
+- Images stored in Supabase `solution-uploads` bucket only after successful grading
+- Rate limiting: `GRADE_RATE_LIMIT_PER_MIN` (default 5/min, IP-keyed); `GRADE_MAX_IMAGES` (default 5); `GRADE_MAX_IMAGE_MB` (default 8)
+
+**Secrets location:** `backend/.env` (`GEMINI_API_KEY`, optionally `GEMINI_MODEL`)
+
+---
+
+## Socket.IO (Real-time)
+
+**What it does:** Live photo streaming from a student's phone to the desktop app during the QR-pairing upload flow.
+
+**Server:** `socket.io` 4.8.3 — `backend/src/realtime.ts`
+- Attached to the raw `http.Server` instance (same port 3001 as Express)
+- CORS: `origin: '*'`
+- Desktop clients join a token-specific room via `pair:subscribe`; events are emitted only to that room via `emitToPair(token, event, payload)`
+
+**Client:** `socket.io-client` 4.8.3 — `frontend/src/lib/socket.ts`
+- Singleton `getSocket()` connecting to same origin (tunnels through Vite `/socket.io` proxy in dev)
+- Hook: `frontend/src/hooks/usePairSocket.ts` — forwards Socket.IO events into practice session state
+
+**Events:**
+
+| Event | Direction | Payload | Purpose |
+|---|---|---|---|
+| `pair:subscribe` | Client → Server | `{ token }` | Desktop joins room for its token |
+| `pair:unsubscribe` | Client → Server | `{ token }` | Desktop leaves room |
+| `pair:phone-connected` | Server → Desktop | — | Phone opened the mobile upload page |
+| `pair:image` | Server → Desktop | image data | Phone sent a photo |
+| `pair:grading` | Server → Desktop | — | Grading started |
+| `pair:graded` | Server → Desktop | grading result | Grading complete |
+| `pair:error` | Server → Desktop | error message | Grading failed or image rejected |
+
+---
+
+## Phone Pairing (QR + Token)
+
+**What it does:** Lets students photograph handwritten work on their phone and transfer it to the desktop session without any auth.
+
+**Backend service:** `backend/src/services/pairService.ts`
+- In-memory `Map` of capability tokens (32-byte `crypto.randomBytes` → base64url)
+- TTL: `PAIR_TTL_MIN` env var (default 10 minutes)
+- No database persistence — tokens are ephemeral
+
+**Routes (`backend/src/routes/pair.ts`):**
+- `POST /api/pair` — creates token → returns `{ token, mobile_path, expires_at }`
+- `GET /api/pair/:token` — mobile page context; fires `pair:phone-connected` Socket.IO event
+- `POST /api/pair/:token/photo` — receives single image via multipart; emits `pair:image` to desktop
+- `POST /api/pair/:token/done` — triggers grading pipeline; emits `pair:grading` → `pair:graded` or `pair:error`
+
+**Auth model:** Possession of the unguessable token (no user credentials required)
+
+**Frontend components:**
+- `frontend/src/components/QrPairModal.tsx` — displays QR code (URL = `origin + mobile_path`)
+- `frontend/src/pages/MobileUploadPage.tsx` — top-level route `/m/:token` (outside `RootLayout`)
+
+---
+
+## Data Storage
+
+**Primary database:** Supabase (Postgres) — see Supabase section above
+
+**File storage:** Supabase Storage (`solution-uploads` private bucket) — graded photos only
+
+**Client-side storage:**
+- `localStorage` — session UUID (`session_id`), study plan (`study_plan_v1`), first-seed guard; managed in `frontend/src/lib/session.ts` and `frontend/src/lib/studyPlan.ts`
+
+**Caching:** None
+
+---
+
+## Authentication & Identity
+
+**Auth provider:** Firebase Auth (see Firebase section above)
+- Client-side sign-in; ID token passed as `Authorization: Bearer` header to all protected backend routes
+- Backend resolves Firebase UID → Supabase `users.id` on every authenticated request (via upsert)
+- Session identity also tracked via anonymous `session_id` in `localStorage` (used for attempts, stars, streaks, chat history — no login required for basic practice)
+
+---
+
+## Monitoring & Observability
+
+**Error tracking:** None detected
+
+**Logs:** `console.log` / `console.error` only; no structured logging library
+
+---
+
+## CI/CD & Deployment
+
+**Hosting:** Not configured in repo
+
+**CI pipeline:** None detected
+
+---
+
+## Environment Variables — Full Reference
+
+**Backend (`backend/.env`):**
+- `SUPABASE_URL` — Supabase project URL (required)
+- `SUPABASE_SERVICE_ROLE_KEY` — Service role key (required)
+- `FIREBASE_PROJECT_ID` — Firebase project (required for auth)
+- `FIREBASE_CLIENT_EMAIL` — Service account email (required for auth)
+- `FIREBASE_PRIVATE_KEY` — Service account private key, `\n` escaped (required for auth)
+- `GEMINI_API_KEY` — Google AI key (required for chat/grade)
+- `GEMINI_MODEL` — Model override (optional, default `gemini-2.5-flash`)
+- `CHAT_RATE_LIMIT_PER_MIN` — default 15
+- `CHAT_MAX_MESSAGES_PER_QUESTION` — default 40
+- `GRADE_RATE_LIMIT_PER_MIN` — default 5
+- `GRADE_MAX_IMAGES` — default 5
+- `GRADE_MAX_IMAGE_MB` — default 8
+- `PAIR_TTL_MIN` — default 10
+- `PAIR_RATE_LIMIT_PER_MIN` — default (unspecified in code)
+- `PORT` — default 3001
+- `NODE_ENV` — controls CORS origin selection
+- `CORS_ORIGIN` — production frontend URL
+
+**Frontend (`frontend/.env`):**
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_APP_ID`
+
+---
+
+*Integration audit: 2026-06-29*
