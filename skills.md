@@ -52,13 +52,18 @@ For multi-part questions:
 
 If there is no shared context (parts are independent), set `prompt_latex = ''`.
 
-### Answer type for each part
+### Answer type for each part — classify by the COMMAND WORD, not by surface keywords
 
-| Situation | `answer_type` | `correct_answer` | `tolerance` |
-|---|---|---|---|
-| "Show that", proof, sketch, text | `null` | `null` | `null` |
-| Exact algebraic/LaTeX answer | `"exact"` | LaTeX string | `null` |
-| Decimal/numerical within a range | `"range"` | decimal string | number |
+> ⚠️ **The #1 historical mistake:** flagging a part as `null` (no submission) just because its text contains "show that" or "sketch", when the part *also* asks the student to compute something. Migration 021 had to retro-fix ~120 such parts. **Read the whole part and classify by what the student must produce.**
+
+| The part asks the student to… | `answer_type` | Notes |
+|---|---|---|
+| **find, determine, calculate, evaluate, compute, solve, express, deduce \[a value], write down, give, state \[a value]** | `"exact"` or `"range"` | **A typed box is expected.** Pull the answer from `solution_latex`. |
+| Only **prove / show that / verify \[an identity]** (no value asked afterwards) | `null` | True proof — no box. |
+| Only **sketch / draw / plot / construct** | `null` | Diagram — no box. |
+| Only **describe / explain / comment / justify / interpret** | `null` | Prose — exact-match can't grade it. |
+
+Decide `"exact"` vs `"range"`: exact LaTeX/algebraic answer → `"exact"`; a decimal rounded to s.f./d.p. → `"range"` with a tolerance.
 
 **Tolerance guidelines for `"range"` answers:**
 
@@ -70,16 +75,46 @@ If there is no shared context (parts are independent), set `prompt_latex = ''`.
 | Length/area (2 d.p.) | `0.005` |
 | Coefficient/constant (3 s.f.) | `0.005` |
 
-### Parts with multiple sub-outputs
+### Mixed parts: "show that X, hence find Y"
 
-If a part asks "find x AND y" or "state a and b":
-- If both outputs form one natural answer string (e.g. `p = 2^{1/3}, q = 2^{2/3}`), use `"exact"` and accept the combined form.
-- If the outputs are conceptually different and one is textual, make the whole part `null`.
-- Never try to grade a "show that" component, even if the part also has a "find" component — make the whole part `null`.
+A part can contain *both* a show-that step and a real ask. **Grade on the computed result.** Set the part's `answer_type`/`correct_answer` to **Y** (the value the student must find); the show-that step is just working and isn't separately graded. Do **not** make the whole part `null` — that hides the answer box the student needs.
 
-### Indefinite integrals
+Likewise "find the cartesian equation … hence sketch" → grade the equation; "state the value of h and explain …" → grade h.
 
-Always `null` — there are infinitely many equivalent antiderivative forms that the exact-match normaliser cannot handle.
+### Parts asking for SEVERAL values → multi-box `answers[]`
+
+If a part asks for **two or more named values** ("find a, b and c", "find \|p\| and arg(p)", "find the mean and variance", "find the values of x₁₀ and x₁₁"), render **one box per value** using a per-part `answers[]` array. The part is correct only when **every** field matches.
+
+```json
+{
+  "label": "b",
+  "prompt_latex": "…find the exact values of a, b and c…",
+  "answer_type": "exact",                  // NON-NULL sentinel — keeps existing "graded part" logic working
+  "correct_answer": "a=2/3, b=5/2, c=23/6", // display fallback (stripped before client)
+  "tolerance": null,
+  "answers": [
+    { "key": "a", "label": "a", "correct_answer": "\\frac{2}{3}",  "answer_type": "exact", "tolerance": null },
+    { "key": "b", "label": "b", "correct_answer": "\\frac{5}{2}",  "answer_type": "exact", "tolerance": null },
+    { "key": "c", "label": "c", "correct_answer": "\\frac{23}{6}", "answer_type": "exact", "tolerance": null }
+  ]
+}
+```
+
+Rules:
+- Each field has its own `key` (unique within the part), `label` (rendered beside the box, e.g. `"a"`, `"|u|"`, `"\\text{mean}"`), `correct_answer`, `answer_type` (`"exact"` or `"range"`), and `tolerance`.
+- Keep the **part-level** `answer_type` and `correct_answer` as **non-null sentinels** (e.g. `"exact"` + a human-readable joined string). This is required so the existing "graded part" / "reveal when all parts done" logic still counts the part. Both the part-level and per-field `correct_answer`s are stripped before reaching the client.
+- Backend type: `PartAnswerField` in `backend/src/types/index.ts`; rendering: `MultiFieldInput` in `MultiPartQuestion.tsx`. See **CLAUDE.md → Multi-Part Questions** for the full contract.
+
+Do **not** cram several values into one box (e.g. `"a=2/3, b=5/2"`) — exact-match is order/format sensitive and will reject correct work.
+
+### Answers exact-match can't grade reliably — choose deliberately
+
+The grader is a normalised string / numeric / multi-point-symbolic match. It is **brittle** for: ranges & inequalities (`1<x<5/3`), equations of lines/planes, general solutions with arbitrary constants, vectors / coordinates, complex numbers, and **indefinite integrals** (`+C` and infinitely many equivalent forms). Options, in order of preference:
+1. If the part has a *clean* scalar result, grade that and leave the messy form as working.
+2. If you must enable a box for a messy answer, do it — but add an inline SQL comment `-- FLAG: <reason>` so it can be reviewed, and prefer the form a MathLive keyboard actually outputs (braced surds `\sqrt{3}`, etc.).
+3. If nothing is cleanly gradable (pure prose, a distribution table, a "describe" answer), keep the part `null`.
+
+(Project convention had been "indefinite integrals are always `null`"; if you override that, treat it as option 2 and FLAG it.)
 
 ---
 
@@ -239,14 +274,20 @@ Run this Python snippet to catch JSON errors before hitting Supabase:
 import re, json
 
 content = open('backend/supabase/migrations/NNN_xxx.sql').read()
+# matches both `parts = $$...$$::jsonb` (INSERT) and `SET parts = $$...$$::jsonb` (UPDATE)
 pattern = re.compile(r'parts = \$\$(\[.*?\])\$\$::jsonb', re.DOTALL)
 matches = pattern.findall(content)
 print(f'Found {len(matches)} parts blocks')
 for i, block in enumerate(matches):
     try:
         parsed = json.loads(block)
+        for p in parsed:
+            assert {'label', 'answer_type', 'correct_answer'} <= p.keys(), f'part {p.get("label")} missing keys'
+            for f in p.get('answers') or []:          # validate multi-box fields too
+                assert f.get('key') and f.get('label') and f.get('answer_type') and 'correct_answer' in f, \
+                    f'bad answers[] field in part {p["label"]}'
         print(f'  Block {i+1}: OK — {len(parsed)} parts: {[p["label"] for p in parsed]}')
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, AssertionError) as e:
         print(f'  Block {i+1}: ERROR — {e}')
 ```
 
@@ -283,6 +324,9 @@ GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
 | `ERROR: syntax error at or near "\"` in Supabase | Unescaped `'` inside single-quoted string — use `$$...$$` instead |
 | JSON validation fails | Missing `\\` before LaTeX backslash inside JSON string |
 | `\\` in `\begin{cases}` not working | Need `\\\\` in JSON for a LaTeX `\\` |
+| **Part shows "Show that — no submission required" but it actually asks the student to find/state/determine something** | Over-flagged as `null`. Re-classify by the **command word** (see §3): set `answer_type` + `correct_answer` from `solution_latex`. For a "show that X, hence find Y" part, grade on Y. |
+| Part asks for several values but only one box appears | Use the multi-box `answers[]` array (see §3), one entry per value, with non-null part-level sentinels. |
+| Multi-box part still renders "no submission required" | Part-level `answer_type` is `null`. Multi-box parts must keep a **non-null** part-level `answer_type`/`correct_answer` sentinel (the real data lives in `answers[]`). |
 | Part answer not grading | Check `answer_type` is set (not null) and `correct_answer` is non-null |
 | Solution not revealing after last part | `part_label` column may be missing — run schema migration first |
 | Marks shown twice in the UI, e.g. `[2] [2]` | The mark count belongs **only** in the part's `prompt_latex` as `\\([N]\\)`. Do **not** also add a `"marks": N` field to the part — the frontend renders both. Omit `marks` entirely (house style; matches ASRJC/DHS). |

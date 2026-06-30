@@ -122,6 +122,7 @@ export const api = {
       question_id: string
       part_label?: string
       answer_given: string
+      field_answers?: { key: string; value: string }[]
       time_taken_s?: number
     }) =>
       request<SubmitAttemptResponse>('/api/attempts', {

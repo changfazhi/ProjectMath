@@ -5,7 +5,11 @@ function stripSolution(q: Question): QuestionPublic {
   const { correct_answer: _ca, solution_latex: _sl, parts, ...pub } = q;
   return {
     ...pub,
-    parts: parts?.map(({ correct_answer: _pca, ...rest }) => rest) ?? null,
+    parts:
+      parts?.map(({ correct_answer: _pca, answers, ...rest }) => ({
+        ...rest,
+        answers: answers?.map(({ correct_answer: _fca, ...field }) => field) ?? answers ?? null,
+      })) ?? null,
   };
 }
 

@@ -3,12 +3,21 @@ export type Difficulty = 1 | 2 | 3
 export type AnswerType = 'exact' | 'mcq' | 'range'
 export type AttemptStatus = 'not_attempted' | 'attempted' | 'correct'
 
+export interface PartAnswerField {
+  key: string
+  label: string
+  answer_type: AnswerType
+  tolerance: number | null
+}
+
 export interface QuestionPart {
   label: string
   prompt_latex: string
   answer_type: AnswerType | null
   tolerance: number | null
   marks?: number | null
+  // When present, render one box per field (e.g. "find a, b and c").
+  answers?: PartAnswerField[] | null
 }
 
 export interface Topic {

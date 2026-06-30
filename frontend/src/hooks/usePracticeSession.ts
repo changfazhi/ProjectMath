@@ -240,7 +240,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
   )
 
   const submitPart = useCallback(
-    async (partLabel: string, answerGiven: string) => {
+    async (partLabel: string, answerGiven: string, fieldAnswers?: { key: string; value: string }[]) => {
       if (!state.question) return
       dispatch({ type: 'PART_SUBMIT_START', partLabel })
       const timeTaken = state.questionStartTime
@@ -251,6 +251,7 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
           question_id: state.question.id,
           part_label: partLabel,
           answer_given: answerGiven,
+          field_answers: fieldAnswers,
           time_taken_s: timeTaken,
         })
         dispatch({

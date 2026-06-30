@@ -34,6 +34,7 @@ Run in order in the Supabase SQL Editor:
 15. `015_acjc_prelim_2025.sql` — 24 ACJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–12, Paper 2 Q1–12)
 16. `016_cjc_prelim_2025.sql` — 22 CJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–11, Paper 2 Q1–11)
 17. `017_grading_transcription.sql` — adds `transcription_latex TEXT` to `gradings` (editable AI transcription of handwriting)
+18. `021_enable_typed_submissions.sql` — re-classifies mis-flagged `null` parts (find/state/determine → typed box) and adds multi-box `answers[]` data across **all 6 papers** (ASRJC, DHS, HCI, ACJC, CJC, RI). 81 `UPDATE`s on `questions.parts`, no DDL. `-- FLAG:` comments mark brittle/exact-match-risky answers and parts left null for review.
 
 **After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
 
@@ -82,7 +83,7 @@ Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). 
 | POST | `/api/pair/:token/photo` | **multipart** single `image` → streams to desktop via `pair:image` |
 | POST | `/api/pair/:token/done` | Grade collected photos → `pair:grading`/`pair:graded`/`pair:error` |
 
-`POST /api/attempts` body: `{ session_id, question_id, answer_given, part_label?, time_taken_s? }`. Include `part_label` for multi-part questions. `solution_latex` in the response is `null` until all graded parts of the question are submitted.
+`POST /api/attempts` body: `{ session_id, question_id, answer_given, part_label?, field_answers?, time_taken_s? }`. Include `part_label` for multi-part questions; include `field_answers: [{ key, value }]` for multi-box parts. `solution_latex` in the response is `null` until all graded parts of the question are submitted.
 
 ## Multi-Part Questions
 
@@ -97,6 +98,8 @@ Questions can have a `parts JSONB` column — an array of per-part objects:
 - `question.prompt_latex` = shared preamble only; `parts[i].prompt_latex` = per-part sub-question
 - `correct_answer` is stripped from parts before sending to the client (same as question-level)
 - Topic status: multi-part questions show ✓ only when **all** graded parts have a correct attempt
+
+**Multi-box parts (several values in one sub-question, e.g. "find a, b and c"):** add an `answers[]` array to the part — `[{ "key": "a", "label": "a", "correct_answer": "\\frac{2}{3}", "answer_type": "exact", "tolerance": null }, ...]`. The frontend renders one labelled box per field; the part is correct only when **every** field matches. Keep the part-level `answer_type`/`correct_answer` as **non-null sentinels** (e.g. `"exact"` + a human-readable joined string) so the existing "graded part" / "reveal when all done" logic still counts it. The part-level and per-field `correct_answer`s are all stripped before the client (`stripSolution` in `questionService.ts`). Submit via `POST /api/attempts` with `field_answers: [{ key, value }]` (grading in `attemptService.ts`); `answer_given` carries a combined display string. Frontend: `MultiFieldInput` in `MultiPartQuestion.tsx`.
 
 **LaTeX in parts JSON:** Every backslash must be doubled (`\frac` → `\\frac`; LaTeX `\\` line break → `\\\\`). Use dollar-quoting (`$$...$$`) in SQL to avoid quote escaping. See `skills.md` for the full workflow.
 

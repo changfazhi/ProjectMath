@@ -10,7 +10,94 @@ import { cn } from '../../lib/utils'
 interface PartInputProps {
   part: QuestionPart
   partState: PartState
-  onSubmit: (answer: string) => void
+  onSubmit: (answer: string, fieldAnswers?: { key: string; value: string }[]) => void
+}
+
+// Renders one labelled box per field for a multi-value part (e.g. "find a, b and c").
+// All boxes share a single Submit; the part is graded correct only if every field matches.
+function MultiFieldInput({ part, partState, onSubmit }: PartInputProps) {
+  const fields = part.answers ?? []
+  const mathRefs = useRef<Record<string, MathFieldHandle | null>>({})
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const [showKeyboard, setShowKeyboard] = useState(false)
+
+  const disabled = partState.phase === 'submitting'
+  const loading = partState.phase === 'submitting'
+
+  function submit() {
+    const fieldAnswers: { key: string; value: string }[] = []
+    for (const f of fields) {
+      const value =
+        f.answer_type === 'range'
+          ? inputRefs.current[f.key]?.value.trim() ?? ''
+          : mathRefs.current[f.key]?.getValue().trim() ?? ''
+      fieldAnswers.push({ key: f.key, value })
+    }
+    if (fieldAnswers.some((fa) => fa.value === '')) return
+    const display = fieldAnswers.map((fa) => `${fa.key} = ${fa.value}`).join(', ')
+    onSubmit(display, fieldAnswers)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {fields.map((f) => (
+        <div key={f.key} className="flex items-center gap-3">
+          <span className="font-mono text-sm text-slate-600 dark:text-slate-300 shrink-0 min-w-[2.5rem] text-right">
+            {renderLatex(f.label)} =
+          </span>
+          {f.answer_type === 'range' ? (
+            <input
+              ref={(el) => { inputRefs.current[f.key] = el }}
+              type="number"
+              step="any"
+              disabled={disabled}
+              onFocus={() => setActiveKey(f.key)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+              placeholder="Enter a number"
+              className="flex-1 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+          ) : (
+            <div className="flex-1" onFocus={() => setActiveKey(f.key)}>
+              <MathField
+                ref={(el) => { mathRefs.current[f.key] = el }}
+                onChange={() => {}}
+                disabled={disabled}
+                className={cn(
+                  'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100',
+                  'focus-within:ring-2 focus-within:ring-blue-500',
+                )}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => {
+            setShowKeyboard((v) => !v)
+            if (!showKeyboard && activeKey) setTimeout(() => mathRefs.current[activeKey]?.focus(), 50)
+          }}
+          disabled={disabled}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed',
+            showKeyboard
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+              : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-blue-400',
+          )}
+        >
+          <span>⌨</span> Math Input
+        </button>
+        <Button onClick={submit} disabled={disabled} loading={loading} size="lg" className="flex-1">
+          Submit ({part.label})
+        </Button>
+      </div>
+      {showKeyboard && !disabled && (
+        <MathKeyboard onInsert={(latex) => { if (activeKey) mathRefs.current[activeKey]?.insert(latex) }} />
+      )}
+    </div>
+  )
 }
 
 function PartInput({ part, partState, onSubmit }: PartInputProps) {
@@ -29,6 +116,26 @@ function PartInput({ part, partState, onSubmit }: PartInputProps) {
       const value = mathRef.current?.getValue().trim() ?? ''
       if (value) onSubmit(value)
     }
+  }
+
+  if (part.answers && part.answers.length > 0) {
+    if (partState.phase === 'done') {
+      return (
+        <div
+          className={cn(
+            'rounded-lg px-4 py-3 text-sm',
+            partState.isCorrect
+              ? 'bg-green-50 dark:bg-green-900/25 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800',
+          )}
+        >
+          <span className={cn('font-semibold', partState.isCorrect ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300')}>
+            {partState.isCorrect ? '✓ Correct' : '✗ Incorrect'}
+          </span>
+        </div>
+      )
+    }
+    return <MultiFieldInput part={part} partState={partState} onSubmit={onSubmit} />
   }
 
   if (partState.phase === 'done') {
@@ -113,7 +220,7 @@ function PartInput({ part, partState, onSubmit }: PartInputProps) {
 interface Props {
   question: QuestionPublic
   partStates: Record<string, PartState>
-  onSubmitPart: (label: string, answer: string) => void
+  onSubmitPart: (label: string, answer: string, fieldAnswers?: { key: string; value: string }[]) => void
   revealed: boolean
 }
 
@@ -124,7 +231,7 @@ export function MultiPartQuestion({ question, partStates, onSubmitPart, revealed
     <div className="flex flex-col">
       {parts.map((part) => {
         const partState = partStates[part.label] ?? { phase: 'idle' as const }
-        const isShowThat = part.answer_type === null
+        const isShowThat = part.answer_type === null && !(part.answers && part.answers.length > 0)
 
         return (
           <div
@@ -149,7 +256,7 @@ export function MultiPartQuestion({ question, partStates, onSubmitPart, revealed
                 <PartInput
                   part={part}
                   partState={partState}
-                  onSubmit={(answer) => onSubmitPart(part.label, answer)}
+                  onSubmit={(answer, fieldAnswers) => onSubmitPart(part.label, answer, fieldAnswers)}
                 />
               )
             )}
