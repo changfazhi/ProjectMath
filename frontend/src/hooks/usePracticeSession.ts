@@ -116,13 +116,14 @@ function reducer(state: PracticeState, action: Action): PracticeState {
         },
       }
 
-      if (action.solutionLatex !== null) {
-        // All graded parts submitted — transition to revealed
-        const gradedParts = state.question?.parts?.filter((p) => p.answer_type !== null) ?? []
-        const allCorrect = gradedParts.every((p) => {
-          if (p.label === action.partLabel) return action.isCorrect
-          return updatedPartStates[p.label]?.isCorrect === true
-        })
+      // Reveal only when every graded part in THIS session is done — not when the backend
+      // happens to return solutionLatex (which also fires on retries because old attempts
+      // already cover all parts in the DB).
+      const gradedParts = state.question?.parts?.filter((p) => p.answer_type !== null) ?? []
+      const allPartsSubmitted = gradedParts.every((p) => updatedPartStates[p.label]?.phase === 'done')
+
+      if (allPartsSubmitted) {
+        const allCorrect = gradedParts.every((p) => updatedPartStates[p.label]?.isCorrect === true)
         return {
           ...state,
           phase: 'revealed',

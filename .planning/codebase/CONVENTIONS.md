@@ -136,6 +136,38 @@ Hooks live in `frontend/src/hooks/`:
 - Phase progression: `'loading' → 'answering' → 'submitted' → 'revealed' → 'complete' | 'error'`
 - Phase `'answering'` returns to itself for `GRADE_REJECTED` (soft error, no penalty)
 
+## Multi-Part Question Submission Pattern
+
+Multi-part questions (`question.parts != null`) track per-part state in `partStates: Record<string, PartState>` inside `usePracticeSession`. Each part has `phase: 'idle' | 'submitting' | 'done'` and an optional `isCorrect` flag.
+
+**The reveal trigger lives entirely in the frontend reducer — never in the backend signal.**
+
+The session transitions to `phase: 'revealed'` only when every graded part in the *current session* has `phase === 'done'` in `updatedPartStates`. "Graded" means `part.answer_type !== null` (show-that parts are excluded).
+
+```ts
+// CORRECT — PART_SUBMIT_DONE case in usePracticeSession.ts
+const gradedParts = state.question?.parts?.filter((p) => p.answer_type !== null) ?? []
+const allPartsSubmitted = gradedParts.every((p) => updatedPartStates[p.label]?.phase === 'done')
+if (allPartsSubmitted) { /* transition to revealed */ }
+```
+
+**Never use `action.solutionLatex !== null` as the reveal trigger.** The backend returns `solution_latex` whenever all graded parts exist in the DB across *any* historical attempt — including previous retries. On a retry the backend returns `solution_latex` after the very first part is submitted (old attempts cover the rest), so using it as a gate causes immediate premature reveal, locks out remaining input boxes, and incorrectly scores the question as wrong. `action.solutionLatex` is used only as the solution *content* when the frontend decides to reveal:
+
+```ts
+result: { ..., solution_latex: action.solutionLatex }  // content only, not a trigger
+```
+
+**Scoring invariant:** `sessionTotal` and `streak` are incremented exactly once, at the moment of reveal. `allCorrect` is `true` only if every graded part in `updatedPartStates` has `isCorrect === true`.
+
+**Show-that parts:** `answer_type === null` → excluded from `gradedParts`, never reach `phase: 'done'`, and do not block reveal. UI renders "Show that — no submission required".
+
+**Multi-box parts:** Parts with an `answers[]` array carry a non-null `answer_type` sentinel at the part level. They are included in `gradedParts` and behave identically to single-box graded parts — the whole part becomes `'done'` once the multi-box submit fires.
+
+**Files:**
+- `frontend/src/hooks/usePracticeSession.ts` — `PART_SUBMIT_DONE` reducer case (reveal logic)
+- `frontend/src/components/question/MultiPartQuestion.tsx` — `PartInput`, `MultiFieldInput` (per-part UI)
+- `frontend/src/pages/PracticePage.tsx` — `showTypedMultiPart`, `revealed` prop passed to `MultiPartQuestion`
+
 ## Naming Conventions
 
 **Files:**
