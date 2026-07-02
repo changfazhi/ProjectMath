@@ -104,7 +104,7 @@ const EDGES: [string, string][] = [
 // Each node echoes the landing-page roadmap cards: a dark card with an icon
 // tile, a thin progress bar and a status label. Status is derived from real
 // per-topic progress — no topic is ever hidden or removed.
-type Status = 'completed' | 'progress' | 'upnext' | 'locked'
+type Status = 'completed' | 'progress' | 'attempted' | 'upnext' | 'empty' | 'locked'
 
 interface StatusStyle {
   card: CSSProperties
@@ -115,15 +115,21 @@ interface StatusStyle {
   sub: string
   track: string
   fill: CSSProperties | null
+  attemptedFill: CSSProperties | null
   label: string
   labelColor: string
   pctColor: string
 }
 
-function statusOf(topic: Topic | null, p: { correct: number; total: number }): Status {
+function statusOf(
+  topic: Topic | null,
+  p: { correct: number; attempted: number; total: number },
+): Status {
   if (!topic) return 'locked'
-  if (p.total > 0 && p.correct >= p.total) return 'completed'
+  if (p.total === 0) return 'empty'
+  if (p.correct >= p.total) return 'completed'
   if (p.correct > 0) return 'progress'
+  if (p.attempted > 0) return 'attempted'
   return 'upnext'
 }
 
@@ -135,7 +141,7 @@ function styleFor(status: Status, accent: Accent): StatusStyle {
         tile: { background: `linear-gradient(135deg,${accent.main},${accent.second})` },
         icon: '✓', iconColor: '#ffffff',
         title: '#ffffff', sub: '#7e84ad',
-        track: '#222742', fill: { background: accent.second },
+        track: '#222742', fill: { background: accent.second }, attemptedFill: { background: `${accent.main}59` },
         label: 'Completed', labelColor: accent.label, pctColor: '#7e84ad',
       }
     case 'progress':
@@ -144,8 +150,17 @@ function styleFor(status: Status, accent: Accent): StatusStyle {
         tile: { background: `linear-gradient(135deg,${accent.main},${accent.second})` },
         icon: '▸', iconColor: '#ffffff',
         title: '#ffffff', sub: '#aab0e6',
-        track: '#222742', fill: { background: `linear-gradient(90deg,${accent.main},${accent.second})` },
+        track: '#222742', fill: { background: `linear-gradient(90deg,${accent.main},${accent.second})` }, attemptedFill: { background: `${accent.main}59` },
         label: 'In progress', labelColor: accent.label, pctColor: '#aab0e6',
+      }
+    case 'attempted':
+      return {
+        card: { background: '#141833', border: `1px solid ${accent.main}55` },
+        tile: { background: '#1b2042', border: `1px solid ${accent.main}55` },
+        icon: '▸', iconColor: accent.label,
+        title: '#e7e9f7', sub: '#aab0e6',
+        track: '#222742', fill: null, attemptedFill: { background: `${accent.main}66` },
+        label: 'Attempted', labelColor: accent.label, pctColor: '#aab0e6',
       }
     case 'upnext':
       return {
@@ -153,8 +168,17 @@ function styleFor(status: Status, accent: Accent): StatusStyle {
         tile: { background: '#1b2042', border: '1px solid #2f3666' },
         icon: '▸', iconColor: '#aab0e6',
         title: '#e7e9f7', sub: '#7e84ad',
-        track: '#222742', fill: { background: '#3a4170' },
+        track: '#222742', fill: { background: '#3a4170' }, attemptedFill: null,
         label: 'Up next', labelColor: '#aab0d6', pctColor: '#7e84ad',
+      }
+    case 'empty':
+      return {
+        card: { background: '#10132a', border: '1px solid #232850', opacity: 0.72 },
+        tile: { background: '#161a33', border: '1px solid #262b4d' },
+        icon: '—', iconColor: '#5b6090',
+        title: '#bcc1e0', sub: '#6a6f99',
+        track: '#1c2138', fill: null, attemptedFill: null,
+        label: 'No questions yet', labelColor: '#6a6f99', pctColor: '#54597e',
       }
     case 'locked':
       return {
@@ -162,7 +186,7 @@ function styleFor(status: Status, accent: Accent): StatusStyle {
         tile: { background: '#161a33', border: '1px solid #262b4d' },
         icon: '⌧', iconColor: '#5b6090',
         title: '#bcc1e0', sub: '#6a6f99',
-        track: '#1c2138', fill: null,
+        track: '#1c2138', fill: null, attemptedFill: null,
         label: 'Locked', labelColor: '#6a6f99', pctColor: '#54597e',
       }
   }
@@ -181,7 +205,7 @@ interface Transform { x: number; y: number; scale: number }
 
 interface Props {
   topics: Topic[]
-  progress: Map<string, { correct: number; total: number }>
+  progress: Map<string, { correct: number; attempted: number; total: number }>
   onTopicClick: (topic: Topic) => void
 }
 
@@ -348,30 +372,34 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
 
         {/* Node cards — styled like the landing-page roadmap cards */}
         {nodes.map(({ name, pos, topic }) => {
-          const p = topic ? (progress.get(topic.id) ?? { correct: 0, total: 0 }) : { correct: 0, total: 0 }
+          const p = topic
+            ? (progress.get(topic.id) ?? { correct: 0, attempted: 0, total: 0 })
+            : { correct: 0, attempted: 0, total: 0 }
           const status = statusOf(topic, p)
           const accent = pos.color === 'emerald' ? STATS_ACCENT : PURE_MATH_ACCENT
           const s = styleFor(status, accent)
-          const pct = p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0
-          const barWidth = status === 'completed' ? 100 : pct
+          const pctCorrect = p.total > 0 ? (p.correct / p.total) * 100 : 0
+          const pctAttempted = p.total > 0 ? (p.attempted / p.total) * 100 : 0
+          const correctWidth = status === 'completed' ? 100 : pctCorrect
+          const clickable = !!topic && status !== 'empty'
 
           return (
             <button
               key={name}
-              disabled={!topic}
-              onClick={() => { if (!didPan.current && topic) onTopicClick(topic) }}
-              className={cn('rm-node absolute flex flex-col justify-center rounded-2xl text-left', topic ? 'cursor-pointer' : 'cursor-not-allowed')}
+              disabled={!clickable}
+              onClick={() => { if (!didPan.current && clickable) onTopicClick(topic!) }}
+              className={cn('rm-node absolute flex flex-col justify-center rounded-2xl text-left', clickable ? 'cursor-pointer' : 'cursor-not-allowed')}
               style={{
                 left: pos.cx - NODE_W / 2,
                 top: pos.cy - NODE_H / 2,
                 width: NODE_W,
-                height: NODE_H,
+                minHeight: NODE_H,
                 padding: '12px 14px',
                 ...s.card,
               }}
             >
               {/* header row: icon tile + title + question count */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <div
                   className="flex-none flex items-center justify-center rounded-[10px]"
                   style={{ width: 32, height: 32, color: s.iconColor, fontSize: 15, ...s.tile }}
@@ -398,22 +426,30 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
                 </div>
               </div>
 
-              {/* progress bar + status row */}
-              {status !== 'locked' && (
+              {/* progress bar + status row — muted "attempted" fill behind the accent "correct" fill */}
+              {status !== 'locked' && status !== 'empty' && (
                 <>
                   <div
-                    className="mt-2 overflow-hidden"
+                    className="mt-2 overflow-hidden relative shrink-0"
                     style={{ height: 6, borderRadius: 99, background: s.track }}
                   >
+                    {s.attemptedFill && (
+                      <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${pctAttempted}%`, borderRadius: 99, ...s.attemptedFill }} />
+                    )}
                     {s.fill && (
-                      <div style={{ height: '100%', width: `${barWidth}%`, borderRadius: 99, ...s.fill }} />
+                      <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${correctWidth}%`, borderRadius: 99, ...s.fill }} />
                     )}
                   </div>
-                  <div className="flex items-center justify-between mt-1.5" style={{ fontSize: 10 }}>
+                  <div className="flex items-center justify-between mt-1.5 shrink-0" style={{ fontSize: 10 }}>
                     <span className="font-bold" style={{ color: s.labelColor }}>{s.label}</span>
-                    <span className="tabular-nums" style={{ color: s.pctColor }}>{barWidth}%</span>
+                    <span className="tabular-nums" style={{ color: s.pctColor }}>{p.correct}/{p.total} correct</span>
                   </div>
                 </>
+              )}
+              {status === 'empty' && (
+                <div className="mt-2 font-bold shrink-0" style={{ fontSize: 10, color: s.labelColor }}>
+                  {s.label}
+                </div>
               )}
             </button>
           )

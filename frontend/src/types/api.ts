@@ -80,6 +80,7 @@ export interface StarToggleResponse {
 export interface TopicProgress {
   topic_id: string
   correct: number
+  attempted: number
   total: number
 }
 

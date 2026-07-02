@@ -1,5 +1,5 @@
 import { supabase } from '../db/supabase.js';
-import type { MathLevel, Topic, TopicAccuracy, TopicProgress } from '../types/index.js';
+import type { MathLevel, QuestionPart, Topic, TopicAccuracy, TopicProgress } from '../types/index.js';
 
 export async function getAllTopics(level?: MathLevel): Promise<Topic[]> {
   let query = supabase
@@ -18,33 +18,56 @@ export async function getAllTopics(level?: MathLevel): Promise<Topic[]> {
 
 export async function getTopicsProgress(userId: string): Promise<TopicProgress[]> {
   const [questionsResult, attemptsResult] = await Promise.all([
-    supabase.from('questions').select('id, topic_id'),
-    supabase
-      .from('attempts')
-      .select('question_id')
-      .eq('session_id', userId)
-      .eq('is_correct', true),
+    supabase.from('questions').select('id, topic_id, parts'),
+    supabase.from('attempts').select('question_id, part_label, is_correct').eq('session_id', userId),
   ]);
 
   if (questionsResult.error) throw new Error(questionsResult.error.message);
   if (attemptsResult.error) throw new Error(attemptsResult.error.message);
 
-  const questions = questionsResult.data as { id: string; topic_id: string }[];
-  const correctIds = new Set(
-    (attemptsResult.data as { question_id: string }[]).map((a) => a.question_id),
-  );
+  const questions = questionsResult.data as {
+    id: string;
+    topic_id: string;
+    parts: QuestionPart[] | null;
+  }[];
+  const attempts = attemptsResult.data as {
+    question_id: string;
+    part_label: string | null;
+    is_correct: boolean;
+  }[];
 
-  const map = new Map<string, { correct: number; total: number }>();
-  for (const q of questions) {
-    if (!map.has(q.topic_id)) map.set(q.topic_id, { correct: 0, total: 0 });
-    const entry = map.get(q.topic_id)!;
-    entry.total++;
-    if (correctIds.has(q.id)) entry.correct++;
+  const attemptedIds = new Set(attempts.map((a) => a.question_id));
+  // Which parts of each question have a correct attempt (part_label = null for single-answer).
+  const correctParts = new Map<string, Set<string | null>>();
+  for (const a of attempts) {
+    if (!a.is_correct) continue;
+    if (!correctParts.has(a.question_id)) correctParts.set(a.question_id, new Set());
+    correctParts.get(a.question_id)!.add(a.part_label);
   }
 
-  return Array.from(map.entries()).map(([topic_id, { correct, total }]) => ({
+  // A question counts as correct only when EVERY graded part has a correct attempt
+  // (single-answer questions: the one null-part attempt). Matches the roadmap ✓ rule.
+  function isQuestionCorrect(id: string, parts: QuestionPart[] | null): boolean {
+    const labels = correctParts.get(id);
+    if (!labels) return false;
+    const graded = (parts ?? []).filter((p) => p.correct_answer !== null);
+    if (graded.length > 0) return graded.every((p) => labels.has(p.label));
+    return labels.has(null);
+  }
+
+  const map = new Map<string, { correct: number; attempted: number; total: number }>();
+  for (const q of questions) {
+    if (!map.has(q.topic_id)) map.set(q.topic_id, { correct: 0, attempted: 0, total: 0 });
+    const entry = map.get(q.topic_id)!;
+    entry.total++;
+    if (attemptedIds.has(q.id)) entry.attempted++;
+    if (isQuestionCorrect(q.id, q.parts)) entry.correct++;
+  }
+
+  return Array.from(map.entries()).map(([topic_id, { correct, attempted, total }]) => ({
     topic_id,
     correct,
+    attempted,
     total,
   }));
 }

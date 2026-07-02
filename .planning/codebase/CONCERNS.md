@@ -160,6 +160,15 @@
 
 ---
 
+### [LOW] `solution_latex` from the backend must not be used as the multi-part reveal trigger
+
+- **Risk:** The backend returns `solution_latex` (non-null) whenever all graded parts for a question exist in the DB across *any* historical attempt — including previous retries. A past bug gated the `'revealed'` phase transition on `action.solutionLatex !== null` in `PART_SUBMIT_DONE`. On any retry, submitting the very first part caused the backend to find the old attempts, return `solution_latex`, and immediately transition to `'revealed'` — locking out the remaining input boxes and scoring the question as wrong even if the submitted part was correct.
+- **Files:** `frontend/src/hooks/usePracticeSession.ts` — `PART_SUBMIT_DONE` reducer case
+- **Current state:** Fixed (2026-07-02). Reveal now triggers on frontend-only state: every graded part in `updatedPartStates` must have `phase === 'done'`. `solution_latex` is retained only as display content.
+- **Do not regress:** Never restore `if (action.solutionLatex !== null)` as the reveal gate. See **CONVENTIONS.md → Multi-Part Question Submission Pattern** for the required invariant.
+
+---
+
 ### [LOW] StrictMode double-invoke causes two API calls on every `PracticePage` mount
 
 - **Risk:** `loadNext` and `loadSpecific` are `useCallback` functions invoked from `useEffect`. StrictMode mounts effects twice, causing two network requests. The second overwrites the first. No data corruption — just wasted requests.

@@ -4,9 +4,9 @@ import { useAuth } from '../contexts/AuthContext'
 
 export function useTopicsProgress() {
   const { user } = useAuth()
-  const [progress, setProgress] = useState<Map<string, { correct: number; total: number }>>(
-    new Map(),
-  )
+  const [progress, setProgress] = useState<
+    Map<string, { correct: number; attempted: number; total: number }>
+  >(new Map())
 
   useEffect(() => {
     if (!user) {
@@ -16,7 +16,14 @@ export function useTopicsProgress() {
     api.topics
       .progress()
       .then((data) => {
-        setProgress(new Map(data.map((p) => [p.topic_id, { correct: p.correct, total: p.total }])))
+        setProgress(
+          new Map(
+            data.map((p) => [
+              p.topic_id,
+              { correct: p.correct, attempted: p.attempted, total: p.total },
+            ]),
+          ),
+        )
       })
       .catch(() => {})
   }, [user])
