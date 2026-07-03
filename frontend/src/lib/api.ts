@@ -218,4 +218,15 @@ export const api = {
     diagnosis: () => request<DiagnosisResult>('/api/review/diagnosis'),
     studyPlan: () => request<StudyPlanResponse>('/api/review/study-plan'),
   },
+
+  billing: {
+    checkout: (plan: 'monthly' | 'annual', method: 'card' | 'paynow' = 'card') =>
+      request<{ url: string }>('/api/billing/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ plan, method }),
+      }),
+
+    portal: () =>
+      request<{ url: string }>('/api/billing/portal', { method: 'POST' }),
+  },
 }

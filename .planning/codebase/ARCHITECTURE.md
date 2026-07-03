@@ -1,14 +1,14 @@
-<!-- refreshed: 2026-06-29 -->
+<!-- refreshed: 2026-07-03 -->
 # Architecture
 
-**Analysis Date:** 2026-06-29
+**Analysis Date:** 2026-07-03
 
 ## System Overview
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │              Browser (React 19 + Vite, port 5173)            │
-│  AuthProvider → AuthContext (Firebase Auth JWT)              │
+│  AuthProvider → AuthContext (Firebase Auth JWT + tier)       │
 │  App.tsx → React Router → Page Components                    │
 │  All fetch via lib/api.ts (attaches Bearer token)            │
 └────────────────────┬─────────────────────────────────────────┘
@@ -24,11 +24,15 @@
           │                       │
           ▼                       ▼
 ┌──────────────────┐   ┌──────────────────────────────────────┐
-│ Supabase          │   │  External AI / Auth                  │
-│ (Postgres +       │   │  - Firebase Auth (token verify)      │
-│  Storage)         │   │  - Gemini 2.5-flash (chat + grading) │
-│ db/supabase.ts    │   │  db/firebase.ts, db/gemini.ts        │
-└──────────────────┘   └──────────────────────────────────────┘
+│ Supabase          │   │  External Services                   │
+│ (Postgres +       │   │  - Firebase Auth (token verify +     │
+│  Storage)         │   │    custom claims for tier)           │
+│ db/supabase.ts    │   │  - Gemini 2.5-flash (chat + grading) │
+└──────────────────┘   │  - Stripe (billing checkout,         │
+                        │    webhooks, customer portal)        │
+                        │  db/firebase.ts, db/gemini.ts,       │
+                        │  db/stripe.ts                        │
+                        └──────────────────────────────────────┘
 ```
 
 ## Component Responsibilities
@@ -49,15 +53,20 @@
 | `attemptService.ts` | Answer grading (exact/range/mcq/symbolic); streak upsert; Supabase write | `backend/src/services/attemptService.ts` |
 | `pairService.ts` | In-memory Map of ephemeral pairing sessions (token → PairSession) | `backend/src/services/pairService.ts` |
 | `featureTiers.ts` | Maps feature name → required tier (`free`/`paid`) | `backend/src/config/featureTiers.ts` |
+| `billingService.ts` | Stripe checkout session creation (card + PayNow); portal session; webhook event handling; Firebase claim grants/revocations | `backend/src/services/billingService.ts` |
+| `UpgradeModal.tsx` | Card/PayNow toggle; plan card selection; triggers checkout redirect via `api.billing.checkout(plan, method)` | `frontend/src/components/UpgradeModal.tsx` |
+| `PremiumExpiryBanner.tsx` | Amber warning bar for PayNow users within 3 days of expiry; shown once per Singapore calendar day; "Renew now" opens UpgradeModal | `frontend/src/components/PremiumExpiryBanner.tsx` |
 
-## Auth Model (firebase-auth branch)
+## Auth Model
 
 **Current state:** Full Firebase Auth is implemented and active. The old `session_id` (localStorage UUID) identity model is replaced.
 
-- **Frontend:** `frontend/src/lib/firebase.ts` initializes Firebase app with `VITE_FIREBASE_*` env vars. `AuthContext.tsx` listens via `onAuthStateChanged`. Reads `tier` claim from `getIdTokenResult().claims`.
+- **Frontend:** `frontend/src/lib/firebase.ts` initializes Firebase app with `VITE_FIREBASE_*` env vars. `AuthContext.tsx` listens via `onAuthStateChanged`. Reads `tier` and `expires_at` claims from `getIdTokenResult().claims` via the shared `applyTokenResult()` helper.
 - **Token flow:** `lib/api.ts:getAuthHeader()` calls `auth.currentUser?.getIdToken()` before every request; appends `Authorization: Bearer <idToken>`.
-- **Backend token verification:** `backend/src/middleware/auth.ts:requireAuth` → `getAuth(getFirebaseAdmin()).verifyIdToken(token)` → upserts `users` table row (`firebase_uid`, `email`) → resolves internal Supabase UUID as `req.user.uid`. All protected routes use `gate('feature')` which composes `requireAuth` + tier check.
-- **Tier system:** `tier` is a custom Firebase Auth claim (`'free'` / `'paid'`). Backend reads it from the decoded token. Frontend reads it from `getIdTokenResult().claims.tier`. Currently all features mapped to `'free'` in `backend/src/config/featureTiers.ts`.
+- **Backend token verification:** `backend/src/middleware/auth.ts:requireAuth` → `getAuth(getFirebaseAdmin()).verifyIdToken(token)` → upserts `users` table row (`firebase_uid`, `email`) → resolves internal Supabase UUID as `req.user.uid`. Also selects `access_expires_at` and enforces PayNow expiry server-side (see Tier System below). All protected routes use `gate('feature')` which composes `requireAuth` + tier check.
+- **Tier system:** `tier` is a custom Firebase Auth claim (`'free'` / `'paid'`), set by `billingService.ts` via Firebase Admin SDK on successful payment. Gated features: `aiHints`, `photoGrading`, `pairUpload` → `'paid'`; `practice`, `review` → `'free'`. For card subscriptions, `tier: 'paid'` claim has no expiry — revoked only on subscription cancellation webhook. For PayNow one-time payments, the claim includes `expires_at: ISO_string`; `requireAuth` checks `users.access_expires_at` against the current time on every request and downgrades to `'free'` if past, clearing the claim and DB field asynchronously.
+- **PayNow expiry enforcement:** Server-side in `requireAuth` (authoritative); client-side via `accessExpiresAt: Date | null` in `AuthContext` (for UI only — banner display). The client cannot be trusted for access control.
+- **refreshTier():** After Stripe checkout redirect, `HomePage.tsx` calls `refreshTier()` which force-refreshes the Firebase ID token (`getIdTokenResult(true)`) and immediately updates both `tier` and `accessExpiresAt` in context without waiting for `onAuthStateChanged`.
 - **Error handling:** 401 → `_callbacks.onUnauthorized()` → opens `LoginModal`. 402 → `_callbacks.onPaymentRequired()` → opens `UpgradeModal`. Both callbacks registered via `setApiCallbacks()` inside `AuthContext.tsx`.
 - **Auth methods:** Google OAuth (`signInWithPopup`) and email/password (`createUserWithEmailAndPassword` / `signInWithEmailAndPassword` + `sendEmailVerification`).
 - **Database identity:** `req.user.uid` is the Supabase `users.id` UUID (not firebase_uid), resolved after upsert in `requireAuth`. All service calls use this UUID as the identity key.
@@ -127,6 +136,34 @@
 7. Backend emits `pair:grading`, then `pair:graded` (with `GradeResponse`) or `pair:error` to the token room
 8. Desktop `usePairSocket` receives events → forwards to `usePracticeSession` via `beginExternalGrading` / `receiveGrading` / `rejectExternalGrading`
 
+### Stripe Billing Checkout Flow
+
+**Card (recurring subscription):**
+1. User clicks "Get Premium" → `UpgradeModal` → selects Card tab → picks Monthly or Annual
+2. `api.billing.checkout(plan, 'card')` → `POST /api/billing/checkout` with `{ plan, method: 'card' }`
+3. `billingService.createCheckoutSession()` looks up or creates Stripe Customer; creates Checkout Session (`mode: 'subscription'`, SGD price)
+4. Returns `{ url }` — frontend redirects `window.location.href = url` to Stripe's hosted page
+5. User fills card details on Stripe → Stripe charges card → redirects to `/roadmap?checkout=success`
+6. Stripe fires `checkout.session.completed` webhook → `handleWebhookEvent` → `grantPaidTier()` → sets Firebase claim `{ tier: 'paid' }` + `subscription_status: 'active'`
+7. `HomePage.tsx` detects `?checkout=success` → calls `refreshTier()` → tier flips in UI instantly → 5s gold toast
+
+**PayNow (one-time payment):**
+1. Same entry as Card; user switches to PayNow tab → picks Monthly (S$15) or Annual (S$144)
+2. `api.billing.checkout(plan, 'paynow')` → `POST /api/billing/checkout` with `{ plan, method: 'paynow' }`
+3. `billingService.createCheckoutSession()` creates Checkout Session (`mode: 'payment'`, `payment_method_types: ['paynow']`, metadata `paynow_plan`)
+4. Stripe shows QR code page → user scans with banking app → Stripe receives PayNow network confirmation
+5. Stripe fires `checkout.session.completed` webhook → `handleWebhookEvent` branches on `session.mode === 'payment'` → `grantPayNowTier()` → sets Firebase claim `{ tier: 'paid', expires_at: ISO_string }` + `access_expires_at` in DB (30 days for monthly, 365 days for annual)
+6. Stripe Checkout page redirects to `/roadmap?checkout=success` → same `refreshTier()` / toast flow as card
+
+**Subscription lifecycle (card only):**
+- `customer.subscription.updated` (past_due / canceled / unpaid) → `revokePaidTier()` → claim reset to `{ tier: 'free' }`, `access_expires_at: null`
+- `customer.subscription.deleted` → same revocation
+- `customer.deleted` (manual Dashboard deletion) → revocation + `stripe_customer_id: null` (stale customer guard)
+
+**PayNow expiry (no webhook):**
+- `requireAuth` checks `users.access_expires_at` on every request — downgrades server-side when past
+- Client shows `PremiumExpiryBanner` within 3 days of expiry (once per SGT calendar day via `localStorage`)
+
 ### AI Hint Chatbot
 
 1. User types in `ChatPanel.tsx` → `useChatSession.send(message)` → optimistic append
@@ -142,7 +179,7 @@
 ## State Management
 
 **Global:**
-- `AuthContext` (`frontend/src/contexts/AuthContext.tsx`) — Firebase `User` object, `tier`, loading flag; mounted at root in `main.tsx`; no other global state stores
+- `AuthContext` (`frontend/src/contexts/AuthContext.tsx`) — Firebase `User` object, `tier`, `accessExpiresAt` (PayNow expiry as `Date | null`), loading flag; mounted at root in `main.tsx`; no other global state stores
 
 **Route-level:**
 - `PracticePage` — `usePracticeSession` reducer (practice phase state machine); `useChatSession`; `usePairSocket`; local `useState` for tabs, input mode, attempts list, solution
@@ -151,10 +188,10 @@
 - `useTopics`, `useTopicsProgress`, `useTopicQuestions`, `useConcepts`, `useAttemptHistory`, `useFeature`, `useStudyPlan`
 
 **Persistent client state:**
-- `localStorage` — Study plan cache (`frontend/src/lib/studyPlan.ts` reads/writes `study_plan` key with date + items + reasoning). Session_id has been removed on this branch.
+- `localStorage` — Study plan cache (`frontend/src/lib/studyPlan.ts`); expiry banner dismissed date (`premium_expiry_banner_dismissed` key, set to current SGT date on dismiss). Session_id has been removed on this branch.
 
 **Server state:**
-- Supabase Postgres — all persistent data: `users`, `attempts`, `starred_questions`, `streaks`, `chat_messages`, `gradings`, `study_plan_cache`, `spaced_repetition_cards`
+- Supabase Postgres — all persistent data: `users` (incl. `stripe_customer_id`, `subscription_status`, `access_expires_at`), `attempts`, `starred_questions`, `streaks`, `chat_messages`, `gradings`, `study_plan_cache`, `spaced_repetition_cards`
 - Supabase Storage — `solution-uploads` bucket for graded photo images
 
 **Ephemeral server state:**
@@ -245,12 +282,16 @@ answering → complete  (no more questions in topic)
 
 **Answer normalization:** `normalizeLaTeX()` in `backend/src/services/attemptService.ts` strips whitespace, expands compact MathLive notation (`\frac34` → `\frac{3}{4}`), lowercases.
 
-**Rate limiting:** `express-rate-limit` on `POST /api/chat` and `POST /api/grade`; IP-keyed; configured via env vars `CHAT_RATE_LIMIT_PER_MIN` (default 15) and `GRADE_RATE_LIMIT_PER_MIN` (default 5).
+**Rate limiting:** `express-rate-limit` on `POST /api/chat` and `POST /api/grade`; IP-keyed; configured via env vars `CHAT_RATE_LIMIT_PER_MIN` (default 15) and `GRADE_RATE_LIMIT_PER_MIN` (default 5). Billing routes (`/api/billing/checkout`, `/api/billing/portal`) have no explicit rate limit beyond Firebase token verification cost.
 
 **Validation:** Zod on all `req.body` and `req.query` in every route handler.
 
 **Logging:** `console.log` / `console.error` only; no structured logging framework.
 
+### Webhook Router Ordering
+
+The billing router **must** be mounted before `express.json()` in `backend/src/index.ts`. The webhook endpoint (`POST /api/billing/webhook`) uses `express.raw({ type: 'application/json' })` to receive the raw body for Stripe signature verification. If `express.json()` runs first, the body is consumed and verification fails with a 400. Non-webhook billing routes (`/checkout`, `/portal`) apply `express.json()` per-route explicitly.
+
 ---
 
-*Architecture analysis: 2026-06-29*
+*Architecture analysis: 2026-07-03*

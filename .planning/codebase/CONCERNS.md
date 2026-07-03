@@ -1,7 +1,7 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-06-29
-**Branch:** firebase-auth (in-progress Firebase Auth migration)
+**Analysis Date:** 2026-07-03
+**Branch:** stripe-API-and-payment
 
 ---
 
@@ -38,11 +38,38 @@
 
 ---
 
-### [HIGH] Firebase tier custom claims are never set — paid tier is unreachable
+### ~~[HIGH] Firebase tier custom claims are never set — paid tier is unreachable~~ RESOLVED 2026-07-03
 
-- **Risk:** `backend/src/middleware/auth.ts` reads `decoded['tier']` from the Firebase ID token to assign `'paid'` tier. However, there is no code anywhere in the backend that calls `setCustomUserClaims()` to grant this claim. `backend/src/config/featureTiers.ts` currently sets all features to `'free'`, which masks the bug — but if any feature is ever gated as `'paid'`, no user will ever be able to access it.
-- **Files:** `backend/src/middleware/auth.ts` line 24; `backend/src/config/featureTiers.ts`
-- **Fix:** Add an admin endpoint or Firebase Cloud Function to set custom claims. Document the mechanism before adding any paid-tier gates.
+- **Resolution:** Stripe billing integration (migrations 022–023, `billingService.ts`, `routes/billing.ts`) now calls `setCustomUserClaims()` on `checkout.session.completed` (card: `{ tier: 'paid' }`; PayNow: `{ tier: 'paid', expires_at: ISO }`), reverts to `{ tier: 'free' }` on subscription cancellation/deletion, and enforces PayNow expiry server-side in `requireAuth`. `featureTiers.ts` now gates `aiHints`, `photoGrading`, and `pairUpload` as `'paid'`.
+
+---
+
+---
+
+### [MEDIUM] PayNow expiry only enforced at auth-request time — client may show stale tier
+
+- **Risk:** When a PayNow subscription expires, the Firebase ID token still contains `tier: 'paid'` until the user makes an authenticated API call (which triggers `requireAuth`'s expiry check). `AuthContext` reads `tier` and `accessExpiresAt` from the token; if the user loads the app with a cached token and doesn't make an API call, the UI may briefly show them as "Premium" even though they're expired. The banner check (`accessExpiresAt <= now`) will not fire correctly either, because the token is stale.
+- **Files:** `backend/src/middleware/auth.ts`; `frontend/src/contexts/AuthContext.tsx`
+- **Severity:** Low in practice — any page navigation that triggers an API call will correct the state immediately. The backend gate always enforces correctly.
+- **Fix:** On app load, force-refresh the Firebase token once (`getIdTokenResult(true)`) if `accessExpiresAt` is non-null and past, so the UI corrects before the first API call.
+
+---
+
+### [LOW] PayNow duplicate-purchase guard uses `access_expires_at` null-check — race condition on concurrent checkout
+
+- **Risk:** `createCheckoutSession` allows a new PayNow checkout if `access_expires_at` is past. If a user opens two browser tabs and triggers checkout simultaneously (both check `access_expires_at` before either has paid), both sessions will pass the guard and result in two charges.
+- **Files:** `backend/src/services/billingService.ts` lines 26–31
+- **Severity:** Very low — requires deliberate concurrent tab abuse; no financial harm beyond double-charging.
+- **Fix:** Use a DB-level idempotency key (e.g., a `pending_checkout` flag set before redirect, cleared by webhook) or Stripe's built-in `idempotency_key` parameter on session creation.
+
+---
+
+### [LOW] Billing portal is unavailable for PayNow users
+
+- **Risk:** PayNow payments are one-time and have no Stripe Subscription object. `POST /api/billing/portal` works correctly for card subscribers (Stripe Customer Portal manages the subscription). For PayNow users, the "✦ Premium" badge in the header calls the portal, which opens a Stripe Customer Portal page with nothing to manage (no active subscription). The user sees an empty portal.
+- **Files:** `frontend/src/components/layout/Header.tsx` (badge onClick); `backend/src/services/billingService.ts` (`createPortalSession`)
+- **Current state:** Functional but confusing — the portal loads, it just has no subscription to show.
+- **Fix:** In `AuthContext`, expose whether the user is on a PayNow plan (e.g., `accessExpiresAt !== null`). In `Header.tsx`, change the PayNow badge click to open the `UpgradeModal` for renewal instead of the portal.
 
 ---
 
@@ -196,15 +223,15 @@
 
 ### Not yet implemented / placeholder state
 
-1. **Custom claims for `tier`** — No mechanism to promote a user to `'paid'`. The `UpgradeModal` shows "coming soon." The monetization path is a shell with no backend wiring.
+1. ~~**Custom claims for `tier`**~~ — **RESOLVED 2026-07-03.** Full Stripe billing integration with card + PayNow is live.
 
 2. **`users` table migration** — The table is required by `requireAuth` but has no documented SQL migration file. Deployment without this table will cause all authenticated requests to return 500.
 
 3. **Email verification enforcement** — `sendEmailVerification()` is called but never checked. Email sign-ups can access the full app with an unverified address.
 
-4. **LandingPage pricing section** — Static HTML showing `$15/mo` / `$12/mo` pricing cards with no payment integration (Stripe, etc.).
+4. ~~**LandingPage pricing section**~~ — **RESOLVED 2026-07-03.** `UpgradeModal.tsx` now connects to real Stripe Checkout for both card and PayNow.
 
-5. **`LandingPage.tsx` is untracked** — The file has not been committed. Switching branches or resetting will lose it.
+5. **`LandingPage.tsx` pricing copy** — The landing page still shows static pricing copy that should be kept in sync with the actual S$15/mo and S$144/yr prices charged through Stripe.
 
 ---
 
@@ -224,4 +251,4 @@
 
 ---
 
-*Concerns audit: 2026-06-29*
+*Concerns audit: 2026-07-03*

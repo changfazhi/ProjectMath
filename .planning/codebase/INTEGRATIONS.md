@@ -1,6 +1,6 @@
 # External Integrations
 
-**Analysis Date:** 2026-06-29
+**Analysis Date:** 2026-07-03
 
 ## Firebase (Auth)
 
@@ -18,10 +18,10 @@
 - Used exclusively in `backend/src/middleware/auth.ts` → `getAuth(getFirebaseAdmin()).verifyIdToken(token)`
 
 **Auth middleware (`backend/src/middleware/auth.ts`):**
-- `requireAuth` — verifies `Authorization: Bearer <idToken>`, resolves/upserts user into Supabase `users` table, attaches `req.user = { uid: supabase_uuid, tier }`
+- `requireAuth` — verifies `Authorization: Bearer <idToken>`, resolves/upserts user into Supabase `users` table (selecting `id, access_expires_at`), attaches `req.user = { uid: supabase_uuid, firebaseUid, email, tier }`
+- PayNow expiry enforcement: if `tier === 'paid'` and `users.access_expires_at` is in the past, downgrades `tier` to `'free'`, async-revokes Firebase claim, async-sets `subscription_status = 'expired'` in DB
 - `gate(feature)` — composes `requireAuth` + tier check against `backend/src/config/featureTiers.ts`
 - Tier is read from the decoded token's `tier` custom claim; defaults to `'free'`
-- All tiers currently set to `'free'` in `featureTiers.ts` (gating infrastructure exists but not enforced)
 
 **Secrets location:** `backend/.env` (never committed)
 
@@ -145,9 +145,85 @@
 **File storage:** Supabase Storage (`solution-uploads` private bucket) — graded photos only
 
 **Client-side storage:**
-- `localStorage` — session UUID (`session_id`), study plan (`study_plan_v1`), first-seed guard; managed in `frontend/src/lib/session.ts` and `frontend/src/lib/studyPlan.ts`
+- `localStorage` — study plan (`study_plan_v1`); PayNow expiry banner dismissed date (`premium_expiry_banner_dismissed`); managed in `frontend/src/lib/studyPlan.ts` and `frontend/src/components/PremiumExpiryBanner.tsx`
 
 **Caching:** None
+
+---
+
+## Stripe (Billing)
+
+**What it does:** Freemium billing with two payment methods and two billing periods. Upgrades unlock AI grading, AI hints chatbot, and phone QR upload.
+
+| Method | Period | Price | Mode | Renewal |
+|---|---|---|---|---|
+| Card | Monthly | S$15 / month | `subscription` | Auto-renews; cancel anytime via portal |
+| Card | Annual | S$144 / year | `subscription` | Auto-renews; cancel anytime via portal |
+| PayNow | Monthly | S$15 one-time | `payment` | No auto-renewal; 30-day access |
+| PayNow | Annual | S$144 one-time | `payment` | No auto-renewal; 365-day access |
+
+**SDK:** `stripe` 22.x (Node.js) — server-side only, never exposed to browser.
+- File: `backend/src/db/stripe.ts` — lazy singleton `getStripe()` (same pattern as `getGemini()`)
+- API version: `2026-06-24.dahlia`
+
+**Stripe resources (sandbox account `acct_1ToaOKKGxkiNQqZh`):**
+- Product: `prod_UoZ2ZzgZseMDCF` — "ProjectMath Premium" (SGD)
+- Card Monthly: `price_1Tp1yVKGxkiNQqZhbHMAkSye` — S$15.00/month recurring
+- Card Annual: `price_1Tp1yXKGxkiNQqZh4CPPsbK7` — S$144.00/year recurring
+- PayNow Monthly: `price_1Tp1yYKGxkiNQqZhHimzyTTq` — S$15.00 one-time
+- PayNow Annual: `price_1Tp1yZKGxkiNQqZhAgumFiMx` — S$144.00 one-time
+
+**Routes (`backend/src/routes/billing.ts`) — mounted BEFORE `express.json()` in `index.ts`:**
+- `POST /api/billing/checkout` — `requireAuth`; body `{ plan: 'monthly'|'annual', method: 'card'|'paynow' }` → resolves Price ID server-side → returns `{ url }` (Stripe Checkout Session redirect URL)
+- `POST /api/billing/portal` — `requireAuth` → Stripe Customer Portal session → `{ url }` (card subscribers only)
+- `POST /api/billing/webhook` — NO auth; raw body (`express.raw`) for signature verification → handles Stripe events
+
+**Checkout session creation (`billingService.createCheckoutSession`):**
+- Card: `mode: 'subscription'`, standard price, `metadata: { user_id, firebase_uid }`
+- PayNow: `mode: 'payment'`, `payment_method_types: ['paynow']`, `metadata: { user_id, firebase_uid, paynow_plan }`
+- Duplicate guard: blocks if `subscription_status === 'active'` unless `access_expires_at` is past (allows PayNow repurchase after expiry)
+- Stale customer guard: verifies Stripe Customer exists before use; recreates if deleted from Dashboard
+
+**Webhook events handled (`billingService.handleWebhookEvent`):**
+- `checkout.session.completed` — branches on `session.mode`:
+  - `'subscription'` → `grantPaidTier()`: sets `{ tier: 'paid' }` claim, `subscription_status: 'active'`, `access_expires_at: null`
+  - `'payment'` → `grantPayNowTier()`: sets `{ tier: 'paid', expires_at: ISO }` claim, `subscription_status: 'active'`, `access_expires_at: <now + 30 or 365 days>`
+- `customer.subscription.updated` (canceled/past_due/unpaid) → `revokePaidTier()`: `{ tier: 'free' }` claim, `access_expires_at: null`
+- `customer.subscription.deleted` → `revokePaidTier()`: same as above, `subscription_status: 'canceled'`
+- `customer.deleted` → `revokePaidTier()` + `stripe_customer_id: null` (handles manual Dashboard deletion)
+
+**Tier propagation:** Firebase custom claim `tier` → decoded in `requireAuth` → `req.user.tier` → `gate()` middleware enforces `featureTiers.ts`
+
+**PayNow expiry enforcement (server-side):** `requireAuth` reads `users.access_expires_at` on every authenticated request. If `tier === 'paid'` and the timestamp has passed, the middleware downgrades `tier` to `'free'` for the current request, then asynchronously revokes the Firebase claim and sets `subscription_status: 'expired'` in DB. No webhook is involved — expiry is purely time-based.
+
+**Feature gates (as of 2026-07-03):**
+- `aiHints`: paid
+- `photoGrading`: paid
+- `pairUpload`: paid
+- `practice`, `review`: free
+
+**DB columns on `users` table:**
+- `stripe_customer_id TEXT UNIQUE` — added migration 022; links Supabase user to Stripe Customer
+- `subscription_status TEXT` — added migration 022; mirrors Stripe status (`active`, `canceled`, `past_due`, `expired`, null)
+- `access_expires_at TIMESTAMPTZ` — added migration 023; non-null only for PayNow users; null for card subscribers and free users
+
+**Frontend integration:**
+- `api.billing.checkout(plan, method)` / `api.billing.portal()` in `frontend/src/lib/api.ts`
+- `UpgradeModal.tsx` — Card/PayNow toggle at top; per-tab plan cards with appropriate framing (card: "auto-renews, cancel anytime"; PayNow: "one-time, no auto-renewal"); S$ prices
+- `Header.tsx` — "✦ Get Premium" button (gold gradient) for free users; "✦ Premium" badge (amber) for paid users; badge click opens billing portal
+- `HomePage.tsx` — two-effect pattern handles `?checkout=success` redirect: effect 1 detects param on mount; effect 2 fires when `user` resolves; calls `refreshTier()` → `accessExpiresAt` updated; 5s gold toast
+- `PremiumExpiryBanner.tsx` — amber warning bar; shown only when `accessExpiresAt !== null` (PayNow users) and within 3 days of expiry; dismissed once per Singapore calendar day via `localStorage` key `premium_expiry_banner_dismissed`; "Renew now" opens UpgradeModal; mounted in `RootLayout` in `App.tsx`
+- `AuthContext.tsx` — exposes `accessExpiresAt: Date | null` read from `expires_at` Firebase claim; `refreshTier()` calls `getIdTokenResult(true)` and updates both `tier` and `accessExpiresAt` via shared `applyTokenResult()`
+
+**Webhook router ordering:** Billing router is mounted before `app.use(express.json())` in `backend/src/index.ts`. The `/webhook` sub-route uses `express.raw({ type: 'application/json' })`; `/checkout` and `/portal` apply `express.json()` per-route. Order is critical — reversing it breaks webhook signature verification.
+
+**Dev setup:**
+1. Run `stripe listen --forward-to localhost:3001/api/billing/webhook` in a separate terminal
+2. Copy the printed `whsec_...` into `backend/.env` as `STRIPE_WEBHOOK_SECRET`
+3. Each developer runs their own `stripe listen` → gets their own unique `whsec_...` (the Stripe secret key and price IDs are shared; only the webhook secret is per-machine)
+4. To reset a test account to free: `npx tsx backend/scripts/reset-user-tier.ts <email>`
+
+**PayNow test mode:** Stripe shows a QR code with a "Simulate scan" button. Clicking it opens a separate "PayNow test payment page" where "Authorize test payment" fires the webhook. The auto-redirect back to `success_url` does NOT happen in test mode (sandbox limitation); navigate manually to `/roadmap?checkout=success`. In live mode, the user stays on the QR page while paying via their banking app and the page auto-redirects after confirmation.
 
 ---
 
@@ -196,6 +272,13 @@
 - `PORT` — default 3001
 - `NODE_ENV` — controls CORS origin selection
 - `CORS_ORIGIN` — production frontend URL
+- `STRIPE_SECRET_KEY` — `sk_test_...` dev / `sk_live_...` prod (required for billing; shared across team)
+- `STRIPE_WEBHOOK_SECRET` — **per-developer**: `whsec_...` from `stripe listen` (dev); Stripe Dashboard webhook endpoint secret (prod); each developer must run `stripe listen` and use the printed secret in their own `.env`
+- `STRIPE_PRICE_MONTHLY` — `price_1Tp1yVKGxkiNQqZhbHMAkSye` (S$15/mo card recurring, SGD)
+- `STRIPE_PRICE_ANNUAL` — `price_1Tp1yXKGxkiNQqZh4CPPsbK7` (S$144/yr card recurring, SGD)
+- `STRIPE_PRICE_MONTHLY_PAYNOW` — `price_1Tp1yYKGxkiNQqZhHimzyTTq` (S$15 PayNow one-time, SGD)
+- `STRIPE_PRICE_ANNUAL_PAYNOW` — `price_1Tp1yZKGxkiNQqZhAgumFiMx` (S$144 PayNow one-time, SGD)
+- `FRONTEND_URL` — default `http://localhost:5173`; override in production for Stripe redirect URLs
 
 **Frontend (`frontend/.env`):**
 - `VITE_FIREBASE_API_KEY`
@@ -205,4 +288,4 @@
 
 ---
 
-*Integration audit: 2026-06-29*
+*Integration audit: 2026-07-03*

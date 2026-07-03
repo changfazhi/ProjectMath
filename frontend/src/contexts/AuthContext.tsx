@@ -19,6 +19,7 @@ type Tier = 'free' | 'paid'
 interface AuthContextValue {
   user: User | null
   tier: Tier | null
+  accessExpiresAt: Date | null
   loading: boolean
   signInWithGoogle: () => Promise<void>
   signInWithEmail: (email: string, password: string) => Promise<void>
@@ -26,6 +27,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   openLoginModal: (message?: string) => void
   openUpgradeModal: () => void
+  refreshTier: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -39,19 +41,27 @@ export function useAuth(): AuthContextValue {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [tier, setTier] = useState<Tier | null>(null)
+  const [accessExpiresAt, setAccessExpiresAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [loginMessage, setLoginMessage] = useState<string | undefined>()
   const [showLogin, setShowLogin] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
+
+  function applyTokenResult(result: { claims: Record<string, unknown> }) {
+    setTier(result.claims['tier'] === 'paid' ? 'paid' : 'free')
+    const expiresAtRaw = result.claims['expires_at']
+    setAccessExpiresAt(typeof expiresAtRaw === 'string' ? new Date(expiresAtRaw) : null)
+  }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u)
       if (u) {
         const result = await u.getIdTokenResult()
-        setTier(result.claims['tier'] === 'paid' ? 'paid' : 'free')
+        applyTokenResult(result)
       } else {
         setTier(null)
+        setAccessExpiresAt(null)
       }
       setLoading(false)
     })
@@ -63,6 +73,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setShowLogin(true)
   }
   const openUpgradeModal = () => setShowUpgrade(true)
+
+  const refreshTier = async () => {
+    if (!auth.currentUser) return
+    const result = await auth.currentUser.getIdTokenResult(true)
+    applyTokenResult(result)
+  }
 
   useEffect(() => {
     setApiCallbacks({
@@ -94,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, tier, loading, signInWithGoogle, signInWithEmail, signUp, signOut, openLoginModal, openUpgradeModal }}
+      value={{ user, tier, accessExpiresAt, loading, signInWithGoogle, signInWithEmail, signUp, signOut, openLoginModal, openUpgradeModal, refreshTier }}
     >
       {children}
       {showLogin && (

@@ -12,6 +12,7 @@ import chatRouter from './routes/chat.js';
 import gradeRouter from './routes/grade.js';
 import pairRouter from './routes/pair.js';
 import reviewRouter from './routes/review.js';
+import billingRouter from './routes/billing.js';
 import { initRealtime } from './realtime.js';
 
 const app = express();
@@ -22,6 +23,11 @@ app.use(cors({
     ? (process.env.CORS_ORIGIN ?? 'https://yourproductiondomain.com')
     : 'http://localhost:5173',
 }));
+
+// Billing router mounts BEFORE express.json() so the webhook route can receive raw body
+// for Stripe signature verification. Non-webhook billing routes apply express.json() themselves.
+app.use('/api/billing', billingRouter);
+
 app.use(express.json());
 
 app.use('/api/topics', topicsRouter);

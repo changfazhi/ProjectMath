@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import type { Topic } from '../types/api'
 import { useTopics } from '../hooks/useTopics'
 import { useVisitedTopics } from '../hooks/useVisitedTopics'
 import { useTopicsProgress } from '../hooks/useTopicsProgress'
+import { useAuth } from '../contexts/AuthContext'
 import { RoadmapGraph } from '../components/topic/RoadmapGraph'
 import { TopicDrawer } from '../components/topic/TopicDrawer'
 import { Spinner } from '../components/ui/Spinner'
@@ -25,6 +26,30 @@ export function HomePage() {
   const { markVisited } = useVisitedTopics()
   const progress = useTopicsProgress()
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null)
+  const [checkoutToast, setCheckoutToast] = useState<string | null>(null)
+  const [pendingSuccess, setPendingSuccess] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { user, refreshTier } = useAuth()
+
+  // Detect ?checkout=success on mount and clean the URL immediately.
+  // Don't read `user` here — Firebase auth is async and may still be null.
+  useEffect(() => {
+    const status = searchParams.get('checkout')
+    if (!status) return
+    setSearchParams(prev => { prev.delete('checkout'); return prev }, { replace: true })
+    if (status === 'success') setPendingSuccess(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once user is available and we have a pending success, force-refresh the
+  // Firebase token claims and update tier state immediately (no page reload needed).
+  useEffect(() => {
+    if (!pendingSuccess || !user) return
+    setPendingSuccess(false)
+    refreshTier().then(() => {
+      setCheckoutToast('Welcome to Premium! Your features are now unlocked.')
+      setTimeout(() => setCheckoutToast(null), 5000)
+    }).catch(() => {})
+  }, [pendingSuccess, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleTopicClick(topic: Topic) {
     markVisited(topic.id)
@@ -33,6 +58,14 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col h-full bg-[#0b0e20]">
+      {checkoutToast && (
+        <div
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 px-5 py-3 rounded-xl text-sm font-semibold text-white shadow-xl"
+          style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}
+        >
+          {checkoutToast}
+        </div>
+      )}
       {/* Title bar */}
       <div className="max-w-5xl mx-auto px-6 pt-9 pb-5 w-full shrink-0">
         <div className="text-[13px] font-bold uppercase tracking-[0.1em] text-[#a5abe0]">

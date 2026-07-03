@@ -1,11 +1,11 @@
 import { useAuth } from '../contexts/AuthContext'
 
 const FEATURE_TIERS: Record<string, 'free' | 'paid'> = {
-  practice: 'free',
-  aiHints: 'free',
-  photoGrading: 'free',
-  pairUpload: 'free',
-  review: 'free',
+  practice:     'free',
+  aiHints:      'paid',
+  photoGrading: 'paid',
+  pairUpload:   'paid',
+  review:       'free',
 }
 
 export function useFeature(feature: string): boolean {
