@@ -90,9 +90,9 @@
 
 ### Landing Page Payment CTA
 
-- [ ] **PAY-01**: The landing page "Go Pro" CTA (Pricing section, `LandingPage.tsx`) opens the real upgrade flow instead of being a dead `href="#"` link
-- [ ] **PAY-02**: A logged-out visitor clicking "Go Pro" is prompted to log in; after successful sign-in they land directly in the upgrade modal (not just redirected to `/roadmap`)
-- [ ] **PAY-03**: A logged-in visitor clicking "Go Pro" opens the upgrade modal immediately, with no extra navigation
+- [x] **PAY-01**: The landing page "Go Pro" CTA (Pricing section, `LandingPage.tsx`) opens the real upgrade flow instead of being a dead `href="#"` link
+- [x] **PAY-02**: A logged-out visitor clicking "Go Pro" is prompted to log in; after successful sign-in they land directly in the upgrade modal (not just redirected to `/roadmap`)
+- [x] **PAY-03**: A logged-in visitor clicking "Go Pro" opens the upgrade modal immediately, with no extra navigation
 
 ## Out of Scope
 
@@ -105,9 +105,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PAY-01 | Phase 3 | Pending |
-| PAY-02 | Phase 3 | Pending |
-| PAY-03 | Phase 3 | Pending |
+| PAY-01 | Phase 3 | Complete |
+| PAY-02 | Phase 3 | Complete |
+| PAY-03 | Phase 3 | Complete |
 
 **Coverage:**
 

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Landing Page Payment Entry Point
-current_phase: 3
-current_phase_name: roadmap created, not yet planned
-status: planning
+current_phase: 03
+current_phase_name: landing-page-go-pro-payment-entry-point
+status: executing
 stopped_at: Phase 3 UI-SPEC approved
-last_updated: "2026-07-04T03:44:43.124Z"
+last_updated: "2026-07-04T04:01:46.106Z"
 last_activity: 2026-07-04
-last_activity_desc: v1.1 roadmap created (Phase 3, continues numbering from v1.0's Phases 1–2)
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-04)
 
 **Core value:** Visitors can start a Premium upgrade directly from the landing page's pricing pitch, without first having to find their way into the app.
-**Current focus:** Phase 3 — Landing Page "Go Pro" Payment Entry Point
+**Current focus:** Phase 03 — landing-page-go-pro-payment-entry-point
 
 ## Current Position
 
-Phase: Phase 3 — Landing Page "Go Pro" Payment Entry Point (roadmap created, not yet planned)
-Plan: —
-Status: Roadmap created — ready for planning
-Last activity: 2026-07-04 — v1.1 roadmap created (Phase 3, continues numbering from v1.0's Phases 1–2)
+Phase: 03 (landing-page-go-pro-payment-entry-point) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-07-04 — Phase 03 execution started
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Last activity: 2026-07-04 — v1.1 roadmap created (Phase 3, continues numbering
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 03 P01 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - Reuse the existing globally-mounted `UpgradeModal` / `openUpgradeModal()` rather than a landing-page-specific modal — avoids duplicating checkout logic
 - Keep the Header "Get Premium" button unchanged — it stays as a second, unmodified entry point
 - Milestone v1.1 is frontend-only wiring: no new backend routes (`POST /api/billing/checkout` and the upgrade modal already exist)
+- [Phase 03]: Reused existing data-attribute delegation pattern (data-login) for the new data-goto-pro CTA — no new component, no href/class/style changes to the anchor
+- [Phase 03]: goProIntentRef kept as a plain in-memory React ref (not localStorage/sessionStorage) per threat T-03-01 — resets on reload, cannot leak into a later unrelated sign-in
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-04T03:44:43.121Z
+Last session: 2026-07-04T04:00:47.690Z
 Stopped at: Phase 3 UI-SPEC approved
 Resume file: .planning/phases/03-landing-page-go-pro-payment-entry-point/03-UI-SPEC.md
