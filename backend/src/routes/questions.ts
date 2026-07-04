@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
+import { compileGraph } from '../services/graphService.js';
 import { getNextQuestion, getQuestionById, getQuestionsByTopicWithStatus, getQuestionWithSolution } from '../services/questionService.js';
+import type { SolutionGraphRender } from '../types/index.js';
 
 const router = Router();
 
@@ -44,7 +46,18 @@ router.get('/:id/solution', async (req, res) => {
       res.status(404).json({ error: 'Question not found' });
       return;
     }
-    res.json({ solution_latex: question.solution_latex ?? null });
+    // Compile model sketches for parts that have one; a broken spec skips that
+    // part rather than failing the whole solution.
+    const graphs: SolutionGraphRender[] = [];
+    for (const part of question.parts ?? []) {
+      if (!part.solution_graph) continue;
+      try {
+        graphs.push(compileGraph(part.label, part.solution_graph));
+      } catch {
+        // skip malformed spec
+      }
+    }
+    res.json({ solution_latex: question.solution_latex ?? null, graphs });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

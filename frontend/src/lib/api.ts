@@ -10,6 +10,7 @@ import type {
   MathLevel,
   PairContext,
   QuestionPublic,
+  SolutionGraphRender,
   QuestionWithStatus,
   ReviewItem,
   StarredQuestionRow,
@@ -114,7 +115,9 @@ export const api = {
     get: (id: string) => request<QuestionPublic>(`/api/questions/${id}`),
 
     solution: (id: string) =>
-      request<{ solution_latex: string | null }>(`/api/questions/${id}/solution`),
+      request<{ solution_latex: string | null; graphs?: SolutionGraphRender[] }>(
+        `/api/questions/${id}/solution`,
+      ),
   },
 
   attempts: {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import type { Attempt, Difficulty } from '../types/api'
+import type { Attempt, Difficulty, SolutionGraphRender } from '../types/api'
 import { usePracticeSession } from '../hooks/usePracticeSession'
 import { QuestionCard } from '../components/question/QuestionCard'
 import { QuestionHeader } from '../components/question/QuestionHeader'
@@ -11,6 +11,7 @@ import { PhotoAnswer } from '../components/question/PhotoAnswer'
 import { GradingResult } from '../components/question/GradingResult'
 import { TranscriptionEditor } from '../components/question/TranscriptionEditor'
 import { SolutionReveal } from '../components/question/SolutionReveal'
+import { SolutionGraph } from '../components/question/SolutionGraph'
 import { StatsBar } from '../components/progress/StatsBar'
 import { Badge } from '../components/ui/Badge'
 import { Spinner } from '../components/ui/Spinner'
@@ -65,6 +66,7 @@ export function PracticePage() {
 
   // Solution tab state
   const [solutionLatex, setSolutionLatex] = useState<string | null>(null)
+  const [solutionGraphs, setSolutionGraphs] = useState<SolutionGraphRender[]>([])
   const [solutionLoading, setSolutionLoading] = useState(false)
   const [solutionError, setSolutionError] = useState<string | null>(null)
 
@@ -107,6 +109,7 @@ export function PracticePage() {
     setActiveTab('question')
     setInputMode('photo')
     setSolutionLatex(null)
+    setSolutionGraphs([])
     setSolutionError(null)
   }, [session.question?.id])
 
@@ -115,7 +118,10 @@ export function PracticePage() {
     if (activeTab !== 'solution' || !session.question?.id || solutionLatex !== null || solutionError !== null) return
     setSolutionLoading(true)
     api.questions.solution(session.question.id)
-      .then((data) => setSolutionLatex(data.solution_latex ?? ''))
+      .then((data) => {
+        setSolutionLatex(data.solution_latex ?? '')
+        setSolutionGraphs(data.graphs ?? [])
+      })
       .catch((e: Error) => setSolutionError(e.message))
       .finally(() => setSolutionLoading(false))
   }, [activeTab, session.question?.id, solutionLatex, solutionError])
@@ -442,16 +448,24 @@ export function PracticePage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">
                 Solution
               </p>
-              {!solutionLatex ? (
+              {!solutionLatex && solutionGraphs.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   No solution available for this question.
                 </p>
               ) : (
                 <div className="flex flex-col gap-4">
-                  {solutionLatex.split(/\n\n+/).map((block, i) => (
+                  {(solutionLatex ?? '').split(/\n\n+/).filter(Boolean).map((block, i) => (
                     <div key={i} className="text-base leading-relaxed text-slate-800 dark:text-slate-100">
                       {renderLatex(block.trim())}
                     </div>
+                  ))}
+                  {solutionGraphs.map((g) => (
+                    <figure key={g.part_label} className="flex flex-col gap-2">
+                      <figcaption className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Part ({g.part_label}) — model sketch
+                      </figcaption>
+                      <SolutionGraph graph={g} />
+                    </figure>
                   ))}
                 </div>
               )}

@@ -20,6 +20,32 @@ export interface QuestionPart {
   answers?: PartAnswerField[] | null
 }
 
+// Compiled model sketch for a sketch part, served by the solution endpoint.
+// Expression-free: the backend samples curves into polylines (mirrors the
+// backend's SolutionGraphRender).
+export interface GraphPoint {
+  x: number
+  y: number
+  label?: string | null
+  kind?: 'min' | 'max' | 'intercept' | 'inflection' | 'point' | null
+}
+
+export interface RenderedAsymptote {
+  kind: 'vertical' | 'horizontal' | 'oblique'
+  x?: number
+  points?: [number, number][]
+  label?: string | null
+}
+
+export interface SolutionGraphRender {
+  part_label: string
+  x_range: [number, number]
+  y_range: [number, number]
+  curves: { segments: [number, number][][]; label?: string | null }[]
+  asymptotes: RenderedAsymptote[]
+  points: GraphPoint[]
+}
+
 export interface Topic {
   id: string
   name: string
