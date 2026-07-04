@@ -490,8 +490,15 @@ export function LandingPage() {
   useEffect(() => {
     const justLoggedIn = prevUserRef.current == null && user != null
     prevUserRef.current = user
-    if (!loading && justLoggedIn) navigate('/roadmap', { replace: true })
-  }, [user, loading, navigate])
+    if (!loading && justLoggedIn) {
+      if (goProIntentRef.current) {
+        goProIntentRef.current = false
+        openUpgradeModal()
+      } else {
+        navigate('/roadmap', { replace: true })
+      }
+    }
+  }, [user, loading, navigate, openUpgradeModal])
 
   // Clicks inside the static markup are delegated here:
   //  - the "Log in" link (data-login) opens the auth modal
