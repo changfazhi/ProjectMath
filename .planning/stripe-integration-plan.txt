@@ -1,0 +1,214 @@
+STRIPE INTEGRATION PLAN — ProjectMath
+======================================
+Branch: stripe-API-and-payment
+Date: 2026-07-03
+
+OVERVIEW
+--------
+Freemium model: monthly ($15/mo) and annual ($144/yr = $12/mo) subscriptions.
+Premium gates: AI hints chatbot + photo-based AI grader + phone QR upload.
+Uses Stripe Checkout (hosted payment page — no Stripe.js needed on frontend).
+Tier propagated via Firebase custom claims (existing mechanism).
+
+
+STEP 1 — Create Stripe Product + Prices (MCP)
+----------------------------------------------
+- Product: "ProjectMath Premium"
+- Price A: $15.00 / month recurring
+- Price B: $144.00 / year recurring
+- Save both Price IDs → go into .env as STRIPE_PRICE_MONTHLY and STRIPE_PRICE_ANNUAL
+
+
+STEP 2 — Environment Variables
+--------------------------------
+Add to backend/.env (fill in manually):
+
+  STRIPE_SECRET_KEY=sk_test_...          # Stripe Dashboard → Developers → API keys
+  STRIPE_WEBHOOK_SECRET=whsec_...        # From running: stripe listen --forward-to localhost:3001/api/billing/webhook
+  STRIPE_PRICE_MONTHLY=price_...         # From Step 1
+  STRIPE_PRICE_ANNUAL=price_...          # From Step 1
+
+Dev vs Production:
+- Local .env uses sk_test_... + whsec_... from `stripe listen`
+- Production env (hosting platform dashboard) uses sk_live_... + whsec_... from Stripe Dashboard webhook endpoint
+- Never commit .env; never put live keys in .env
+
+Running stripe listen (do this AFTER the backend is built):
+  stripe listen --forward-to localhost:3001/api/billing/webhook
+  → Prints: "Your webhook signing secret is whsec_abc123..."
+  → Copy that into STRIPE_WEBHOOK_SECRET in .env
+  → Keep the terminal open while testing
+
+
+STEP 3 — Install Stripe SDK
+-----------------------------
+  cd backend && npm install stripe
+
+
+STEP 4 — Stripe Client Singleton
+----------------------------------
+New file: backend/src/db/stripe.ts
+- Lazy-init pattern matching gemini.ts
+- Throws on missing STRIPE_SECRET_KEY
+
+
+STEP 5 — Database Migration
+-----------------------------
+File: backend/supabase/migrations/022_stripe_billing.sql
+Adds to the existing `users` table:
+  - stripe_customer_id TEXT UNIQUE   (links user to their Stripe Customer)
+  - subscription_status TEXT         (mirrors Stripe: 'active', 'canceled', 'past_due', null)
+
+Run in Supabase SQL Editor after the other migrations.
+
+
+STEP 6 — Billing Service
+--------------------------
+New file: backend/src/services/billingService.ts
+
+Functions:
+  createCheckoutSession(userId, email, priceId)
+    - Finds or creates Stripe Customer (reuse stripe_customer_id from users table)
+    - Creates Stripe Checkout Session (mode: 'subscription')
+    - Success URL: <origin>/roadmap?checkout=success
+    - Cancel URL:  <origin>/roadmap?checkout=canceled
+    - Returns { url }
+
+  createPortalSession(userId)
+    - Looks up stripe_customer_id for the user
+    - Creates Stripe Customer Portal session
+    - Returns { url }
+
+  handleWebhookEvent(rawBody, signature)
+    - Verifies Stripe signature using STRIPE_WEBHOOK_SECRET
+    - Handles events:
+        checkout.session.completed
+          → setCustomUserClaims(firebaseUid, { tier: 'paid' })
+          → UPDATE users SET subscription_status='active' WHERE id=userId
+
+        customer.subscription.updated  (status = 'canceled' | 'past_due')
+          → setCustomUserClaims(firebaseUid, { tier: 'free' })
+          → UPDATE users SET subscription_status=<status>
+
+        customer.subscription.deleted
+          → setCustomUserClaims(firebaseUid, { tier: 'free' })
+          → UPDATE users SET subscription_status='canceled'
+
+
+STEP 7 — Billing Routes
+-------------------------
+New file: backend/src/routes/billing.ts
+
+  POST /api/billing/checkout   requireAuth   body: { priceId }  → { url }
+  POST /api/billing/portal     requireAuth                       → { url }
+  POST /api/billing/webhook    NO auth, raw body                 → 200 OK
+
+IMPORTANT: The webhook route uses express.raw({ type: 'application/json' })
+to receive the unprocessed body for Stripe signature verification.
+It must be mounted in index.ts BEFORE express.json() applies to it.
+
+
+STEP 8 — Feature Gating
+------------------------
+backend/src/config/featureTiers.ts:
+  aiHints:      'paid'    (was 'free')
+  photoGrading: 'paid'    (was 'free')
+  pairUpload:   'paid'    (was 'free')
+
+frontend/src/hooks/useFeature.ts:
+  Mirror the same values.
+
+The existing gate() middleware already returns HTTP 402,
+which already triggers openUpgradeModal() in AuthContext via onPaymentRequired.
+No further wiring needed.
+
+
+STEP 9 — UpgradeModal Redesign
+--------------------------------
+Replace frontend/src/components/UpgradeModal.tsx
+
+Design:
+  - Closable backdrop modal (click outside or X to close)
+  - Header: "Upgrade to Premium"
+  - Two large side-by-side plan cards:
+
+    [  Monthly          ]  [  Annual            ]
+    [  $15 / month      ]  [  $144 / year       ]
+    [                   ]  [  Save 20% badge    ]
+    [  • AI grading     ]  [  • AI grading      ]
+    [  • AI hints       ]  [  • AI hints        ]
+    [  • Phone upload   ]  [  • Phone upload    ]
+    [  $15/mo           ]  [  $12/mo            ]
+
+  - Clicking a card → POST /api/billing/checkout → redirect to Stripe URL
+  - Loading spinner on the clicked card while session is created
+  - Error message if checkout session creation fails
+
+
+STEP 10 — Header Update
+------------------------
+frontend/src/components/layout/Header.tsx
+
+  When user is logged in AND tier === 'free':
+    Show "Get Premium" button (gold/amber gradient) between nav and auth button
+    → calls openUpgradeModal() from useAuth()
+
+  When tier === 'paid':
+    Show subtle "✦ Premium" text badge (no action)
+
+  When not logged in:
+    Hide entirely (Sign in is the primary CTA)
+
+
+STEP 11 — Frontend API Methods
+--------------------------------
+Add to frontend/src/lib/api.ts:
+
+  api.billing.checkout(priceId: string) → Promise<{ url: string }>
+  api.billing.portal()                  → Promise<{ url: string }>
+
+
+STEP 12 — Post-Checkout Redirect Handling
+------------------------------------------
+In frontend/src/pages/HomePage.tsx (the /roadmap route):
+
+  On mount, check URL params:
+    ?checkout=success
+      → call user.getIdToken(true)  (force-refresh Firebase token)
+      → onAuthStateChanged re-reads claims → tier flips to 'paid' in AuthContext
+      → show brief success toast "Welcome to Premium!"
+      → clean the URL param
+
+    ?checkout=canceled
+      → silently clean the URL param (user already back on app)
+
+
+KNOWN CONSTRAINTS
+-----------------
+- Webhook route needs raw body — mounted before express.json() in index.ts
+- Live keys must NEVER go in .env file; set them only in the hosting platform's env dashboard
+- After gating features, free users lose AI access immediately — coordinate timing with launch
+- Firebase custom claims are cached in the ID token (1-hour TTL) — force refresh on success redirect resolves this instantly for the paying user; other sessions auto-refresh within 1 hour
+
+
+FILES CHANGED / CREATED
+------------------------
+New:
+  backend/src/db/stripe.ts
+  backend/src/services/billingService.ts
+  backend/src/routes/billing.ts
+  backend/supabase/migrations/022_stripe_billing.sql
+  .planning/stripe-integration-plan.txt  (this file)
+
+Modified:
+  backend/.env                              (add 4 vars — user fills STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET)
+  backend/.env.example                      (document new vars)
+  backend/src/index.ts                      (mount billing routes, raw body for webhook)
+  backend/src/config/featureTiers.ts        (gate 3 features as paid)
+  backend/src/types/index.ts                (add billing types)
+  frontend/src/hooks/useFeature.ts          (mirror tier gates)
+  frontend/src/lib/api.ts                   (add api.billing.*)
+  frontend/src/types/api.ts                 (mirror billing types)
+  frontend/src/components/UpgradeModal.tsx  (full redesign)
+  frontend/src/components/layout/Header.tsx (add Get Premium button)
+  frontend/src/pages/HomePage.tsx           (handle ?checkout=success/canceled)

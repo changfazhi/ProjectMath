@@ -7,7 +7,7 @@ import { FEATURE_TIERS } from '../config/featureTiers.js';
 declare global {
   namespace Express {
     interface Request {
-      user?: { uid: string; tier: 'free' | 'paid' };
+      user?: { uid: string; firebaseUid: string; email: string | null; tier: 'free' | 'paid' };
     }
   }
 }
@@ -21,7 +21,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const token = header.slice(7);
   try {
     const decoded = await getAuth(getFirebaseAdmin()).verifyIdToken(token);
-    const tier = decoded['tier'] === 'paid' ? 'paid' : 'free';
+    let tier: 'free' | 'paid' = decoded['tier'] === 'paid' ? 'paid' : 'free';
 
     // Atomic upsert — safe under concurrent first-logins.
     const { data, error } = await supabase
@@ -30,7 +30,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         { firebase_uid: decoded.uid, email: decoded.email ?? null },
         { onConflict: 'firebase_uid' },
       )
-      .select('id')
+      .select('id, access_expires_at')
       .single();
 
     if (error || !data) {
@@ -38,7 +38,22 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    req.user = { uid: data.id as string, tier };
+    const row = data as { id: string; access_expires_at: string | null };
+
+    // Enforce PayNow expiry server-side: downgrade if access_expires_at has passed.
+    if (tier === 'paid' && row.access_expires_at && new Date(row.access_expires_at) <= new Date()) {
+      tier = 'free';
+      getAuth(getFirebaseAdmin())
+        .setCustomUserClaims(decoded.uid, { tier: 'free' })
+        .catch(() => {});
+      supabase
+        .from('users')
+        .update({ subscription_status: 'expired', access_expires_at: null })
+        .eq('id', row.id)
+        .then(() => {}, () => {});
+    }
+
+    req.user = { uid: row.id, firebaseUid: decoded.uid, email: decoded.email ?? null, tier };
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });

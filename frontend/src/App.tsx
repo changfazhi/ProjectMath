@@ -1,6 +1,8 @@
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom'
 import { Header } from './components/layout/Header'
 import { StudyPlanSidebar } from './components/layout/StudyPlanSidebar'
+import { PremiumExpiryBanner } from './components/PremiumExpiryBanner'
+import { useAuth } from './contexts/AuthContext'
 import { HomePage } from './pages/HomePage'
 import { PracticePage } from './pages/PracticePage'
 import { HistoryPage } from './pages/HistoryPage'
@@ -12,9 +14,11 @@ import { MobileUploadPage } from './pages/MobileUploadPage'
 import { LandingPage } from './pages/LandingPage'
 
 function RootLayout() {
+  const { openUpgradeModal } = useAuth()
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <PremiumExpiryBanner onRenew={openUpgradeModal} />
       <div className="relative flex-1 overflow-hidden">
         <main className="flex-1 overflow-hidden flex flex-col">
           <Outlet />

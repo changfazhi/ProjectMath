@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { api } from '../../lib/api'
 
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif"
 
@@ -12,7 +13,16 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean }[] = [
 ]
 
 export function Header() {
-  const { user, openLoginModal, signOut } = useAuth()
+  const { user, tier, openLoginModal, openUpgradeModal, signOut } = useAuth()
+
+  async function handleManageBilling() {
+    try {
+      const { url } = await api.billing.portal()
+      window.location.href = url
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not open billing portal. Please try again.')
+    }
+  }
 
   return (
     <header
@@ -62,7 +72,28 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center">
+        <div className="ml-auto flex items-center gap-2">
+          {user && tier === 'free' && (
+            <button
+              onClick={openUpgradeModal}
+              className="px-4 py-2 rounded-[11px] text-sm font-bold text-white transition-transform hover:-translate-y-0.5"
+              style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow: '0 8px 18px -6px rgba(245,158,11,0.5)' }}
+            >
+              ✦ Get Premium
+            </button>
+          )}
+
+          {user && tier === 'paid' && (
+            <button
+              onClick={handleManageBilling}
+              className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+              style={{ color: '#f59e0b' }}
+              title="Manage your subscription"
+            >
+              ✦ Premium
+            </button>
+          )}
+
           {user ? (
             <button
               onClick={() => signOut()}
