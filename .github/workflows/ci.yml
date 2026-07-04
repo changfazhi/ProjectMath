@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (typecheck + build + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `tsc` type-checks and emits to dist/ — no env vars needed at compile time.
+      - name: Build
+        run: npm run build
+
+      # Unit tests (vitest) — pure grading logic, no Supabase/Gemini secrets needed.
+      - name: Test
+        run: npm test
+
+  frontend:
+    name: Frontend (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Vite inlines VITE_* at build time. The build succeeds without them,
+      # but the artifact is only deployable when the Firebase secrets are set
+      # in the repo settings (Settings → Secrets and variables → Actions).
+      - name: Build
+        run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+
+      - name: Upload production bundle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ── CD ──────────────────────────────────────────────────────────────
+  # Deployment target is not decided yet (see .planning/DEPLOYMENT.md):
+  # frontend is leaning Vercel; backend needs a long-lived host
+  # (Railway / Render / Fly) because of Socket.IO + in-memory pair state.
+  # Once chosen, replace this placeholder with the real deploy steps and
+  # gate it on the CI jobs via `needs: [backend, frontend]`.
+  deploy:
+    name: Deploy (placeholder — no target configured)
+    if: github.event_name == 'workflow_dispatch'
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "No deployment target configured yet."
+          echo "See .planning/DEPLOYMENT.md — pick a host, then wire this job up."

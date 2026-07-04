@@ -149,7 +149,7 @@ Desktops have no camera: "📱 Upload via phone" shows a QR; the phone opens `/m
 - **`MathField.tsx`** — wraps `<math-field>`. Exposes `insert(latex)`, `getValue()`, `focus()`. Suppresses built-in keyboard and hamburger menu.
 - **`MathKeyboard.tsx`** — 10-group symbol panel. Use `onMouseDown` (not `onClick`) to avoid stealing focus. Template strings use `#?` placeholders; pass `selectionMode: 'placeholder'` to `mf.insert()`.
 - **Correct answer display:** raw LaTeX → `<Latex>` directly, not `renderLatex()`.
-- **MathLive compact notation:** `\frac34` (not `\frac{3}{4}`) for single-char numerator/denominator. `normalizeLaTeX()` in `attemptService.ts` expands this automatically.
+- **MathLive compact notation:** `\frac34` (not `\frac{3}{4}`) for single-char numerator/denominator. `normalizeLaTeX()` in `answerChecker.ts` expands this automatically (unit-tested in `answerChecker.test.ts`; `npm test` in `backend/` runs vitest).
 
 ## Key Conventions
 
