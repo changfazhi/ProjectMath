@@ -1,82 +1,54 @@
-# Roadmap: Math Trainer — Persistent Study Plan Sidebar
+# Roadmap: Math Trainer — Landing Page Payment Entry Point (v1.1)
 
 ## Overview
 
-Two phases deliver a persistent, collapsible study plan sidebar for Math Trainer. Phase 1 wires the sidebar into `RootLayout` with full UI and local plan display so the feature is immediately usable. Phase 2 adds Firestore-backed persistence and live quest status refresh so the plan survives device switches and reflects completed questions without a reload.
+Stripe billing already works end-to-end and the `UpgradeModal` is globally mounted (callable
+anywhere via `openUpgradeModal()`), but the public landing page's Pricing "Go Pro" CTA is still a
+dead `href="#"` link. This milestone is a single frontend-wiring phase: connect that CTA to the
+existing upgrade flow, adding a "log in first, then auto-open the upgrade modal" path for logged-out
+visitors while leaving the existing Header "Get Premium" button and the plain login→roadmap redirect
+untouched.
+
+Phase numbering continues from the previous milestone (v1.0 shipped Phases 1–2: the persistent
+study-plan sidebar). v1.1 begins at Phase 3.
 
 ## Phases
 
 **Phase Numbering:**
 
 - Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- Decimal phases (3.1, 3.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Collapsible Sidebar with Local Plan** - Persistent sidebar in RootLayout showing today's quest list, collapsible, with empty/new-day states (completed 2026-06-27)
-- [x] **Phase 2: Firestore Sync and Live Quest Status** - Cloud persistence keyed to Firebase UID plus live status refresh from the attempts API (completed 2026-06-27)
+_Phases 1–2 completed in milestone v1.0 (Persistent Study Plan Sidebar)._
+
+- [ ] **Phase 3: Landing Page "Go Pro" Payment Entry Point** - Wire the landing page Pricing CTA to the existing upgrade flow, with a login-then-auto-upgrade path for logged-out visitors
 
 ## Phase Details
 
-### Phase 1: Collapsible Sidebar with Local Plan
+### Phase 3: Landing Page "Go Pro" Payment Entry Point
 
-**Goal**: Students can see and act on their daily study plan from a persistent sidebar on any page
-**Mode:** mvp
-**Depends on**: Nothing (first phase)
-**Requirements**: SIDE-01, SIDE-02, SIDE-03, SIDE-04, SIDE-05, SIDE-06, QUEST-01, QUEST-02, QUEST-03, QUEST-04
+**Goal**: Visitors can start a Premium upgrade directly from the landing page's Pricing section — a logged-in visitor gets the upgrade modal instantly; a logged-out visitor logs in first and then lands in the upgrade modal automatically.
+**Depends on**: Nothing new (builds on the already-shipped Stripe checkout flow and the globally-mounted `UpgradeModal`)
+**Requirements**: PAY-01, PAY-02, PAY-03
 **Success Criteria** (what must be TRUE):
 
-  1. A collapsed sidebar tab/icon is visible and reachable from every page in the app (roadmap, practice, history, starred, stats) without obstructing main content
-  2. Clicking the tab expands a sidebar that lists all of today's quest items — each showing question name, topic, and status icon (✓ correct / ↩ attempted / numbered pending)
-  3. A progress summary (e.g. "2 / 5 complete") appears at the top of the expanded quest list
-  4. Clicking any quest item navigates to the correct practice question at `/practice/:topicId?question_id=...`
-  5. When no plan exists the expanded sidebar shows a "Generate plan" button that links to `/review`; when a new day begins it shows the prior plan greyed out with a "New day — generate today's plan" prompt
+  1. Clicking "Go Pro" in the landing page Pricing section starts the real upgrade flow — it no longer behaves as a dead `href="#"` link that scrolls the page to the top (PAY-01)
+  2. A logged-in visitor who clicks "Go Pro" sees the `UpgradeModal` open immediately on the landing page, with no extra navigation or redirect (PAY-03)
+  3. A logged-out visitor who clicks "Go Pro" is shown the login modal first; after a successful sign-in the `UpgradeModal` opens automatically, rather than only being redirected to `/roadmap` (PAY-02)
+  4. A plain sign-in (via the nav "Log in" link, not "Go Pro") still redirects to `/roadmap` and does NOT open the upgrade modal — the "Go Pro" intent is distinguished from an ordinary login (guards PAY-02 against regressing the existing `justLoggedIn` → `/roadmap` transition)
 
-**Plans**: 3/3 plans complete
-**Wave 1**
-
-- [x] 01-01-PLAN.md — Walking skeleton: shared studyPlan lib + useStudyPlan hook + QuestItem + StudyPlanSidebar mounted in RootLayout (open → see quests → click → navigate)
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 01-02-PLAN.md — Empty / stale-day / loading / error states + refresh-on-open + WCAG focus & Escape handling
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 01-03-PLAN.md — End-to-end human verification of the Phase 1 sidebar
-
+**Plans**: TBD
 **UI hint**: yes
 
-### Phase 2: Firestore Sync and Live Quest Status
-
-**Goal**: Students' study plans persist across devices when signed in and quest statuses update without a page reload
-**Mode:** mvp
-**Depends on**: Phase 1
-**Requirements**: PERS-01, PERS-02, PERS-03, SYNC-01, SYNC-02
-**Success Criteria** (what must be TRUE):
-
-  1. ✓ A signed-in user who generates a study plan on one device sees that same plan in the sidebar on any other device after a page reload — *plan persisted in `study_plans` Supabase table by `user_id + date`; backend serves saved plan on subsequent calls*
-  2. ✓ An anonymous user's plan is preserved in localStorage and displays correctly in the sidebar after a page refresh — *localStorage cache in `studyPlan.ts` unchanged*
-  3. ⬜ Quest statuses update to ✓ correct or ↩ attempted in the sidebar when the user returns from a practice question — no full page reload required
-  4. ✓ Quest status is always derived from the attempts API (`GET /api/attempts`) — no separate status store is written or maintained — *`useStudyPlan` calls `api.attempts.list()` to derive status*
-
-**Remaining work**: Criterion 3 only — live quest status refresh (SYNC-01). Criteria 1, 2, 4 already implemented.
-
-**Plans**: 2/2 plans complete
-**Wave 1**
-
-- [x] 02-01-PLAN.md — Firestore-backed cross-device plan persistence (save under users/{uid}/study_plans/{date}, Firestore-first read, localStorage cache/fallback)
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 02-02-PLAN.md — Live quest status refresh from the attempts API on window focus / visibilitychange (no reload, no status store)
+_Out of scope for this phase: any change to the Header "Get Premium" button (stays as an unmodified second entry point) and going live with real Stripe payments / production deployment (tracked separately)._
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2
+Phases execute in numeric order: 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Collapsible Sidebar with Local Plan | 3/3 | Complete    | 2026-06-27 |
-| 2. Firestore Sync and Live Quest Status | 0/TBD | In progress (sync done; live status pending) | - |
+| 3. Landing Page "Go Pro" Payment Entry Point | 0/TBD | Not started | - |

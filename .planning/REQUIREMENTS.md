@@ -105,16 +105,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PAY-01 | TBD | Pending |
-| PAY-02 | TBD | Pending |
-| PAY-03 | TBD | Pending |
+| PAY-01 | Phase 3 | Pending |
+| PAY-02 | Phase 3 | Pending |
+| PAY-03 | Phase 3 | Pending |
 
 **Coverage:**
 
 - v1.1 requirements: 3 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 3
+- Mapped to phases: 3 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-04*
-*Last updated: 2026-07-04 — v1.1 requirements (PAY-01/02/03) added*
+*Last updated: 2026-07-04 — v1.1 roadmap created; PAY-01/02/03 mapped to Phase 3*
