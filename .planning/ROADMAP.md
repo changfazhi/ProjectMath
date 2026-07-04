@@ -40,8 +40,14 @@ _Phases 1–2 completed in milestone v1.0 (Persistent Study Plan Sidebar)._
   4. A plain sign-in (via the nav "Log in" link, not "Go Pro") still redirects to `/roadmap` and does NOT open the upgrade modal — the "Go Pro" intent is distinguished from an ordinary login (guards PAY-02 against regressing the existing `justLoggedIn` → `/roadmap` transition)
 
 **Plans**: 2 plans
+**Wave 1**
+
 - [ ] 03-01-PLAN.md — Wire the "Go Pro" CTA in LandingPage.tsx: instant UpgradeModal for logged-in visitors, login-then-auto-upgrade for logged-out visitors, with the plain-login → /roadmap redirect preserved
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03-02-PLAN.md — Human-verify checkpoint: confirm all three "Go Pro" flows plus the plain-login non-regression / intent-leak guard at runtime
+
 **UI hint**: yes
 
 _Out of scope for this phase: any change to the Header "Get Premium" button (stays as an unmodified second entry point) and going live with real Stripe payments / production deployment (tracked separately)._
