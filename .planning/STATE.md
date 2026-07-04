@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-current_phase: 2
-current_phase_name: Firestore Sync and Live Quest Status
-status: complete
-stopped_at: ~
-last_updated: "2026-06-27T14:50:40Z"
-last_activity: 2026-06-27
-last_activity_desc: Completed 02-02 — live quest status refresh on focus/visibilitychange
+milestone: v1.1
+milestone_name: Landing Page Payment Entry Point
+status: planning
+last_updated: "2026-07-04T03:31:01.352Z"
+last_activity: 2026-07-04
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -28,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-27)
 
 ## Current Position
 
-Phase: 2 — Firestore Sync and Live Quest Status
-Plan: 02-02 (complete — final plan)
-Status: Phase 2 complete
-Last activity: 2026-06-27 — Completed 02-02 live quest status refresh
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-04 — Milestone v1.1 started
 
 ## Performance Metrics
 
