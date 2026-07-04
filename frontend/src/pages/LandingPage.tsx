@@ -399,7 +399,7 @@ const MARKUP = `
           <div style="font-weight:700;font-size:18px">Pro</div>
           <p style="font-size:14px;color:#aab0d6;margin:6px 0 0">Unlimited AI, plans built around you.</p>
           <div style="margin:22px 0;display:flex;align-items:flex-end;gap:5px"><span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:46px;line-height:1"><span class="pm-price-annual">S$15</span><span class="pm-price-monthly">S$19</span></span><span style="font-size:14px;color:#aab0d6;margin-bottom:8px"><span class="pm-sub-annual">/mo &middot; billed S$180/yr</span><span class="pm-sub-monthly">/month</span></span></div>
-          <a href="#" class="pm-hov-lift" style="display:block;text-align:center;padding:13px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:700;font-size:15px;transition:transform .15s">Go Pro</a>
+          <a href="#" data-goto-pro class="pm-hov-lift" style="display:block;text-align:center;padding:13px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:700;font-size:15px;transition:transform .15s">Go Pro</a>
           <ul style="list-style:none;padding:0;margin:24px 0 0;display:flex;flex-direction:column;gap:13px">
             <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span>Everything in Free</li>
             <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span><b>Unlimited</b> AI Scans</li>
@@ -474,7 +474,12 @@ const MARKUP = `
 
 export function LandingPage() {
   const navigate = useNavigate()
-  const { user, loading, openLoginModal } = useAuth()
+  const { user, loading, openLoginModal, openUpgradeModal } = useAuth()
+
+  // Marks "the login now in progress was triggered by a 'Go Pro' click" so the transition
+  // effect below knows to auto-open the upgrade modal instead of redirecting to /roadmap.
+  // Deliberately a plain in-memory ref (never persisted to storage) so it resets on reload.
+  const goProIntentRef = useRef(false)
 
   // Redirect into the app only on the login *transition* (logged-out → logged-in), e.g. right after
   // signing in via the modal here, or landing on `/` directly while already authenticated. We must
@@ -490,6 +495,8 @@ export function LandingPage() {
 
   // Clicks inside the static markup are delegated here:
   //  - the "Log in" link (data-login) opens the auth modal
+  //  - the "Go Pro" CTA (data-goto-pro) opens the upgrade modal instantly if logged in, or
+  //    opens the login modal first (auto-opening the upgrade modal after sign-in) if logged out
   //  - CTAs that funnel into the app carry href="/roadmap" → router navigate (no reload)
   //  - in-page #section links smooth-scroll (slide) to that section
   function handleClick(e: MouseEvent<HTMLDivElement>) {
@@ -499,6 +506,14 @@ export function LandingPage() {
     if (anchor.dataset.login !== undefined) {
       e.preventDefault()
       openLoginModal()
+    } else if (anchor.dataset.gotoPro !== undefined) {
+      e.preventDefault()
+      if (user) {
+        openUpgradeModal()
+      } else {
+        goProIntentRef.current = true
+        openLoginModal('Log in to continue to Premium checkout.')
+      }
     } else if (href === '/roadmap') {
       e.preventDefault()
       navigate('/roadmap')
