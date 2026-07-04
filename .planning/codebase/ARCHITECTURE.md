@@ -1,297 +1,360 @@
-<!-- refreshed: 2026-07-03 -->
 # Architecture
 
-**Analysis Date:** 2026-07-03
+**Analysis Date:** 2026-07-04
 
 ## System Overview
 
+Math Trainer is a full-stack web application for Singapore H2 A-Level math practice. Students answer questions across 24 topics, receive AI-generated hints, submit handwritten solutions via photo, and track progress through streaks and analytics. The system is split into a React 19 frontend (Vite) and Express TypeScript backend (Supabase + Gemini integration).
+
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│              Browser (React 19 + Vite, port 5173)            │
-│  AuthProvider → AuthContext (Firebase Auth JWT + tier)       │
-│  App.tsx → React Router → Page Components                    │
-│  All fetch via lib/api.ts (attaches Bearer token)            │
-└────────────────────┬─────────────────────────────────────────┘
-                     │  HTTP /api/* (Vite proxy in dev)
-                     │  WS /socket.io  (Vite ws proxy in dev)
-                     ▼
-┌──────────────────────────────────────────────────────────────┐
-│          Express + Socket.IO backend (port 3001)             │
-│  backend/src/index.ts                                        │
-│  Middleware: cors, express.json, auth.ts (Firebase JWT)      │
-│  Routes → Services (thin route / business logic in service)  │
-└─────────┬───────────────────────┬────────────────────────────┘
-          │                       │
-          ▼                       ▼
-┌──────────────────┐   ┌──────────────────────────────────────┐
-│ Supabase          │   │  External Services                   │
-│ (Postgres +       │   │  - Firebase Auth (token verify +     │
-│  Storage)         │   │    custom claims for tier)           │
-│ db/supabase.ts    │   │  - Gemini 2.5-flash (chat + grading) │
-└──────────────────┘   │  - Stripe (billing checkout,         │
-                        │    webhooks, customer portal)        │
-                        │  db/firebase.ts, db/gemini.ts,       │
-                        │  db/stripe.ts                        │
-                        └──────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      Frontend (React 19 + Vite)                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Pages (HomePage, PracticePage, HistoryPage, etc.)         │  │
+│  │  `frontend/src/pages/*.tsx`                                │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                             │                                     │
+│  ┌──────────────────────────▼──────────────────────────────────┐  │
+│  │  Components (Question, Chat, Progress, Layout)              │  │
+│  │  `frontend/src/components/**/*.tsx`                         │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                             │                                     │
+│  ┌──────────────────────────▼──────────────────────────────────┐  │
+│  │  Hooks (usePracticeSession, useChatSession, etc.)           │  │
+│  │  Contexts (AuthContext)                                    │  │
+│  │  `frontend/src/hooks/*.ts` + `frontend/src/contexts/*.tsx` │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                             │                                     │
+│  ┌──────────────────────────▼──────────────────────────────────┐  │
+│  │  API Abstraction & Socket.IO                                │  │
+│  │  `frontend/src/lib/api.ts`, `frontend/src/lib/socket.ts`   │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+                             │
+                   ┌─────────▼─────────┐
+                   │  HTTP/WebSocket   │
+                   │  (Vite proxy)     │
+                   └─────────┬─────────┘
+                             │
+┌──────────────────────────────────────────────────────────────────┐
+│                 Backend (Express + TypeScript)                   │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Routes (topics, questions, attempts, chat, grade, pair)   │  │
+│  │  `backend/src/routes/*.ts`                                 │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                             │                                     │
+│  ┌──────────────────────────▼──────────────────────────────────┐  │
+│  │  Services (Business Logic)                                  │  │
+│  │  topicService, questionService, attemptService,            │  │
+│  │  chatService, gradingService, pairService, etc.           │  │
+│  │  `backend/src/services/*.ts`                               │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                             │                                     │
+│  ┌──────────────────────────▼──────────────────────────────────┐  │
+│  │  Database & External Integrations                           │  │
+│  │  Supabase (questions, attempts, chat history)              │  │
+│  │  Gemini (hints, photo grading, transcription)              │  │
+│  │  Firebase (auth), Stripe (billing)                         │  │
+│  │  `backend/src/db/*.ts`                                     │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Socket.IO (Phone upload realtime pairing)                 │  │
+│  │  `backend/src/realtime.ts`                                 │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Component Responsibilities
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| `AuthProvider` | Firebase Auth state, tier resolution, login/upgrade modals | `frontend/src/contexts/AuthContext.tsx` |
-| `lib/api.ts` | All HTTP calls; attaches Bearer token; handles 401/402 callbacks | `frontend/src/lib/api.ts` |
-| `usePracticeSession` | Practice state machine (reducer); single/multi-part/photo answer flows | `frontend/src/hooks/usePracticeSession.ts` |
-| `usePairSocket` | Subscribes desktop to pairing token room; forwards Socket.IO events to session | `frontend/src/hooks/usePairSocket.ts` |
-| `useChatSession` | Optimistic send for AI chatbot; history rehydration | `frontend/src/hooks/useChatSession.ts` |
-| `useStudyPlan` | Loads/caches daily study plan; cross-references attempts for status | `frontend/src/hooks/useStudyPlan.ts` |
-| `middleware/auth.ts` | Verifies Firebase ID token; upserts user row in Supabase; attaches `req.user` | `backend/src/middleware/auth.ts` |
-| `gate(feature)` | Composes `requireAuth` + tier check; used on every protected route | `backend/src/middleware/auth.ts` |
-| `realtime.ts` | Socket.IO server; manages `pair:subscribe`/`pair:unsubscribe` room membership | `backend/src/realtime.ts` |
-| `gradingService.ts` | Gemini vision grading pipeline; junk filtering; persists to Supabase | `backend/src/services/gradingService.ts` |
-| `chatService.ts` | Builds Socratic system prompt; proxies Gemini; persists messages | `backend/src/services/chatService.ts` |
-| `attemptService.ts` | Answer grading (exact/range/mcq/symbolic); streak upsert; Supabase write | `backend/src/services/attemptService.ts` |
-| `pairService.ts` | In-memory Map of ephemeral pairing sessions (token → PairSession) | `backend/src/services/pairService.ts` |
-| `featureTiers.ts` | Maps feature name → required tier (`free`/`paid`) | `backend/src/config/featureTiers.ts` |
-| `billingService.ts` | Stripe checkout session creation (card + PayNow); portal session; webhook event handling; Firebase claim grants/revocations | `backend/src/services/billingService.ts` |
-| `UpgradeModal.tsx` | Card/PayNow toggle; plan card selection; triggers checkout redirect via `api.billing.checkout(plan, method)` | `frontend/src/components/UpgradeModal.tsx` |
-| `PremiumExpiryBanner.tsx` | Amber warning bar for PayNow users within 3 days of expiry; shown once per Singapore calendar day; "Renew now" opens UpgradeModal | `frontend/src/components/PremiumExpiryBanner.tsx` |
+| **Pages** | Route-level containers; load data, manage page-wide state | `frontend/src/pages/*.tsx` |
+| **Question Components** | Render questions, answer inputs (text, multi-box, photo, MCQ) | `frontend/src/components/question/*.tsx` |
+| **Chat Panel** | Socratic hint history + input; bridges to chatService | `frontend/src/components/chat/ChatPanel.tsx` |
+| **Photo Grading UI** | Photo capture, transcription editor, grading feedback | `frontend/src/components/question/PhotoAnswer.tsx` etc. |
+| **Layout Components** | Header, sidebar, study plan drawer | `frontend/src/components/layout/*.tsx` |
+| **Progress Components** | StatsBar, StreakNotification, topical accuracy | `frontend/src/components/progress/*.tsx` |
+| **usePracticeSession** | Core question-session state machine; coords attempts/grades | `frontend/src/hooks/usePracticeSession.ts` |
+| **AuthContext** | Firebase login, subscription tier, global modal toggles | `frontend/src/contexts/AuthContext.tsx` |
+| **Routes (backend)** | HTTP handler; parse/validate → call service → respond | `backend/src/routes/*.ts` |
+| **Services** | Business logic: answer validation, AI calls, progress calc | `backend/src/services/*.ts` |
+| **Supabase Client** | Query builder + RLS enforcement | `backend/src/db/supabase.ts` |
+| **Gemini Integration** | Hint generation + photo grading + transcription | `backend/src/db/gemini.ts` + `gradingService.ts` |
+| **Auth Middleware** | Firebase token verification + subscription gating | `backend/src/middleware/auth.ts` |
+| **Socket.IO/Realtime** | Room-based event broadcast for phone-upload pairing | `backend/src/realtime.ts` |
 
-## Auth Model
+## Pattern Overview
 
-**Current state:** Full Firebase Auth is implemented and active. The old `session_id` (localStorage UUID) identity model is replaced.
+**Overall:** Layered Request-Response with Real-Time Pairing
 
-- **Frontend:** `frontend/src/lib/firebase.ts` initializes Firebase app with `VITE_FIREBASE_*` env vars. `AuthContext.tsx` listens via `onAuthStateChanged`. Reads `tier` and `expires_at` claims from `getIdTokenResult().claims` via the shared `applyTokenResult()` helper.
-- **Token flow:** `lib/api.ts:getAuthHeader()` calls `auth.currentUser?.getIdToken()` before every request; appends `Authorization: Bearer <idToken>`.
-- **Backend token verification:** `backend/src/middleware/auth.ts:requireAuth` → `getAuth(getFirebaseAdmin()).verifyIdToken(token)` → upserts `users` table row (`firebase_uid`, `email`) → resolves internal Supabase UUID as `req.user.uid`. Also selects `access_expires_at` and enforces PayNow expiry server-side (see Tier System below). All protected routes use `gate('feature')` which composes `requireAuth` + tier check.
-- **Tier system:** `tier` is a custom Firebase Auth claim (`'free'` / `'paid'`), set by `billingService.ts` via Firebase Admin SDK on successful payment. Gated features: `aiHints`, `photoGrading`, `pairUpload` → `'paid'`; `practice`, `review` → `'free'`. For card subscriptions, `tier: 'paid'` claim has no expiry — revoked only on subscription cancellation webhook. For PayNow one-time payments, the claim includes `expires_at: ISO_string`; `requireAuth` checks `users.access_expires_at` against the current time on every request and downgrades to `'free'` if past, clearing the claim and DB field asynchronously.
-- **PayNow expiry enforcement:** Server-side in `requireAuth` (authoritative); client-side via `accessExpiresAt: Date | null` in `AuthContext` (for UI only — banner display). The client cannot be trusted for access control.
-- **refreshTier():** After Stripe checkout redirect, `HomePage.tsx` calls `refreshTier()` which force-refreshes the Firebase ID token (`getIdTokenResult(true)`) and immediately updates both `tier` and `accessExpiresAt` in context without waiting for `onAuthStateChanged`.
-- **Error handling:** 401 → `_callbacks.onUnauthorized()` → opens `LoginModal`. 402 → `_callbacks.onPaymentRequired()` → opens `UpgradeModal`. Both callbacks registered via `setApiCallbacks()` inside `AuthContext.tsx`.
-- **Auth methods:** Google OAuth (`signInWithPopup`) and email/password (`createUserWithEmailAndPassword` / `signInWithEmailAndPassword` + `sendEmailVerification`).
-- **Database identity:** `req.user.uid` is the Supabase `users.id` UUID (not firebase_uid), resolved after upsert in `requireAuth`. All service calls use this UUID as the identity key.
+**Key Characteristics:**
+- **Thin routes** — minimal logic; delegate to services
+- **Rich services** — answer grading, AI integration, progress math
+- **Centralized API** — single `api.*` object on frontend for all HTTP
+- **Session-based** — UUID in localStorage; no user auth required for free features (paid gated at route level)
+- **State machine** — PracticeSession tracks multi-part question workflow (`answering → submitted → revealed → complete`)
+- **Lazy photo + text modes** — toggle between photo/MathLive input on same question
+- **Socket.IO pairing** — desktop subscribes to phone-upload token; real-time photo stream + grading
 
 ## Layers
 
-**Frontend:**
-- `frontend/src/main.tsx` — React root; wraps `<App>` in `<AuthProvider>` + `<StrictMode>`
-- `frontend/src/App.tsx` — Router definition; `RootLayout` (Header + StudyPlanSidebar shell); standalone routes for `/` (LandingPage) and `/m/:token` (MobileUploadPage)
-- `frontend/src/contexts/` — `AuthContext` (only global context; no Redux or Zustand)
-- `frontend/src/hooks/` — Feature-specific data and state hooks; `usePracticeSession` is the most complex (reducer pattern)
-- `frontend/src/lib/` — `api.ts` (all HTTP), `firebase.ts` (client SDK init), `socket.ts` (Socket.IO singleton), `studyPlan.ts` (localStorage cache), `renderLatex.tsx`, `utils.ts`
-- `frontend/src/components/` — Presentational components grouped by domain
-- `frontend/src/pages/` — Route-level components that compose hooks + components
-- `frontend/src/types/api.ts` — Client-side type mirror of backend types
+**Frontend Layer: Pages**
+- Purpose: Route-specific containers; fetch initial data; page-level state
+- Location: `frontend/src/pages/`
+- Contains: `.tsx` page components (HomePage, PracticePage, HistoryPage, etc.)
+- Depends on: Hooks (usePracticeSession, useTopics), AuthContext, api
+- Used by: Router in App.tsx
 
-**Backend:**
-- `backend/src/index.ts` — Express + `http.Server` setup; mounts all routers; calls `initRealtime`
-- `backend/src/middleware/auth.ts` — Firebase token verification + tier gate
-- `backend/src/routes/` — Thin Express routers; validate with Zod; delegate to services
-- `backend/src/services/` — All business logic; only layer that touches Supabase or Gemini
-- `backend/src/db/` — Supabase client singleton (`supabase.ts`), Firebase Admin lazy-init (`firebase.ts`), Gemini client factory (`gemini.ts`)
-- `backend/src/config/featureTiers.ts` — Feature-to-tier mapping
-- `backend/src/realtime.ts` — Socket.IO initialization and `emitToPair()` helper
-- `backend/src/types/index.ts` — All shared TypeScript types
+**Frontend Layer: Components**
+- Purpose: Reusable UI: questions, inputs (MathField, photo), chat, progress bars
+- Location: `frontend/src/components/`
+- Contains: Subdirectories by concern (question/, chat/, math/, layout/, etc.)
+- Depends on: Hooks, types, lib utilities (renderLatex, cn, api)
+- Used by: Pages and other components
+
+**Frontend Layer: Hooks & Contexts**
+- Purpose: State management and data fetching; decouple logic from render
+- Location: `frontend/src/hooks/`, `frontend/src/contexts/`
+- Contains: usePracticeSession (question workflow), useTopics, useChatSession, AuthContext
+- Depends on: api, types
+- Used by: Pages and components
+
+**Frontend Layer: API Abstraction**
+- Purpose: Centralized fetch wrapper; auth header injection; error mapping (401 → unauthorized, 402 → payment required)
+- Location: `frontend/src/lib/api.ts`
+- Contains: Namespaced object (api.topics.*, api.questions.*, etc.)
+- Depends on: Firebase auth, types
+- Used by: All hooks and services
+
+**Backend Layer: Routes**
+- Purpose: HTTP request handler; parse/validate input with Zod; call service; return JSON
+- Location: `backend/src/routes/`
+- Contains: Express Router per feature (topics, questions, attempts, chat, grade, pair, etc.)
+- Depends on: Service functions, Zod schemas, middleware (auth, gate)
+- Used by: Express app in index.ts
+
+**Backend Layer: Services**
+- Purpose: Business logic; coordinate db queries + external APIs
+- Location: `backend/src/services/`
+- Contains: One service per major feature (attemptService, gradingService, chatService, etc.)
+- Depends on: Supabase client, Gemini client, types
+- Used by: Routes and other services (e.g., attemptService calls questionService)
+
+**Backend Layer: Database & External Clients**
+- Purpose: Third-party client initialization; no query logic
+- Location: `backend/src/db/`
+- Contains: supabase.ts (Supabase client), gemini.ts (Gemini AI), firebase.ts (Firebase admin), stripe.ts (Stripe client)
+- Depends on: Environment variables, SDK libraries
+- Used by: Services
+
+**Backend Layer: Middleware**
+- Purpose: Request-level concerns: authentication, feature gating
+- Location: `backend/src/middleware/`
+- Contains: auth.ts (Firebase token verification + tier checking)
+- Depends on: Firebase admin SDK, Supabase
+- Used by: Routes via gate('feature') wrapper
+
+**Backend Layer: Real-Time (Socket.IO)**
+- Purpose: Publish/subscribe for phone-upload QR pairing
+- Location: `backend/src/realtime.ts`
+- Contains: initRealtime(), emitToPair()
+- Depends on: Socket.IO, http.Server
+- Used by: pairService (broadcasts pair:image, pair:graded events)
 
 ## Data Flow
 
-### Typed Answer Submission (single-part)
+### Primary Request Path: Submit Answer
 
-1. User types in `MathField` or selects MCQ in `PracticePage` (`frontend/src/pages/PracticePage.tsx`)
-2. `usePracticeSession.submitAnswer(answerGiven)` dispatches `SUBMIT_START`
-3. `api.attempts.submit({ question_id, answer_given, time_taken_s })` → `POST /api/attempts` with `Authorization: Bearer <token>`
-4. `backend/src/middleware/auth.ts:requireAuth` verifies JWT, attaches `req.user.uid`
-5. `backend/src/routes/attempts.ts` validates body with Zod; calls `attemptService.submitAttempt(uid, body)`
-6. `backend/src/services/attemptService.ts` fetches question from Supabase; grades answer via `normalizeLaTeX` / `tryNumericEval` / `trySymbolicEval` / range check; writes attempt row; calls `upsertSRCard`
-7. Returns `{ attempt_id, is_correct, correct_answer, solution_latex }` — `solution_latex` is `null` until all graded parts submitted
-8. Route returns 201; `api.ts` resolves; `SUBMIT_SUCCESS` dispatched → `phase: 'revealed'`
+1. Student types/photographs answer on **PracticePage** (`frontend/src/pages/PracticePage.tsx`)
+2. **AnswerInput** or **PhotoAnswer** component collects input + calls `session.submitAnswer()` or `session.submitPhotos()`
+3. **usePracticeSession** hook dispatches `SUBMIT_START` action (phase: submitted) and calls `api.attempts.submit()` or `api.grade.submit()`
+4. **Frontend API layer** (`frontend/src/lib/api.ts`) wraps fetch with Firebase auth token + error handling
+5. **Route handler** (`backend/src/routes/attempts.ts` or `grade.ts`) receives POST, validates with Zod, extracts user ID from auth middleware
+6. **Service function** (`attemptService.submitAttempt()` or `gradingService.gradeSolution()`) runs business logic:
+   - Fetch question + solution (answer_correct?)
+   - For typed: check answer via `checkAnswer(answerType, correct, given, tolerance)`
+   - For photo: send images to Gemini via `gradingService`, parse structured response
+   - Upsert attempt row (+ gradings row for photo)
+   - Update streak + topic progress cache
+7. **Service returns** `SubmitAttemptResponse` with `is_correct`, `correct_answer`, `solution_latex` (null until all parts done)
+8. **Route** responds 201 with JSON
+9. **usePracticeSession** receives response, dispatches `SUBMIT_SUCCESS` or `GRADE_SUCCESS`, transitions phase → `revealed`
+10. **SolutionReveal** component renders answer + feedback
 
-### Multi-Part Question Flow
+**Multi-Part Questions:** Each part's submission follows the same flow (step 2–9), keyed by `part_label`. Topic status flips to ✓ only when **all graded parts** are correct.
 
-- `question.parts` arrives as `QuestionPartPublic[]`; `correct_answer` is stripped server-side before client receives it
-- `MultiPartQuestion` (`frontend/src/components/question/MultiPartQuestion.tsx`) renders one answer box per part with `answer_type !== null`
-- Each part calls `usePracticeSession.submitPart(partLabel, answer)` → `api.attempts.submit({ ..., part_label })`
-- Backend grades the specific part; returns `solution_latex: null` until all graded parts are done
-- `PART_SUBMIT_DONE` action updates `partStates[label]`; when `solution_latex !== null` in the response → transitions to `phase: 'revealed'`
+### Secondary Request Path: AI Hint Chat
 
-### Photo Grading Pipeline
+1. Student opens **Hints tab** on **PracticePage**, types question
+2. **ChatPanel** component calls `chat.send(questionId, message)`
+3. **useChatSession** hook calls `api.chat.send(questionId, message)`
+4. **Route** (`backend/src/routes/chat.ts`) passes to `chatService.getChatResponse()`
+5. **chatService** builds system instruction with question + solution (server-only) and calls Gemini
+6. Gemini returns Socratic hint (guardrail: never the answer)
+7. Service persists in `chat_messages` table and returns to client
+8. **ChatPanel** appends to message list and rerenders
 
-1. `PhotoAnswer.tsx` captures images → `usePracticeSession.submitPhotos(files)`
-2. `api.grade.submit(questionId, images)` → `POST /api/grade` as `multipart/form-data`
-3. `backend/src/routes/grade.ts` parses with `multer`; calls `gradingService.gradeSolution({ userId, question_id, images, time_taken_s })`
-4. `backend/src/services/gradingService.ts` fetches question + `solution_latex` from Supabase (confidential, never returned to client)
-5. Calls `getGemini().models.generateContent(...)` with base64 images + `buildGradingInstruction()` prompt + `responseSchema` for structured output
-6. STEP 0 junk filter: Gemini returns `gradable: false` → `GradingError` thrown → HTTP 400 → `GRADE_REJECTED` action → student stays on question to retake
-7. If gradable: writes `gradings` row + one `attempts` row per graded part to Supabase; uploads images to `solution-uploads` bucket
-8. Returns `GradeResponse`; `GRADE_SUCCESS` dispatched → `phase: 'revealed'`
+**Rate limiting:** IP-based (`express-rate-limit`), 15/min default. Per-question cap of 40 messages → HTTP 429.
 
-### QR Phone Upload Flow
+### Tertiary Request Path: Phone Upload QR Pairing
 
-1. Desktop: `api.pair.create(questionId)` → `POST /api/pair` → `pairService.createPair()` → returns `{ token, mobile_path, expires_at }`
-2. Desktop: `QrPairModal.tsx` renders QR code encoding `<origin>/m/<token>`
-3. Desktop: `usePairSocket(token, ...)` → `socket.emit('pair:subscribe', { token })` → joins Socket.IO room
-4. Phone opens `/m/<token>` → `MobileUploadPage.tsx` → `api.pair.context(token)` to get question context
-5. Phone uploads photos: `api.pair.uploadPhoto(token, image)` → `POST /api/pair/:token/photo` → `emitToPair(token, 'pair:image', { index, dataUrl })` → desktop `usePairSocket` appends to `images[]`
-6. Phone taps Done: `api.pair.done(token)` → `POST /api/pair/:token/done` → backend calls `gradeSolution()` (same pipeline as direct upload)
-7. Backend emits `pair:grading`, then `pair:graded` (with `GradeResponse`) or `pair:error` to the token room
-8. Desktop `usePairSocket` receives events → forwards to `usePracticeSession` via `beginExternalGrading` / `receiveGrading` / `rejectExternalGrading`
+1. Student opens **PracticePage**, clicks "📱 Upload via phone"
+2. **QrPairModal** component calls `api.pair.create(questionId)`
+3. **Route** (`backend/src/routes/pair.ts`) generates unguessable token, stores in pairService Map, responds with token + URL
+4. **QrPairModal** renders QR of `<origin>/m/:token`
+5. Student opens QR on phone → **MobileUploadPage** (`frontend/src/pages/MobileUploadPage.tsx`)
+6. **MobileUploadPage** calls `api.pair.context(token)` (auth-free), then emits `pair:phone-connected` via Socket.IO
+7. **Desktop** receives `pair:phone-connected` event via `usePairSocket`, fires `session.beginExternalGrading()`
+8. Student photographs solution on phone; each upload POSTs to `/api/pair/:token/photo`
+9. **Route** streams image to desktop via `emitToPair(token, 'pair:image', image_data)`
+10. Desktop UI shows live preview in **PhotoAnswer** component
+11. Student clicks **Done** on phone → POST `/api/pair/:token/done`
+12. **Route** calls `gradeSolution()` (same as desktop photo grading) and emits `pair:grading` → `pair:graded` or `pair:error`
+13. Desktop receives event and displays feedback
 
-### Stripe Billing Checkout Flow
+**State Management:** Pair token lives in `pairService` (in-memory Map, 10-min TTL). Socket.IO rooms keyed by token ensure isolation.
 
-**Card (recurring subscription):**
-1. User clicks "Get Premium" → `UpgradeModal` → selects Card tab → picks Monthly or Annual
-2. `api.billing.checkout(plan, 'card')` → `POST /api/billing/checkout` with `{ plan, method: 'card' }`
-3. `billingService.createCheckoutSession()` looks up or creates Stripe Customer; creates Checkout Session (`mode: 'subscription'`, SGD price)
-4. Returns `{ url }` — frontend redirects `window.location.href = url` to Stripe's hosted page
-5. User fills card details on Stripe → Stripe charges card → redirects to `/roadmap?checkout=success`
-6. Stripe fires `checkout.session.completed` webhook → `handleWebhookEvent` → `grantPaidTier()` → sets Firebase claim `{ tier: 'paid' }` + `subscription_status: 'active'`
-7. `HomePage.tsx` detects `?checkout=success` → calls `refreshTier()` → tier flips in UI instantly → 5s gold toast
+## Key Abstractions
 
-**PayNow (one-time payment):**
-1. Same entry as Card; user switches to PayNow tab → picks Monthly (S$15) or Annual (S$144)
-2. `api.billing.checkout(plan, 'paynow')` → `POST /api/billing/checkout` with `{ plan, method: 'paynow' }`
-3. `billingService.createCheckoutSession()` creates Checkout Session (`mode: 'payment'`, `payment_method_types: ['paynow']`, metadata `paynow_plan`)
-4. Stripe shows QR code page → user scans with banking app → Stripe receives PayNow network confirmation
-5. Stripe fires `checkout.session.completed` webhook → `handleWebhookEvent` branches on `session.mode === 'payment'` → `grantPayNowTier()` → sets Firebase claim `{ tier: 'paid', expires_at: ISO_string }` + `access_expires_at` in DB (30 days for monthly, 365 days for annual)
-6. Stripe Checkout page redirects to `/roadmap?checkout=success` → same `refreshTier()` / toast flow as card
+**PracticeSession State Machine:**
+- Purpose: Tracks a student's interaction with one question (typing, submitting, photo grading, revealing)
+- Implementation: `usePracticeSession` hook with reducer; encapsulates phases: `answering → submitted → revealed → complete`
+- Used: PracticePage manages one session; transitions on answer submission / grading
+- Examples: `frontend/src/hooks/usePracticeSession.ts` (state machine), `frontend/src/pages/PracticePage.tsx` (consumer)
 
-**Subscription lifecycle (card only):**
-- `customer.subscription.updated` (past_due / canceled / unpaid) → `revokePaidTier()` → claim reset to `{ tier: 'free' }`, `access_expires_at: null`
-- `customer.subscription.deleted` → same revocation
-- `customer.deleted` (manual Dashboard deletion) → revocation + `stripe_customer_id: null` (stale customer guard)
+**Question Models (Full vs. Public):**
+- Purpose: Hide solutions and correct answers from client until after attempt
+- Implementation: Backend services export `Question` (full) and `QuestionPublic` (stripped) types; routes strip before sending
+- Example: `backend/src/types/index.ts` defines `Question` and `QuestionPublic` (omit correct_answer, solution_latex, parts[].correct_answer)
 
-**PayNow expiry (no webhook):**
-- `requireAuth` checks `users.access_expires_at` on every request — downgrades server-side when past
-- Client shows `PremiumExpiryBanner` within 3 days of expiry (once per SGT calendar day via `localStorage`)
+**Multi-Part Questions (parts JSONB):**
+- Purpose: Represent sub-questions within one question (e.g., "a", "b", "c")
+- Implementation: `questions.parts` is array of `QuestionPart` objects (label, prompt_latex, answer_type, correct_answer, etc.)
+- When present: Frontend renders per-part input boxes; one attempt per part; topic status only ✓ when all graded parts correct
+- Examples: Multi-box parts have `answers[]` field for parallel inputs (e.g., "find a, b, c" → 3 input boxes, graded independently)
 
-### AI Hint Chatbot
+**API Namespace:**
+- Purpose: Single object for all client-side HTTP; centralizes auth injection and error handling
+- Implementation: `frontend/src/lib/api.ts` exports `api` object with namespaced methods (api.topics.*, api.attempts.*, etc.)
+- Error mapping: 401 → `onUnauthorized()` callback (triggers login modal), 402 → `onPaymentRequired()` (triggers upgrade modal)
+- Example: `api.grade.submit(questionId, images) → POST /api/grade` with multipart FormData
 
-1. User types in `ChatPanel.tsx` → `useChatSession.send(message)` → optimistic append
-2. `api.chat.send(questionId, message)` → `POST /api/chat` with auth header
-3. `backend/src/routes/chat.ts` → `chatService.sendMessage(userId, questionId, message)`
-4. `backend/src/services/chatService.ts` fetches question + `solution_latex` from Supabase (confidential, injected into system prompt only)
-5. `buildSystemInstruction(question)` constructs Socratic system prompt with question text, parts, and reference solution
-6. Calls Gemini `generateContent` with full `chat_messages` history + new user message
-7. Persists both user message and model reply to `chat_messages` table (keyed by `userId` + `question_id`)
-8. Returns `{ reply, history }`; `useChatSession` replaces optimistic message with real reply
-9. History is scoped to auth user (not session_id); `GET /api/chat?question_id=X` rehydrates on load
+**Socket.IO Realtime:**
+- Purpose: One-way broadcast for phone-upload pairing (desktop listens for phone events)
+- Implementation: `backend/src/realtime.ts` exports `initRealtime(httpServer)` + `emitToPair(token, event, data)`
+- Rooms: Each pairing token is a room; desktop subscribes via `pair:subscribe` event; no auth (token = secret)
+- Example: `pairService.gradePhotosFromMobile()` calls `emitToPair()` to send `pair:graded` event
 
-## State Management
+## Entry Points
 
-**Global:**
-- `AuthContext` (`frontend/src/contexts/AuthContext.tsx`) — Firebase `User` object, `tier`, `accessExpiresAt` (PayNow expiry as `Date | null`), loading flag; mounted at root in `main.tsx`; no other global state stores
+**Frontend: Browser**
+- Location: `frontend/src/main.tsx` → `App.tsx`
+- Triggers: `npm run dev` (Vite dev server) or load `/dist/index.html` (production)
+- Responsibilities:
+  1. Render AuthProvider + RouterProvider
+  2. Router dispatches to pages based on path (/ → LandingPage, /roadmap → HomePage, /practice/:topicId → PracticePage, etc.)
+  3. Pages load data via hooks (usePracticeSession, useTopics, etc.)
 
-**Route-level:**
-- `PracticePage` — `usePracticeSession` reducer (practice phase state machine); `useChatSession`; `usePairSocket`; local `useState` for tabs, input mode, attempts list, solution
+**Backend: Express Server**
+- Location: `backend/src/index.ts`
+- Triggers: `npm run dev` (tsx watch on port 3001) or `npm start` (compiled node)
+- Responsibilities:
+  1. Load environment variables (`dotenv`)
+  2. Create Express app + http.Server (for Socket.IO)
+  3. Mount middleware (CORS, auth gate)
+  4. Mount routes (topics, questions, attempts, chat, grade, pair, review, billing)
+  5. Initialize Socket.IO + listen on PORT
 
-**Data-fetching hooks (local to component trees):**
-- `useTopics`, `useTopicsProgress`, `useTopicQuestions`, `useConcepts`, `useAttemptHistory`, `useFeature`, `useStudyPlan`
+**Socket.IO Gateway:**
+- Location: `backend/src/realtime.ts`
+- Attached to: http.Server (same port as Express)
+- Responsibilities:
+  1. Accept WebSocket connections from frontend
+  2. Handle `pair:subscribe` / `pair:unsubscribe` to join/leave pairing rooms
+  3. Expose `emitToPair(token, event, data)` for services to broadcast
 
-**Persistent client state:**
-- `localStorage` — Study plan cache (`frontend/src/lib/studyPlan.ts`); expiry banner dismissed date (`premium_expiry_banner_dismissed` key, set to current SGT date on dismiss). Session_id has been removed on this branch.
+## Architectural Constraints
 
-**Server state:**
-- Supabase Postgres — all persistent data: `users` (incl. `stripe_customer_id`, `subscription_status`, `access_expires_at`), `attempts`, `starred_questions`, `streaks`, `chat_messages`, `gradings`, `study_plan_cache`, `spaced_repetition_cards`
-- Supabase Storage — `solution-uploads` bucket for graded photo images
-
-**Ephemeral server state:**
-- `backend/src/services/pairService.ts` — in-memory `Map<token, PairSession>`; never persisted; TTL enforced by `PAIR_TTL_MIN` env var (default 10 min)
-
-## Real-Time (Socket.IO)
-
-**Topology:**
-- Single `http.Server` (wraps Express app) with Socket.IO attached at `backend/src/realtime.ts`
-- Default namespace (`/`); no custom namespaces
-- Rooms: one room per pairing token string
-
-**Socket.IO events:**
-
-| Direction | Event | Payload | Purpose |
-|-----------|-------|---------|---------|
-| client → server | `pair:subscribe` | `{ token }` | Desktop joins token room |
-| client → server | `pair:unsubscribe` | `{ token }` | Desktop leaves token room |
-| server → client | `pair:phone-connected` | — | Phone opened mobile upload page |
-| server → client | `pair:image` | `{ index, dataUrl }` | Photo streamed from phone |
-| server → client | `pair:grading` | — | Backend started grading |
-| server → client | `pair:graded` | `{ grading: GradeResponse }` | Grading complete |
-| server → client | `pair:error` | `{ message }` | Grading rejected |
-
-**Frontend connection:** `frontend/src/lib/socket.ts` — module-level singleton via `io()` (same-origin; Vite proxies `/socket.io` as WebSocket in dev via `vite.config.ts`).
-
-## Practice State Machine
-
-Managed by `useReducer` in `frontend/src/hooks/usePracticeSession.ts`:
-
-```
-loading → answering → submitted → revealed → (nextQuestion) → loading
-                    ↓ (GRADE_REJECTED)
-                  answering   (soft error, retake photo)
-                    ↓ (ERROR)
-                  error
-answering → complete  (no more questions in topic)
-```
-
-`PracticePhase` type: `'loading' | 'answering' | 'submitted' | 'revealed' | 'complete' | 'error'`
+- **Threading:** Node.js single-threaded event loop; CPU-heavy tasks (Gemini) are non-blocking (awaited)
+- **Global state:** Socket.IO server singleton in `realtime.ts` (module-level `let io`); pairService uses in-memory Map (resets on server restart)
+- **Module resolution:** TypeScript + `NodeNext` (esm by default); all imports must include `.js` extension
+- **Environment:** Backend relies on `.env` for Supabase, Gemini, Firebase, Stripe keys; never sent to browser
+- **Rate limiting:** IP-keyed via `express-rate-limit`; routes gate chat (15/min), grading (5/min) by IP
+- **Circular imports:** Generally avoided by organizing routes → services → db (no reverse deps); one exception: reviewService calls questionService, questionService calls topicService (safe, no cycle)
+- **RLS:** Supabase uses Row-Level Security; all queries run as `anon` or `service_role` context (frontend requests are `anon`, backend has service key for seeding)
+- **Type safety:** Strict TS throughout; Zod validates all external input (req.body, req.query, API responses expected locally)
 
 ## Anti-Patterns
 
-### Bypassing `lib/api.ts` for direct fetch
+### Calling Supabase Directly from Routes
 
-**What happens:** Calling `fetch('/api/...')` directly in a component instead of using `api.*` methods.
-**Why it's wrong:** Auth header won't be attached; 401/402 callbacks won't fire; type safety lost.
-**Do this instead:** Always use `api.*` from `frontend/src/lib/api.ts`.
+**What happens:** A route imports `supabase` and queries directly instead of delegating to service
+**Why it's wrong:** Violates separation of concerns; service layer is meant to encapsulate db + business logic; makes tests/mocks harder
+**Do this instead:** Create a service function in `backend/src/services/` (e.g., `attemptService.getAttemptsBySession()`) and call it from the route. Services own all database access.
 
-### Calling Supabase from a route handler
+### Hardcoding Secrets or API Keys
 
-**What happens:** Importing `supabase` in `backend/src/routes/*.ts` and running queries there.
-**Why it's wrong:** Violates the thin-route pattern; business logic leaks into transport layer.
-**Do this instead:** Delegate to a service function in `backend/src/services/`.
+**What happens:** `.env` values leak into frontend via unguarded constants or console.log
+**Why it's wrong:** GEMINI_API_KEY, SUPABASE_SERVICE_ROLE_KEY must stay backend-only; browser can see all code
+**Do this instead:** Store only Firebase config (public) in frontend. Backend routes proxy all Gemini/Supabase calls; never expose keys to frontend
 
-### Using `session_id` as identity on the firebase-auth branch
+### Mixing Zod Parsing and Business Logic in Routes
 
-**What happens:** Passing `session_id` query param to protected endpoints.
-**Why it's wrong:** Session_id identity has been removed; backend uses `req.user.uid` from the verified JWT.
-**Do this instead:** Rely on `req.user.uid` server-side; let `lib/api.ts` attach the token automatically.
+**What happens:** Route does `const body = req.body; if (body.x) { ...business logic... }`
+**Why it's wrong:** Routes become fat; no single responsibility; hard to reuse validation or logic
+**Do this instead:** Use Zod in route to parse/validate (e.g., `submitSchema.parse(req.body)`), then call service with parsed object. Service has clean input contract.
 
-### Mutating state directly in a route effect
+### Submitting Answers Without Session Context
 
-**What happens:** Using `useEffect` with a `firstLoad` ref guard in `PracticePage`.
-**Why it's wrong:** React StrictMode double-invokes effects; `firstLoad` refs break under StrictMode.
-**Do this instead:** `loadSpecific(id)` and `loadNext()` are idempotent — call them directly in the effect without guards.
+**What happens:** Attempt row saved without `session_id` or attempt to grade without checking question exists
+**Why it's wrong:** Progress tracking breaks; attempts hang as orphans; security: user A could grade user B's photo if no auth
+**Do this instead:** Extract user ID from auth middleware (`req.user!.uid`), always include in every query/insert. Services operate on behalf of authenticated user.
 
 ## Error Handling
 
-**Backend pattern:**
-- Zod parse errors → 400 with `{ error, details }`
-- `ChatLimitError` → 429
-- `GradingError` → 400 (soft, retryable; no attempt row written)
-- Auth failures → 401 / 402
-- All other thrown errors → 500 with `{ error: message }`
+**Strategy:** Zod for input validation (400 errors), service functions throw descriptive errors, routes catch and map to HTTP codes.
 
-**Frontend pattern:**
-- `lib/api.ts:request()` throws on non-ok; 401 triggers login modal; 402 triggers upgrade modal
-- Hooks catch errors and set local `error` state or dispatch `ERROR`/`GRADE_REJECTED` actions
-- `GRADE_REJECTED` keeps student on question (soft); `ERROR` transitions to error screen
+**Patterns:**
+
+1. **Input Validation:** Route uses `schema.parse(req.body)` → catches `ZodError` → responds 400 with issues list
+   - Example: `backend/src/routes/attempts.ts` lines 8–25
+
+2. **Not Found:** Service throws error with "not found" message → route catches → responds 404
+   - Example: `getQuestionWithSolution()` throws if question doesn't exist
+
+3. **Business Logic Errors:** Service throws descriptive error → route catches → responds 400 or 500
+   - Example: `chatService` throws `ChatLimitError` → route responds 429
+
+4. **Photo Grading Rejection:** `gradingService` returns `gradable: false` + `rejection_reason` → service throws `GradingError` → frontend receives 400 GRADE_REJECTED (soft error, stays on question)
+
+5. **Authentication:** Middleware `requireAuth` catches bad token → responds 401 with clear message
+
+6. **Feature Gating:** Middleware `gate('feature')` checks tier → responds 402 if not paid (frontend intercepts, shows upgrade modal)
+
+**Frontend Error Handling:**
+- `api.ts` catches 401/402 and invokes callbacks (onUnauthorized, onPaymentRequired)
+- `usePracticeSession` catches submission errors and dispatches ERROR action → renders `<ErrorMessage>`
+- Network errors bubble as `Error('...')` and are caught by component error boundaries
 
 ## Cross-Cutting Concerns
 
-**LaTeX rendering:**
-- Mixed text+math → `renderLatex()` from `frontend/src/lib/renderLatex.tsx` (`\(...\)` / `\[...\]` delimiters)
-- Pure LaTeX → `<Latex>` from `frontend/src/components/math/Latex.tsx`
-- Block display → `<LatexBlock>` from `frontend/src/components/math/LatexBlock.tsx`
+**Logging:** Console-based (development); no structured logging library. Services log key milestones (answer submitted, photo graded, hint generated).
 
-**Answer normalization:** `normalizeLaTeX()` in `backend/src/services/attemptService.ts` strips whitespace, expands compact MathLive notation (`\frac34` → `\frac{3}{4}`), lowercases.
+**Validation:** 
+- Frontend: Real-time input type checking (MathField rejects invalid LaTeX), form state validation (disable submit until valid)
+- Backend: Zod schemas on all HTTP inputs; db constraints (NOT NULL, unique indexes) on writes
 
-**Rate limiting:** `express-rate-limit` on `POST /api/chat` and `POST /api/grade`; IP-keyed; configured via env vars `CHAT_RATE_LIMIT_PER_MIN` (default 15) and `GRADE_RATE_LIMIT_PER_MIN` (default 5). Billing routes (`/api/billing/checkout`, `/api/billing/portal`) have no explicit rate limit beyond Firebase token verification cost.
+**Authentication:**
+- Frontend: Firebase anonymous (free) or signed-in (paid). ID token in Authorization header.
+- Backend: `requireAuth` middleware verifies token, upserts user row, injects `req.user`. Routes call `gate('feature')` to enforce tier.
 
-**Validation:** Zod on all `req.body` and `req.query` in every route handler.
-
-**Logging:** `console.log` / `console.error` only; no structured logging framework.
-
-### Webhook Router Ordering
-
-The billing router **must** be mounted before `express.json()` in `backend/src/index.ts`. The webhook endpoint (`POST /api/billing/webhook`) uses `express.raw({ type: 'application/json' })` to receive the raw body for Stripe signature verification. If `express.json()` runs first, the body is consumed and verification fails with a 400. Non-webhook billing routes (`/checkout`, `/portal`) apply `express.json()` per-route explicitly.
+**Answer Grading:**
+- Exact (LaTeX): normalize, try numeric eval, try symbolic eval (multi-point substitution)
+- Range (numerical): parse float, check abs diff ≤ tolerance
+- MCQ: normalize, string match
+- Null (show-that): no grading, part unsubmitted
 
 ---
 
-*Architecture analysis: 2026-07-03*
+*Architecture analysis: 2026-07-04*

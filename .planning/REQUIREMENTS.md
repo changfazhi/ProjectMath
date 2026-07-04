@@ -80,5 +80,41 @@
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-06-27*
-*Last updated: 2026-06-29 — PERS-01/02/03, SYNC-02 marked complete after codebase review confirmed implementation*
+
+# Requirements: Math Trainer — Landing Page Payment Entry Point (v1.1)
+
+**Defined:** 2026-07-04
+**Core Value:** Visitors can start a Premium upgrade directly from the landing page's pricing pitch, without first having to find their way into the app.
+
+## v1.1 Requirements
+
+### Landing Page Payment CTA
+
+- [x] **PAY-01**: The landing page "Go Pro" CTA (Pricing section, `LandingPage.tsx`) opens the real upgrade flow instead of being a dead `href="#"` link
+- [x] **PAY-02**: A logged-out visitor clicking "Go Pro" is prompted to log in; after successful sign-in they land directly in the upgrade modal (not just redirected to `/roadmap`)
+- [x] **PAY-03**: A logged-in visitor clicking "Go Pro" opens the upgrade modal immediately, with no extra navigation
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Changing the Header "Get Premium" button | Stays as an unmodified second entry point |
+| Going live with real Stripe payments / production deployment | Tracked separately (`.planning/codebase/RUNBOOKS.md`, `.planning/DEPLOYMENT.md`) |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PAY-01 | Phase 3 | Complete |
+| PAY-02 | Phase 3 | Complete |
+| PAY-03 | Phase 3 | Complete |
+
+**Coverage:**
+
+- v1.1 requirements: 3 total
+- Mapped to phases: 3 ✓
+- Unmapped: 0 ✓
+
+---
+*Requirements defined: 2026-07-04*
+*Last updated: 2026-07-04 — v1.1 roadmap created; PAY-01/02/03 mapped to Phase 3*

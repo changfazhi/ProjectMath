@@ -1,45 +1,43 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-current_phase: 2
-current_phase_name: Firestore Sync and Live Quest Status
-status: complete
-stopped_at: ~
-last_updated: "2026-06-27T14:50:40Z"
-last_activity: 2026-06-27
-last_activity_desc: Completed 02-02 — live quest status refresh on focus/visibilitychange
+milestone: v1.1
+milestone_name: Landing Page Payment Entry Point
+current_phase: 03
+current_phase_name: landing-page-go-pro-payment-entry-point
+status: executing
+stopped_at: Phase 3 UI-SPEC approved
+last_updated: "2026-07-04T04:01:46.106Z"
+last_activity: 2026-07-04
+last_activity_desc: Phase 03 execution started
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-27)
+See: .planning/PROJECT.md (updated 2026-07-04)
 
-**Core value:** Students can see and act on their daily study plan from anywhere in the app without losing their place.
-**Current focus:** Phase 01 — collapsible-sidebar-with-local-plan
+**Core value:** Visitors can start a Premium upgrade directly from the landing page's pricing pitch, without first having to find their way into the app.
+**Current focus:** Phase 03 — landing-page-go-pro-payment-entry-point
 
 ## Current Position
 
-Phase: 2 — Firestore Sync and Live Quest Status
-Plan: 02-02 (complete — final plan)
-Status: Phase 2 complete
-Last activity: 2026-06-27 — Completed 02-02 live quest status refresh
-
-Progress: [██████████] 100%
+Phase: 03 (landing-page-go-pro-payment-entry-point) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-07-04 — Phase 03 execution started
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 5 (v1.0)
 - Average duration: —
 - Total execution time: —
 
@@ -47,7 +45,9 @@ Progress: [██████████] 100%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 3 | - | - |
+| 1 (v1.0) | 3 | - | - |
+| 2 (v1.0) | 2 | - | - |
+| 3 | 0/TBD | - | - |
 
 **Recent Trend:**
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 03 P01 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -63,10 +64,11 @@ Progress: [██████████] 100%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Sidebar slots into `RootLayout` (alongside `<Outlet />`) — survives route transitions
-- Firestore is authoritative for plan storage; localStorage is a read-cache only
-- Quest status derived from attempts API — no separate write path
-- Phase 1 delivers a fully usable sidebar on localStorage; Phase 2 adds Firestore sync
+- Reuse the existing globally-mounted `UpgradeModal` / `openUpgradeModal()` rather than a landing-page-specific modal — avoids duplicating checkout logic
+- Keep the Header "Get Premium" button unchanged — it stays as a second, unmodified entry point
+- Milestone v1.1 is frontend-only wiring: no new backend routes (`POST /api/billing/checkout` and the upgrade modal already exist)
+- [Phase 03]: Reused existing data-attribute delegation pattern (data-login) for the new data-goto-pro CTA — no new component, no href/class/style changes to the anchor
+- [Phase 03]: goProIntentRef kept as a plain in-memory React ref (not localStorage/sessionStorage) per threat T-03-01 — resets on reload, cannot leak into a later unrelated sign-in
 
 ### Pending Todos
 
@@ -74,16 +76,17 @@ None yet.
 
 ### Blockers/Concerns
 
-- Firebase Auth is in-progress on `firebase-auth` branch — Phase 2 depends on UID being available; Phase 1 must degrade gracefully to localStorage when auth is absent
+- The login → auto-open-upgrade flow must distinguish "Go Pro" intent from a plain login: the existing `prevUserRef`/`justLoggedIn` transition in `LandingPage.tsx` currently redirects every fresh sign-in to `/roadmap`. `openLoginModal(message?)` (`AuthContext.tsx:71`) has no post-login callback/intent parameter yet — some form of pending-intent needs to thread through so only "Go Pro" sign-ins open the upgrade modal.
 
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| Billing | Going live with real Stripe payments / production deployment | Deferred | v1.1 (see DEPLOYMENT.md) |
+| Sidebar | SYNC-01 live quest status refresh (from v1.0 Phase 2) | Carried over | v1.0 |
 
 ## Session Continuity
 
-Last session: 2026-06-27T14:50:40Z
-Stopped at: Completed plan 02-02 (final plan of milestone)
-Resume file: None
+Last session: 2026-07-04T04:00:47.690Z
+Stopped at: Phase 3 UI-SPEC approved
+Resume file: .planning/phases/03-landing-page-go-pro-payment-entry-point/03-UI-SPEC.md
