@@ -8,9 +8,11 @@ import {
   getRandomItems,
 } from '../services/reviewService.js';
 import {
-  getWeaknessDiagnosis,
+  getDiagnosisStatus,
+  generateWeaknessDiagnosis,
   getPersonalisedStudyPlan,
 } from '../services/diagnosticService.js';
+import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
 
 const router = Router();
 
@@ -59,11 +61,26 @@ router.get('/random', async (_req, res) => {
   }
 });
 
+// GET — the stored diagnosis + cooldown state; never runs the AI analysis.
 router.get('/diagnosis', ...gate('review'), async (req, res) => {
   try {
-    const result = await getWeaknessDiagnosis(req.user!.uid);
-    res.json(result);
+    const status = await getDiagnosisStatus(req.user!.uid, req.user!.tier);
+    res.json(status);
   } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST — run a new analysis (cooldown-enforced: daily for paid, weekly for free).
+router.post('/diagnosis', ...gate('review'), async (req, res) => {
+  try {
+    const status = await generateWeaknessDiagnosis(req.user!.uid, req.user!.tier);
+    res.json(status);
+  } catch (err) {
+    if (err instanceof QuotaExceededError) {
+      sendQuotaError(res, err, req.user!.tier);
+      return;
+    }
     const msg = (err as Error).message;
     if (msg.includes('Attempt at least')) {
       res.status(403).json({ error: msg });
@@ -75,7 +92,7 @@ router.get('/diagnosis', ...gate('review'), async (req, res) => {
 
 router.get('/study-plan', ...gate('review'), async (req, res) => {
   try {
-    const result = await getPersonalisedStudyPlan(req.user!.uid);
+    const result = await getPersonalisedStudyPlan(req.user!.uid, req.user!.tier);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

@@ -1,3 +1,5 @@
+import type { Tier } from '../config/featureTiers.js';
+
 export type MathLevel = 'H1' | 'H2';
 export type Difficulty = 1 | 2 | 3;
 export type AnswerType = 'exact' | 'mcq' | 'range';
@@ -254,6 +256,7 @@ export interface GradeImage {
 
 export interface GradeSolutionParams {
   userId: string;
+  tier: Tier; // drives the daily scan quota inside the grading service
   question_id: string;
   images: GradeImage[];
   time_taken_s?: number;
@@ -262,6 +265,7 @@ export interface GradeSolutionParams {
 // Re-grade from the student's (edited) typed LaTeX instead of photos.
 export interface GradeTranscriptionParams {
   userId: string;
+  tier: Tier;
   question_id: string;
   transcription_latex: string;
   time_taken_s?: number;
@@ -286,6 +290,7 @@ export interface GradeResponse {
 export interface PairSession {
   token: string;
   userId: string;
+  tier: Tier; // snapshot at pair creation — the /done route has no auth middleware
   question_id: string;
   images: GradeImage[];
   created_at: number; // epoch ms

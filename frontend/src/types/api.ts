@@ -260,6 +260,14 @@ export interface DiagnosisResult {
   generated_at: string
 }
 
+// Persisted diagnosis + regeneration cooldown (daily for paid, weekly for free).
+export interface DiagnosisStatus {
+  diagnosis: DiagnosisResult | null
+  generated_at: string | null
+  can_generate: boolean
+  next_allowed_at: string | null
+}
+
 export type QuestStatus = 'correct' | 'attempted' | 'pending'
 
 export interface StudyPlanItem {
@@ -272,4 +280,21 @@ export interface StudyPlanItem {
 export interface StudyPlanResponse {
   items: StudyPlanItem[]
   reasoning: string
+  date: string        // SGT date the plan was generated (YYYY-MM-DD)
+  valid_until: string // first SGT date the plan is stale (paid: next day; free: +7 days)
+}
+
+// ── Daily usage quotas (GET /api/usage) ──────────────────────────────────────
+
+export interface UsageBucket {
+  used: number
+  limit: number | null // null = unlimited (paid)
+  remaining: number | null
+}
+
+export interface UsageSummary {
+  tier: 'free' | 'paid'
+  resets_at: string // next SGT midnight, ISO
+  scans: UsageBucket
+  chat: UsageBucket
 }

@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
 import { ChatLimitError, getChatHistory, sendHintMessage } from '../services/chatService.js';
+import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
 
 const router = Router();
 
@@ -39,11 +40,15 @@ router.get('/', ...gate('aiHints'), async (req, res) => {
 router.post('/', ...gate('aiHints'), chatLimiter, async (req, res) => {
   try {
     const { question_id, message } = sendSchema.parse(req.body);
-    const result = await sendHintMessage(req.user!.uid, question_id, message);
+    const result = await sendHintMessage(req.user!.uid, question_id, message, req.user!.tier);
     res.json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid request body', details: err.issues });
+      return;
+    }
+    if (err instanceof QuotaExceededError) {
+      sendQuotaError(res, err, req.user!.tier);
       return;
     }
     if (err instanceof ChatLimitError) {

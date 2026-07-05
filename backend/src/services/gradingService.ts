@@ -3,6 +3,8 @@ import { Type } from '@google/genai';
 import { supabase } from '../db/supabase.js';
 import { getGemini, GEMINI_MODEL } from '../db/gemini.js';
 import { getQuestionWithSolution } from './questionService.js';
+import { assertScanQuota } from './usageService.js';
+import type { Tier } from '../config/featureTiers.js';
 import type {
   GradeResponse,
   GradeSolutionParams,
@@ -224,6 +226,7 @@ function normaliseParts(ai: GradingAiOutput): GradingPartResult[] {
 // Fields both the photo and typed-text grading paths share.
 interface GradeCoreParams {
   userId: string;
+  tier: Tier;
   question_id: string;
   time_taken_s?: number;
 }
@@ -301,6 +304,11 @@ async function runGrading(opts: {
   transcriptionOverride?: string;
 }): Promise<GradeResponse> {
   const { params, mode } = opts;
+
+  // Daily scan quota (free tier) — checked before the Gemini call so a blocked
+  // attempt costs nothing and writes nothing. This is the single enforcement point
+  // for all three entry points (photo, typed re-grade, phone pair flow).
+  await assertScanQuota(params.userId, params.tier);
 
   const question = await getQuestionWithSolution(params.question_id);
   if (!question) throw new Error(`Question ${params.question_id} not found`);

@@ -4,14 +4,22 @@ import type { StudyPlanItem } from '../types/api'
 
 export interface StoredPlan {
   date: string
+  valid_until?: string // first SGT date the plan is stale (server-computed; free = weekly)
   items: StudyPlanItem[]
   reasoning: string
 }
 
 export const PLAN_KEY = 'study_plan_v1'
 
+// "Today" in Asia/Singapore (UTC+8, no DST) — matches the backend's day boundary.
 export function todayStr() {
-  return new Date().toLocaleDateString('en-CA')
+  return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10)
+}
+
+// Plans persisted before valid_until existed are treated as stale — the server
+// returns the same plan back for free users, so nothing regenerates early.
+function isPlanStale(p: StoredPlan): boolean {
+  return !p.valid_until || todayStr() >= p.valid_until
 }
 
 export function savePlan(plan: StoredPlan) {
@@ -24,7 +32,7 @@ export function loadStoredPlan(): { plan: StoredPlan | null; isStale: boolean } 
     if (!raw) return { plan: null, isStale: false }
     const p = JSON.parse(raw) as StoredPlan
     if (!Array.isArray(p.items)) return { plan: null, isStale: false }
-    return { plan: p, isStale: p.date !== todayStr() }
+    return { plan: p, isStale: isPlanStale(p) }
   } catch {
     return { plan: null, isStale: false }
   }
@@ -32,22 +40,27 @@ export function loadStoredPlan(): { plan: StoredPlan | null; isStale: boolean } 
 
 // ── Firestore helpers ─────────────────────────────────────────────────────────
 
-/** Write a study plan to Firestore at users/{uid}/study_plans/{date}. */
+/**
+ * Write the study plan to Firestore at users/{uid}/study_plans/current.
+ * A single fixed doc (not date-keyed) so a still-valid week-old free plan can be
+ * found from another device; the plan carries its own valid_until.
+ */
 export async function savePlanRemote(uid: string, plan: StoredPlan): Promise<void> {
-  const ref = doc(db, 'users', uid, 'study_plans', plan.date)
+  const ref = doc(db, 'users', uid, 'study_plans', 'current')
   await setDoc(ref, plan)
 }
 
 /**
- * Read today's study plan from Firestore for the given user.
- * Returns null when no doc exists or the stored items array is invalid.
+ * Read the current study plan from Firestore for the given user.
+ * Returns null when no doc exists, the stored items array is invalid, or the plan is stale.
  */
 export async function loadRemotePlan(uid: string): Promise<StoredPlan | null> {
-  const ref = doc(db, 'users', uid, 'study_plans', todayStr())
+  const ref = doc(db, 'users', uid, 'study_plans', 'current')
   const snap = await getDoc(ref)
   if (!snap.exists()) return null
   const data = snap.data() as StoredPlan
   if (!Array.isArray(data.items)) return null
+  if (isPlanStale(data)) return null
   return data
 }
 

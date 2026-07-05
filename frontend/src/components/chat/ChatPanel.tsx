@@ -7,9 +7,14 @@ import { Spinner } from '../ui/Spinner'
 interface Props {
   chat: ChatSession
   className?: string
+  /** e.g. "7/10 free messages left today" — rendered above the input for free users. */
+  quotaNote?: string | null
+  /** Disable sending (daily quota exhausted); pair with onUpgrade for the CTA. */
+  sendDisabled?: boolean
+  onUpgrade?: () => void
 }
 
-export function ChatPanel({ chat, className }: Props) {
+export function ChatPanel({ chat, className, quotaNote, sendDisabled, onUpgrade }: Props) {
   const { messages, loading, error, send } = chat
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -21,7 +26,7 @@ export function ChatPanel({ chat, className }: Props) {
 
   function handleSend() {
     const text = input.trim()
-    if (!text || loading) return
+    if (!text || loading || sendDisabled) return
     setInput('')
     void send(text)
   }
@@ -92,6 +97,20 @@ export function ChatPanel({ chat, className }: Props) {
         <p className="px-4 pb-2 text-xs text-red-500">{error}</p>
       )}
 
+      {/* Daily quota */}
+      {sendDisabled ? (
+        <p className="px-4 pb-2 text-xs text-amber-600 dark:text-amber-400">
+          You've used all your free hints for today — resets at midnight.{' '}
+          {onUpgrade && (
+            <button onClick={onUpgrade} className="underline underline-offset-2 font-semibold">
+              Upgrade for unlimited
+            </button>
+          )}
+        </p>
+      ) : (
+        quotaNote && <p className="px-4 pb-2 text-xs text-slate-400 dark:text-slate-500">{quotaNote}</p>
+      )}
+
       {/* Input */}
       <div className="border-t border-slate-200 dark:border-slate-800 p-3 flex items-end gap-2">
         <textarea
@@ -104,7 +123,7 @@ export function ChatPanel({ chat, className }: Props) {
         />
         <button
           onClick={handleSend}
-          disabled={loading || !input.trim()}
+          disabled={loading || !input.trim() || sendDisabled}
           className="shrink-0 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Send

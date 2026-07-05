@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
-import { todayStr, persistPlan, resolvePlan } from '../lib/studyPlan'
+import { persistPlan, resolvePlan } from '../lib/studyPlan'
 import { useAuth } from '../contexts/AuthContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -102,11 +102,12 @@ function QuestRow({
 
 export function StudyPlanPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, tier } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [quests, setQuests] = useState<Quest[]>([])
   const [reasoning, setReasoning] = useState('')
+  const [validUntil, setValidUntil] = useState<string | null>(null)
 
   // Re-run when auth settles so signed-in users hydrate from Firestore on new devices
   useEffect(() => {
@@ -125,6 +126,7 @@ export function StudyPlanPage() {
       if (stored && !isStale) {
         items = stored.items
         planReasoning = stored.reasoning
+        setValidUntil(stored.valid_until ?? null)
       } else {
         const fresh = await api.review.studyPlan()
         if (fresh.items.length === 0) {
@@ -134,7 +136,13 @@ export function StudyPlanPage() {
         }
         items = fresh.items
         planReasoning = fresh.reasoning
-        await persistPlan(user?.uid ?? null, { date: todayStr(), items, reasoning: planReasoning })
+        setValidUntil(fresh.valid_until)
+        await persistPlan(user?.uid ?? null, {
+          date: fresh.date,
+          valid_until: fresh.valid_until,
+          items,
+          reasoning: planReasoning,
+        })
       }
 
       // Check attempt status for each question
@@ -211,11 +219,16 @@ export function StudyPlanPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1">
-            Daily Quest Log · {new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}
+            {tier === 'paid' ? 'Daily' : 'Weekly'} Quest Log · {new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}
           </p>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            Today&apos;s Study Plan
+            {tier === 'paid' ? "Today's Study Plan" : "This Week's Study Plan"}
           </h1>
+          {tier !== 'paid' && validUntil && (
+            <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+              Refreshes {new Date(`${validUntil}T00:00:00+08:00`).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })}
+            </p>
+          )}
           {reasoning && (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
               {reasoning}

@@ -3,7 +3,7 @@ import type {
   ChatMessage,
   ChatSendResponse,
   CreatePairResponse,
-  DiagnosisResult,
+  DiagnosisStatus,
   Difficulty,
   Grading,
   GradeResponse,
@@ -22,8 +22,57 @@ import type {
   TopicAccuracy,
   TopicConcept,
   TopicProgress,
+  UsageSummary,
 } from '../types/api'
 import { auth } from './firebase'
+
+// Typed API error — carries the structured quota fields from 429 QUOTA_EXCEEDED
+// responses so call sites can show a countdown / upgrade CTA. Extends Error, so
+// existing `.message` consumers keep working.
+export class ApiError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly quota?: string
+  readonly resetAt?: string
+  readonly upgradeable?: boolean
+
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    quota?: string,
+    resetAt?: string,
+    upgradeable?: boolean,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.quota = quota
+    this.resetAt = resetAt
+    this.upgradeable = upgradeable
+  }
+}
+
+interface ErrorBody {
+  error?: string
+  code?: string
+  quota?: string
+  reset_at?: string
+  upgradeable?: boolean
+}
+
+async function throwApiError(res: Response): Promise<never> {
+  const body = (await res.json().catch(() => ({ error: res.statusText }))) as ErrorBody
+  throw new ApiError(
+    body.error ?? res.statusText,
+    res.status,
+    body.code,
+    body.quota,
+    body.reset_at,
+    body.upgradeable,
+  )
+}
 
 interface ApiCallbacks {
   onUnauthorized: () => void
@@ -62,8 +111,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error('Subscription required')
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error((body as { error?: string }).error ?? res.statusText)
+    await throwApiError(res)
   }
   return res.json() as Promise<T>
 }
@@ -80,8 +128,7 @@ async function requestFormData<T>(path: string, formData: FormData): Promise<T> 
     throw new Error('Subscription required')
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error((body as { error?: string }).error ?? res.statusText)
+    await throwApiError(res)
   }
   return res.json() as Promise<T>
 }
@@ -218,8 +265,14 @@ export const api = {
     speedDrills: () => request<{ items: ReviewItem[] }>('/api/review/speed-drills'),
     spaced: () => request<{ items: ReviewItem[] }>('/api/review/spaced'),
     random: () => request<{ items: ReviewItem[] }>('/api/review/random'),
-    diagnosis: () => request<DiagnosisResult>('/api/review/diagnosis'),
+    diagnosis: () => request<DiagnosisStatus>('/api/review/diagnosis'),
+    generateDiagnosis: () =>
+      request<DiagnosisStatus>('/api/review/diagnosis', { method: 'POST' }),
     studyPlan: () => request<StudyPlanResponse>('/api/review/study-plan'),
+  },
+
+  usage: {
+    get: () => request<UsageSummary>('/api/usage'),
   },
 
   billing: {

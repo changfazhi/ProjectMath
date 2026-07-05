@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
 import { addImage, closePair, createPair, getValidPair, PairError } from '../services/pairService.js';
 import { gradeSolution, GradingError } from '../services/gradingService.js';
+import { assertScanQuota, QuotaExceededError, sendQuotaError } from '../services/usageService.js';
 import { getQuestionById } from '../services/questionService.js';
 import { emitToPair } from '../realtime.js';
 import type { CreatePairResponse, PairContext } from '../types/index.js';
@@ -39,7 +40,9 @@ const createSchema = z.object({
 router.post('/', ...gate('pairUpload'), pairLimiter, async (req, res) => {
   try {
     const { question_id } = createSchema.parse(req.body);
-    const pair = createPair(req.user!.uid, question_id);
+    // Fail fast before showing a QR the user can't use; runGrading re-checks at /done.
+    await assertScanQuota(req.user!.uid, req.user!.tier);
+    const pair = createPair(req.user!.uid, question_id, req.user!.tier);
     const body: CreatePairResponse = {
       token: pair.token,
       mobile_path: `/m/${pair.token}`,
@@ -49,6 +52,10 @@ router.post('/', ...gate('pairUpload'), pairLimiter, async (req, res) => {
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid request body', details: err.issues });
+      return;
+    }
+    if (err instanceof QuotaExceededError) {
+      sendQuotaError(res, err, req.user!.tier);
       return;
     }
     res.status(500).json({ error: (err as Error).message });
@@ -122,13 +129,16 @@ router.post('/:token/done', pairLimiter, async (req, res) => {
   try {
     const grading = await gradeSolution({
       userId: pair.userId,
+      tier: pair.tier,
       question_id: pair.question_id,
       images: pair.images,
     });
     emitToPair(pair.token, 'pair:graded', { grading });
   } catch (err) {
     const message =
-      err instanceof GradingError ? err.message : 'Grading failed — please try again on your computer.';
+      err instanceof GradingError || err instanceof QuotaExceededError
+        ? err.message
+        : 'Grading failed — please try again on your computer.';
     emitToPair(pair.token, 'pair:error', { message });
   } finally {
     closePair(pair.token);

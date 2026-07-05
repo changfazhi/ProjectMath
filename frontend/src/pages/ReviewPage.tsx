@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { Spinner } from '../components/ui/Spinner'
 import { cn } from '../lib/utils'
 import { useAuth } from '../contexts/AuthContext'
-import { savePlan, savePlanRemote, todayStr, PLAN_KEY, type StoredPlan } from '../lib/studyPlan'
+import { loadStoredPlan, savePlan, savePlanRemote, type StoredPlan } from '../lib/studyPlan'
 import type { DiagnosisResult, ReviewItem, TopicDiagnosis } from '../types/api'
 
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif"
@@ -183,6 +183,14 @@ function TopicList({
 
 type DiagState = 'idle' | 'loading' | 'shown' | 'error'
 
+// "in 3 days" / "tomorrow" from a server timestamp — display only, never enforcement.
+function formatNextAllowed(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now()
+  const days = Math.ceil(ms / 86_400_000)
+  if (days <= 1) return 'tomorrow'
+  return `in ${days} days`
+}
+
 export function ReviewPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -205,6 +213,21 @@ export function ReviewPage() {
         /* non-critical — defaults to 0 */
       })
       .finally(() => setMetaLoaded(true))
+
+    // Show the stored diagnosis immediately — no re-analysis on revisit.
+    api.review
+      .diagnosis()
+      .then((status) => {
+        setCanGenerate(status.can_generate)
+        setNextAllowedAt(status.next_allowed_at)
+        if (status.diagnosis) {
+          setDiagnosis(status.diagnosis)
+          setDiagState('shown')
+        }
+      })
+      .catch(() => {
+        /* non-critical — card stays in idle state */
+      })
   }, [])
 
   // ── Corrections card ───────────────────────────────────────────────────────
@@ -274,19 +297,46 @@ export function ReviewPage() {
   const [diagState, setDiagState] = useState<DiagState>('idle')
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null)
   const [diagError, setDiagError] = useState<string | null>(null)
+  const [canGenerate, setCanGenerate] = useState(true)
+  const [nextAllowedAt, setNextAllowedAt] = useState<string | null>(null)
+  const [regenLoading, setRegenLoading] = useState(false)
 
+  // First-ever analysis (card in idle/error state).
   async function handleDiagnosis() {
     if (diagState === 'loading') return
     setDiagState('loading')
     setDiagError(null)
 
     try {
-      const result = await api.review.diagnosis()
-      setDiagnosis(result)
-      setDiagState('shown')
+      const status = await api.review.generateDiagnosis()
+      setDiagnosis(status.diagnosis)
+      setCanGenerate(status.can_generate)
+      setNextAllowedAt(status.next_allowed_at)
+      setDiagState(status.diagnosis ? 'shown' : 'idle')
     } catch (err) {
       setDiagError((err as Error).message)
       setDiagState('error')
+    }
+  }
+
+  // Re-analysis from the shown card — keeps the current results visible while loading.
+  async function handleRegenerate() {
+    if (regenLoading || !canGenerate) return
+    setRegenLoading(true)
+    setDiagError(null)
+    try {
+      const status = await api.review.generateDiagnosis()
+      if (status.diagnosis) setDiagnosis(status.diagnosis)
+      setCanGenerate(status.can_generate)
+      setNextAllowedAt(status.next_allowed_at)
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'QUOTA_EXCEEDED') {
+        setCanGenerate(false)
+        if (err.resetAt) setNextAllowedAt(err.resetAt)
+      }
+      setDiagError((err as Error).message)
+    } finally {
+      setRegenLoading(false)
     }
   }
 
@@ -298,23 +348,18 @@ export function ReviewPage() {
     setStudyPlanLoading(true)
     setStudyPlanError(null)
     try {
-      const today = todayStr()
+      // Skip the fetch when a still-valid plan is cached locally.
+      const { plan: stored, isStale } = loadStoredPlan()
 
-      // Check whether today's plan is already cached in localStorage
-      let hasTodayPlan = false
-      const localRaw = localStorage.getItem(PLAN_KEY)
-      if (localRaw) {
-        try {
-          hasTodayPlan = (JSON.parse(localRaw) as { date: string }).date === today
-        } catch {
-          localStorage.removeItem(PLAN_KEY)
-        }
-      }
-
-      if (!hasTodayPlan) {
+      if (!stored || isStale) {
         // Fetch the plan here (spinner is already showing) so StudyPlanPage renders instantly.
         const fresh = await api.review.studyPlan()
-        const planData: StoredPlan = { date: today, items: fresh.items, reasoning: fresh.reasoning }
+        const planData: StoredPlan = {
+          date: fresh.date,
+          valid_until: fresh.valid_until,
+          items: fresh.items,
+          reasoning: fresh.reasoning,
+        }
         savePlan(planData)                                        // sync — localStorage is immediate
         if (user?.uid) savePlanRemote(user.uid, planData).catch(() => {}) // background Firestore write
       }
@@ -500,6 +545,37 @@ export function ReviewPage() {
                   accent="text-emerald-600 dark:text-emerald-400"
                 />
               </div>
+
+              {/* Regenerate (cooldown-gated: daily for premium, weekly for free) */}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs" style={{ color: '#6a6f99' }}>
+                  Generated{' '}
+                  {new Date(diagnosis.generated_at).toLocaleDateString('en-SG', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </p>
+                {canGenerate ? (
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={regenLoading}
+                    className="shrink-0 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60"
+                    style={{ background: 'rgba(79,70,229,.16)', color: '#7c83ff' }}
+                  >
+                    {regenLoading && <Spinner size="sm" />}
+                    <span>{regenLoading ? 'Re-analysing…' : 'Regenerate'}</span>
+                  </button>
+                ) : (
+                  <p className="text-xs shrink-0 text-right" style={{ color: '#6a6f99' }}>
+                    {nextAllowedAt
+                      ? `Next diagnosis available ${formatNextAllowed(nextAllowedAt)}`
+                      : 'Diagnosis up to date'}
+                  </p>
+                )}
+              </div>
+              {diagError && (
+                <p className="text-xs" style={{ color: '#fbbf24' }}>{diagError}</p>
+              )}
 
               {/* Study plan CTA */}
               <div className="flex flex-col gap-2 pt-1">
