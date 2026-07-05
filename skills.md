@@ -60,7 +60,7 @@ If there is no shared context (parts are independent), set `prompt_latex = ''`.
 |---|---|---|
 | **find, determine, calculate, evaluate, compute, solve, express, deduce \[a value], write down, give, state \[a value]** | `"exact"` or `"range"` | **A typed box is expected.** Pull the answer from `solution_latex`. |
 | Only **prove / show that / verify \[an identity]** (no value asked afterwards) | `null` | True proof — no box. |
-| Only **sketch / draw / plot / construct** | `null` | Diagram — no box. |
+| Only **sketch / draw / plot / construct** | `null` | Diagram — no box, **but it MUST get a `solution_graph`** (see §12). |
 | Only **describe / explain / comment / justify / interpret** | `null` | Prose — exact-match can't grade it. |
 
 Decide `"exact"` vs `"range"`: exact LaTeX/algebraic answer → `"exact"`; a decimal rounded to s.f./d.p. → `"range"` with a tolerance.
@@ -317,7 +317,86 @@ GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
 
 ---
 
-## 12. Common Pitfalls
+## 12. Model Graphs for Sketch Parts (`solution_graph`)
+
+**Every sketch/draw part** (classified `null` in §3) must carry a `solution_graph` spec so the Solution tab renders a model graph. This covers function sketches, conics/parametric curves, scatter diagrams, normal-distribution curves, Argand diagrams, and vector diagrams. The only legitimate skips are diagrams that aren't coordinate graphs (Venn diagrams, Riemann-rectangle illustrations) — record those with a `-- FLAG:` comment.
+
+Pipeline recap: the spec lives at `parts[i].solution_graph` (JSONB), is compiled server-side by `graphService.compileGraph()` into expression-free polylines, stripped from public payloads, and served only via `GET /api/questions/:id/solution` as `graphs[]`, rendered by `SolutionGraph.tsx`. Reference migrations: **024** (basic curves) and **027** (every feature below, 40 worked examples with notes).
+
+### Spec format
+
+```json
+{
+  "x_range": [-8, 8], "y_range": [-8, 8],
+  "curves": [
+    { "expr": "x + 9/(x+1)", "domain": [-1, 8], "label": "y=x+\\dfrac{9}{x+1}" },
+    { "x_expr": "2*cos(t)", "y_expr": "3*sin(t)", "domain": [0, 6.2832], "label": "E" }
+  ],
+  "asymptotes": [
+    { "kind": "vertical", "x": -1, "label": "x=-1" },
+    { "kind": "oblique", "expr": "x", "label": "y=x" },
+    { "kind": "horizontal", "expr": "3", "label": "y=3" }
+  ],
+  "points": [
+    { "x": 2, "y": 5, "label": "(2,\\ 5)", "kind": "min" },
+    { "x": 1, "y": 1.4142, "label": "(a,\\ \\sqrt{2}a)", "kind": "point", "open": true }
+  ],
+  "segments": [
+    { "from": [0, 0], "to": [3, 1.5], "style": "dashed", "arrow": true, "label": "\\mathbf{a}" }
+  ],
+  "shade": [{ "expr": "3*x^2/((x+1)*(3*x^2+x+1))", "domain": [0, 4], "label": "R" }],
+  "x_label": "t", "y_label": "\\theta"
+}
+```
+
+- `expr`/`x_expr`/`y_expr` are **mathjs** syntax (`e^x`, `abs()`, `sqrt()`, `log()` = ln, `atan()`, `pi`, explicit `*` everywhere). Evaluated only on the backend.
+- **Parametric** curve = give `x_expr` + `y_expr`; `domain` is then the **t-interval**. Use for ellipses/loci/rosettes, sideways parabolas, and **inverse functions**: plot f⁻¹ as `x_expr: f(t), y_expr: t`.
+- `points[].kind`: `min`/`max`/`intercept` are **validated on-curve** (see below); `point` is free-floating (Argand points, axis markers, line pivots). `open: true` = hollow dot for excluded endpoints (open domains, jump discontinuities).
+- `segments` = straight lines drawn as-is: Argand/vector rays (`arrow: true` for vectors), dashed construction/mean lines, `y=x`, overlay lines, and anything vertical that y = f(x) can't express.
+- `shade` fills between a curve and the x-axis over an x-interval (region R, normal-probability areas).
+- `curves` may be **empty/absent** for points-only sketches (scatter diagrams).
+- Labels are LaTeX (KaTeX). In the SQL JSON, double every backslash as usual (§7).
+
+### Authoring workflow
+
+1. **Verify against the official solutions PDF, not the stored `solution_latex`.** Render the page and look at the actual model sketch:
+   ```bash
+   pdftoppm -f <page> -l <page> -r 100 -png "2025/<school>/<solutions>.pdf" out
+   ```
+   then Read the PNG. History says this step is non-negotiable: the stored text had wrong turning points (d0251001 (2,8)→(2,5); d0250005 (−2,2)→(−2,−2)), wrong constants (cafe1004 `k`/`k²` vs official `√k`; cafe1006 `2+2i` vs official `√2+√2i`), and phantom features (|f| "passing through (−3,0)"). When the DB disagrees with the PDF, **fix the DB text in the same migration** (see 026/027 for `replace()` patterns — and verify each `replace()` target substring actually exists in the live row first, or it silently no-ops).
+2. **Verify the part index against the live DB** (`SELECT parts FROM questions WHERE id = ...` via a read-only script with `backend/.env`) — earlier migrations may have rewritten `parts`, so never trust the original INSERT's ordering. Always label-guard:
+   ```sql
+   UPDATE questions
+   SET parts = jsonb_set(parts, '{<idx>,solution_graph}', $${ ... }$$::jsonb)
+   WHERE id = '<uuid>' AND parts-><idx>->>'label' = '<label>';
+   ```
+3. **Author by category:**
+   | Sketch type | Recipe |
+   |---|---|
+   | Known equation | Direct `expr`; declare vertical asymptotes (sampling auto-splits branches and insets at VAs) |
+   | Conic / parametric / locus | `x_expr`/`y_expr` over t |
+   | f and f⁻¹ on one diagram | f as `expr`; f⁻¹ parametrically as `(f(t), t)`; add `y=x` (curve entry or segment); open dots at domain endpoints |
+   | Piecewise / periodic | One curve entry per piece; exact-precision breakpoints; solid/hollow dots at jumps; dashed segment for the jump if the official sketch shows one |
+   | Scatter diagram | Points-only + `x_label`/`y_label`; data comes from the question prompt |
+   | Normal distribution | Gaussian pdf `e^(-(x-m)^2/(2*s^2))/(s*sqrt(2*pi))`; dashed mean segments; `shade` for probability regions; label curves via on-curve points at the peaks |
+   | Argand / vector diagram | `points` + `segments` (dashed rays, `arrow` for vectors) + `x_label: "\\mathrm{Re}"`, `y_label: "\\mathrm{Im}"` |
+   | Abstract/unknown f | **Stand-in curve**: construct a concrete function passing exactly through every officially labelled feature (asymptote-hugging exponential tails like `x+3-3*e^((x+2)/3)`, Hermite cubics between labelled points with matched slopes). Document the construction in the SQL comment. For "in terms of b" curves, pick a representative value and note it |
+4. **Precision rules:** breakpoints/points at π-multiples or surds need **full precision** (`3.14159265358979`, `1.4142` is fine for points since snapping corrects y, but domain boundaries must line up — 5-dp π caused validation failures). Point `label`s keep the human-readable exact/rounded coords; `compileGraph()` snaps the dot itself onto the curve (analytic for `expr` curves, nearest sampled vertex for parametric) and injects labelled x-values into the sample grid so extrema dots sit exactly on the polyline.
+5. **Validate before shipping** — compile every spec through the real code (pattern from 027: keep specs in a JS file, generate the SQL from it so `JSON.stringify` handles backslash doubling):
+   ```ts
+   // npx tsx validate.ts  (from backend/)
+   import { compileGraph } from './src/services/graphService.js';
+   const render = compileGraph(label, spec);
+   // assert: every curve produced a visible polyline;
+   // every min/max/intercept point is within 1e-6 of a polyline vertex;
+   // all points/segments/shade inside x_range/y_range.
+   ```
+   A labelled point that fails the on-curve check means either the authored coordinate or the official answer is wrong — go back to the PDF (this exact check is what exposed the (2,8) bug).
+6. **Verify in the app** after running the migration: open the question, reveal the solution, and confirm the dots sit on the curves, open circles and shading render, and labels don't collide.
+
+---
+
+## 13. Common Pitfalls
 
 | Problem | Fix |
 |---|---|
@@ -333,3 +412,7 @@ GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
 | `null value in column "answer_type" violates not-null constraint` | Question-level `answer_type` is `NOT NULL`. For an ungraded single-task question, wrap it as a multi-part question with **one `null` part** and give the question row a non-null fallback (`'exact', ''`). Only **per-part** `answer_type` may be `null`. |
 | MathLive outputs `\frac34` not `\frac{3}{4}` | `normalizeLaTeX()` in `attemptService.ts` handles this expansion automatically |
 | "no questions found" error | Topic UUID may be wrong — check `CLAUDE.md` for the full mapping |
+| Sketch part has no model graph in the Solution tab | Missing `solution_graph` on the part — see §12; every sketch/draw part needs one |
+| Min/max dot floats off the curve in the model graph | Authored point coords don't satisfy the curve equation — the stored solution text was probably transcribed wrong; re-check the official PDF (§12 step 1) and run the on-curve validation (§12 step 5) |
+| `solution_graph` UPDATE silently does nothing | Wrong part index in the `jsonb_set` path or label guard mismatch — read the **live** `parts` array first (§12 step 2) |
+| Parametric curve renders jagged/incomplete | Domain must be the **t-interval**, not x; both `x_expr` and `y_expr` required; out-of-range samples are clipped, so widen `x_range`/`y_range` if branches vanish |
