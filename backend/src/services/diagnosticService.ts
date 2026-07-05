@@ -1,6 +1,10 @@
 import { Type } from '@google/genai';
 import { supabase } from '../db/supabase.js';
 import { getGemini, GEMINI_MODEL } from '../db/gemini.js';
+import { TIER_LIMITS } from '../config/limits.js';
+import type { Tier } from '../config/featureTiers.js';
+import { cooldownEndsAt, DAY_MS, nextSgtMidnightUtc, sgtDateStr } from '../lib/sgTime.js';
+import { QuotaExceededError } from './usageService.js';
 
 export interface TopicDiagnosis {
   topic_id: string;
@@ -29,6 +33,16 @@ export interface StudyPlanItem {
 export interface StudyPlanResponse {
   items: StudyPlanItem[];
   reasoning: string;
+  date: string;        // SGT date the plan was generated (YYYY-MM-DD)
+  valid_until: string; // first SGT date the plan is stale — paid: next day; free: +7 days
+}
+
+// Envelope for the persisted weakness diagnosis + regeneration cooldown state.
+export interface DiagnosisStatus {
+  diagnosis: DiagnosisResult | null; // null = never generated
+  generated_at: string | null;
+  can_generate: boolean;
+  next_allowed_at: string | null; // ISO; null when can_generate or never generated
 }
 
 const diagnosisSchema = {
@@ -105,7 +119,9 @@ async function buildTopicStats(userId: string): Promise<TopicStat[]> {
     .sort((a, b) => a.accuracy - b.accuracy);
 }
 
-export async function getWeaknessDiagnosis(userId: string): Promise<DiagnosisResult> {
+// Internal Gemini-calling core — always recomputes. Callers go through
+// getDiagnosisStatus (read) / generateWeaknessDiagnosis (cooldown-checked write).
+async function runGeminiDiagnosis(userId: string): Promise<DiagnosisResult> {
   const statsArr = await buildTopicStats(userId);
 
   const promptText = `You are an expert Singapore H2 A-Level Mathematics tutor. Analyze this student's performance and provide a structured diagnosis.
@@ -173,25 +189,105 @@ Write overall_summary in 2–3 sentences: biggest strength, biggest weakness, an
   };
 }
 
+interface DiagnosisRow {
+  result: DiagnosisResult;
+  generated_at: string;
+}
+
+function toDiagnosisStatus(row: DiagnosisRow | null, tier: Tier): DiagnosisStatus {
+  if (!row) {
+    return { diagnosis: null, generated_at: null, can_generate: true, next_allowed_at: null };
+  }
+  const allowedAt = cooldownEndsAt(new Date(row.generated_at), TIER_LIMITS[tier].diagnosisCooldown);
+  const canGenerate = Date.now() >= allowedAt.getTime();
+  return {
+    diagnosis: row.result,
+    generated_at: row.generated_at,
+    can_generate: canGenerate,
+    next_allowed_at: canGenerate ? null : allowedAt.toISOString(),
+  };
+}
+
+// Read-only: the stored diagnosis + cooldown state. Never calls Gemini.
+export async function getDiagnosisStatus(userId: string, tier: Tier): Promise<DiagnosisStatus> {
+  const { data, error } = await supabase
+    .from('user_diagnoses')
+    .select('result, generated_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return toDiagnosisStatus(data as DiagnosisRow | null, tier);
+}
+
+// Generate (or regenerate) the diagnosis: cooldown-checked, then Gemini, then upsert.
+export async function generateWeaknessDiagnosis(
+  userId: string,
+  tier: Tier,
+): Promise<DiagnosisStatus> {
+  const current = await getDiagnosisStatus(userId, tier);
+  if (!current.can_generate) {
+    const cadence = tier === 'paid' ? 'tomorrow' : 'in a few days';
+    throw new QuotaExceededError(
+      `Your weakness diagnosis is up to date — you can run a new one ${cadence}.`,
+      'diagnosis',
+      1,
+      current.next_allowed_at ?? nextSgtMidnightUtc().toISOString(),
+    );
+  }
+
+  const result = await runGeminiDiagnosis(userId);
+  const generatedAt = new Date().toISOString();
+  const { error } = await supabase
+    .from('user_diagnoses')
+    .upsert({ user_id: userId, result, generated_at: generatedAt }, { onConflict: 'user_id' });
+  if (error) throw new Error(error.message);
+
+  return toDiagnosisStatus({ result, generated_at: generatedAt }, tier);
+}
+
+// First SGT date a plan generated on `dateStr` goes stale: paid regenerate daily,
+// free keep the same plan for a rolling 7 days.
+function planValidUntil(dateStr: string, createdAt: Date, tier: Tier): string {
+  if (tier === 'paid') {
+    return new Date(new Date(`${dateStr}T00:00:00Z`).getTime() + DAY_MS).toISOString().slice(0, 10);
+  }
+  return sgtDateStr(new Date(createdAt.getTime() + 7 * DAY_MS));
+}
+
 // Algorithmic study plan — no second Gemini call. Selects up to 10 unsolved questions
 // from the weakest topics so the student has immediate, prioritised practice.
-// The generated plan is persisted per (user_id, date) so it syncs across devices.
-export async function getPersonalisedStudyPlan(userId: string): Promise<StudyPlanResponse> {
-  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+// Persisted per (user_id, date); paid users get a fresh plan each SGT day, free users
+// keep the same plan for a rolling 7 days.
+export async function getPersonalisedStudyPlan(
+  userId: string,
+  tier: Tier,
+): Promise<StudyPlanResponse> {
+  const today = sgtDateStr();
 
-  // Return today's saved plan if it exists — avoids regeneration on other devices.
+  // Reuse the latest saved plan while it's still valid for this tier.
   const { data: saved } = await supabase
     .from('study_plans')
-    .select('items, reasoning')
+    .select('date, items, reasoning, created_at')
     .eq('user_id', userId)
-    .eq('date', today)
+    .order('date', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (saved) {
-    return {
-      items: saved.items as StudyPlanResponse['items'],
-      reasoning: saved.reasoning as string,
-    };
+    const row = saved as { date: string; items: StudyPlanItem[]; reasoning: string; created_at: string };
+    const createdAt = new Date(row.created_at);
+    const stillValid =
+      tier === 'paid'
+        ? row.date === today
+        : Date.now() < createdAt.getTime() + 7 * DAY_MS;
+    if (stillValid) {
+      return {
+        items: row.items,
+        reasoning: row.reasoning,
+        date: row.date,
+        valid_until: planValidUntil(row.date, createdAt, tier),
+      };
+    }
   }
 
   const statsArr = await buildTopicStats(userId);
@@ -252,10 +348,11 @@ export async function getPersonalisedStudyPlan(userId: string): Promise<StudyPla
     ? `Focusing on your weakest areas: ${topWeakNames.join(', ')}. These have the lowest accuracy and will benefit most from targeted practice.`
     : 'Covering topics where you have the most room to improve.';
 
-  // Persist so other devices get the same plan today.
+  // Persist so other devices get the same plan (and free users keep it all week).
+  const createdAt = new Date();
   await supabase
     .from('study_plans')
     .upsert({ user_id: userId, date: today, items, reasoning }, { onConflict: 'user_id,date' });
 
-  return { items, reasoning };
+  return { items, reasoning, date: today, valid_until: planValidUntil(today, createdAt, tier) };
 }

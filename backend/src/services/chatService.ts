@@ -1,6 +1,8 @@
 import { supabase } from '../db/supabase.js';
 import { getGemini, GEMINI_MODEL } from '../db/gemini.js';
 import { getQuestionWithSolution } from './questionService.js';
+import { assertChatQuota } from './usageService.js';
+import type { Tier } from '../config/featureTiers.js';
 import type {
   ChatMessage,
   ChatMessagePublic,
@@ -76,6 +78,7 @@ export async function sendHintMessage(
   userId: string,
   questionId: string,
   userMessage: string,
+  tier: Tier,
 ): Promise<ChatSendResponse> {
   const question = await getQuestionWithSolution(questionId);
   if (!question) throw new Error(`Question ${questionId} not found`);
@@ -86,6 +89,9 @@ export async function sendHintMessage(
       'You have reached the hint limit for this question. Try working through it or reveal the solution.',
     );
   }
+
+  // Daily cross-question cap for the free tier — checked before the Gemini call.
+  await assertChatQuota(userId, tier);
 
   const systemInstruction = buildSystemInstruction(question);
 

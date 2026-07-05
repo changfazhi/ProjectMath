@@ -1,3 +1,5 @@
+import type { Tier } from '../config/featureTiers.js';
+
 export type MathLevel = 'H1' | 'H2';
 export type Difficulty = 1 | 2 | 3;
 export type AnswerType = 'exact' | 'mcq' | 'range';
@@ -15,6 +17,55 @@ export interface PartAnswerField {
 
 export type PartAnswerFieldPublic = Omit<PartAnswerField, 'correct_answer'>;
 
+// --- Model sketch for graph questions ---------------------------------------
+// Authored spec stored in parts[].solution_graph. `expr` is mathjs syntax and is
+// evaluated ONLY on the server (compiled to polylines before reaching a client).
+
+export interface GraphCurve {
+  expr: string;
+  domain: [number, number];
+  label?: string | null;
+}
+
+export interface GraphAsymptote {
+  kind: 'vertical' | 'horizontal' | 'oblique';
+  x?: number; // vertical only
+  expr?: string; // horizontal/oblique only, e.g. "x" or "8"
+  label?: string | null;
+}
+
+export interface GraphPoint {
+  x: number;
+  y: number;
+  label?: string | null;
+  kind?: 'min' | 'max' | 'intercept' | 'inflection' | 'point' | null;
+}
+
+export interface SolutionGraphSpec {
+  x_range: [number, number];
+  y_range: [number, number];
+  curves: GraphCurve[];
+  asymptotes?: GraphAsymptote[] | null;
+  points?: GraphPoint[] | null;
+}
+
+// Compiled, expression-free render data sent to the client after reveal.
+export interface RenderedAsymptote {
+  kind: 'vertical' | 'horizontal' | 'oblique';
+  x?: number;
+  points?: [number, number][];
+  label?: string | null;
+}
+
+export interface SolutionGraphRender {
+  part_label: string;
+  x_range: [number, number];
+  y_range: [number, number];
+  curves: { segments: [number, number][][]; label?: string | null }[];
+  asymptotes: RenderedAsymptote[];
+  points: GraphPoint[];
+}
+
 export interface QuestionPart {
   label: string;
   prompt_latex: string;
@@ -26,9 +77,12 @@ export interface QuestionPart {
   // The part-level answer_type/correct_answer stay non-null sentinels so the
   // existing "graded part" / "reveal when all done" logic still counts it.
   answers?: PartAnswerField[] | null;
+  // Model sketch for sketch parts — part of the solution, stripped from the
+  // public question payload and served compiled via the solution endpoint.
+  solution_graph?: SolutionGraphSpec | null;
 }
 
-export type QuestionPartPublic = Omit<QuestionPart, 'correct_answer' | 'answers'> & {
+export type QuestionPartPublic = Omit<QuestionPart, 'correct_answer' | 'answers' | 'solution_graph'> & {
   answers?: PartAnswerFieldPublic[] | null;
 };
 
@@ -202,6 +256,7 @@ export interface GradeImage {
 
 export interface GradeSolutionParams {
   userId: string;
+  tier: Tier; // drives the daily scan quota inside the grading service
   question_id: string;
   images: GradeImage[];
   time_taken_s?: number;
@@ -210,6 +265,7 @@ export interface GradeSolutionParams {
 // Re-grade from the student's (edited) typed LaTeX instead of photos.
 export interface GradeTranscriptionParams {
   userId: string;
+  tier: Tier;
   question_id: string;
   transcription_latex: string;
   time_taken_s?: number;
@@ -234,6 +290,7 @@ export interface GradeResponse {
 export interface PairSession {
   token: string;
   userId: string;
+  tier: Tier; // snapshot at pair creation — the /done route has no auth middleware
   question_id: string;
   images: GradeImage[];
   created_at: number; // epoch ms

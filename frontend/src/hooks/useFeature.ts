@@ -1,10 +1,12 @@
 import { useAuth } from '../contexts/AuthContext'
 
+// Mirror of backend/src/config/featureTiers.ts — all AI features are free-accessible;
+// free-tier usage is metered per day/week server-side (see GET /api/usage).
 const FEATURE_TIERS: Record<string, 'free' | 'paid'> = {
   practice:     'free',
-  aiHints:      'paid',
-  photoGrading: 'paid',
-  pairUpload:   'paid',
+  aiHints:      'free',
+  photoGrading: 'free',
+  pairUpload:   'free',
   review:       'free',
 }
 

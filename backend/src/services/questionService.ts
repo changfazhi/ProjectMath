@@ -6,7 +6,7 @@ function stripSolution(q: Question): QuestionPublic {
   return {
     ...pub,
     parts:
-      parts?.map(({ correct_answer: _pca, answers, ...rest }) => ({
+      parts?.map(({ correct_answer: _pca, answers, solution_graph: _sg, ...rest }) => ({
         ...rest,
         answers: answers?.map(({ correct_answer: _fca, ...field }) => field) ?? answers ?? null,
       })) ?? null,

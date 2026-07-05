@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { GradeImage, PairSession } from '../types/index.js';
+import type { Tier } from '../config/featureTiers.js';
 
 const TTL_MS = Number(process.env.PAIR_TTL_MIN ?? 10) * 60_000;
 const MAX_IMAGES_PER_PAIR = Number(process.env.GRADE_MAX_IMAGES ?? 5);
@@ -23,13 +24,14 @@ function isExpired(p: PairSession): boolean {
   return Date.now() > p.expires_at;
 }
 
-export function createPair(userId: string, questionId: string): PairSession {
+export function createPair(userId: string, questionId: string, tier: Tier): PairSession {
   // 256 bits of entropy, URL-safe — the token is the only credential, so it must be unguessable.
   const token = randomBytes(32).toString('base64url');
   const now = Date.now();
   const pair: PairSession = {
     token,
     userId,
+    tier,
     question_id: questionId,
     images: [],
     created_at: now,

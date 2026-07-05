@@ -4,9 +4,10 @@ import { api } from '../lib/api'
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif"
 
 const BENEFITS = [
-  'AI grading of handwritten solutions',
-  'AI hints chatbot (Socratic tutor)',
-  'Upload via phone (QR pairing)',
+  'Unlimited AI scans of handwritten solutions',
+  'Unlimited AI tutor hints (free: 10/day each)',
+  'Daily weakness diagnosis (free: weekly)',
+  'Fresh study plan every day (free: weekly)',
 ]
 
 type Method = 'card' | 'paynow'

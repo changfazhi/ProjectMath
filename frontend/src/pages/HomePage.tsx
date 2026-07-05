@@ -40,15 +40,35 @@ export function HomePage() {
     if (status === 'success') setPendingSuccess(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Once user is available and we have a pending success, force-refresh the
-  // Firebase token claims and update tier state immediately (no page reload needed).
+  // Once user is available and we have a pending success, poll the Firebase
+  // token claims until the webhook-granted upgrade lands. Stripe delivers the
+  // checkout.session.completed webhook asynchronously, so the redirect often
+  // arrives before the tier claim is set — a single refresh would read stale
+  // claims and leave the user looking free until the next natural token refresh.
   useEffect(() => {
     if (!pendingSuccess || !user) return
     setPendingSuccess(false)
-    refreshTier().then(() => {
-      setCheckoutToast('Welcome to Premium! Your features are now unlocked.')
-      setTimeout(() => setCheckoutToast(null), 5000)
-    }).catch(() => {})
+    let cancelled = false
+
+    const poll = async () => {
+      setCheckoutToast('Payment received — activating Premium…')
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const freshTier = await refreshTier().catch(() => null)
+        if (cancelled) return
+        if (freshTier === 'paid') {
+          setCheckoutToast('Welcome to Premium! Your features are now unlocked.')
+          setTimeout(() => { if (!cancelled) setCheckoutToast(null) }, 5000)
+          return
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+        if (cancelled) return
+      }
+      setCheckoutToast('Payment received, but activation is taking longer than usual. Reload the page in a moment.')
+      setTimeout(() => { if (!cancelled) setCheckoutToast(null) }, 8000)
+    }
+
+    void poll()
+    return () => { cancelled = true }
   }, [pendingSuccess, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleTopicClick(topic: Topic) {

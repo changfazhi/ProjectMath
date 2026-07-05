@@ -20,6 +20,32 @@ export interface QuestionPart {
   answers?: PartAnswerField[] | null
 }
 
+// Compiled model sketch for a sketch part, served by the solution endpoint.
+// Expression-free: the backend samples curves into polylines (mirrors the
+// backend's SolutionGraphRender).
+export interface GraphPoint {
+  x: number
+  y: number
+  label?: string | null
+  kind?: 'min' | 'max' | 'intercept' | 'inflection' | 'point' | null
+}
+
+export interface RenderedAsymptote {
+  kind: 'vertical' | 'horizontal' | 'oblique'
+  x?: number
+  points?: [number, number][]
+  label?: string | null
+}
+
+export interface SolutionGraphRender {
+  part_label: string
+  x_range: [number, number]
+  y_range: [number, number]
+  curves: { segments: [number, number][][]; label?: string | null }[]
+  asymptotes: RenderedAsymptote[]
+  points: GraphPoint[]
+}
+
 export interface Topic {
   id: string
   name: string
@@ -234,6 +260,14 @@ export interface DiagnosisResult {
   generated_at: string
 }
 
+// Persisted diagnosis + regeneration cooldown (daily for paid, weekly for free).
+export interface DiagnosisStatus {
+  diagnosis: DiagnosisResult | null
+  generated_at: string | null
+  can_generate: boolean
+  next_allowed_at: string | null
+}
+
 export type QuestStatus = 'correct' | 'attempted' | 'pending'
 
 export interface StudyPlanItem {
@@ -246,4 +280,21 @@ export interface StudyPlanItem {
 export interface StudyPlanResponse {
   items: StudyPlanItem[]
   reasoning: string
+  date: string        // SGT date the plan was generated (YYYY-MM-DD)
+  valid_until: string // first SGT date the plan is stale (paid: next day; free: +7 days)
+}
+
+// ── Daily usage quotas (GET /api/usage) ──────────────────────────────────────
+
+export interface UsageBucket {
+  used: number
+  limit: number | null // null = unlimited (paid)
+  remaining: number | null
+}
+
+export interface UsageSummary {
+  tier: 'free' | 'paid'
+  resets_at: string // next SGT midnight, ISO
+  scans: UsageBucket
+  chat: UsageBucket
 }

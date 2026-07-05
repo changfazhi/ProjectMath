@@ -35,6 +35,7 @@ Run in order in the Supabase SQL Editor:
 16. `016_cjc_prelim_2025.sql` — 22 CJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–11, Paper 2 Q1–11)
 17. `017_grading_transcription.sql` — adds `transcription_latex TEXT` to `gradings` (editable AI transcription of handwriting)
 18. `021_enable_typed_submissions.sql` — re-classifies mis-flagged `null` parts (find/state/determine → typed box) and adds multi-box `answers[]` data across **all 6 papers** (ASRJC, DHS, HCI, ACJC, CJC, RI). 81 `UPDATE`s on `questions.parts`, no DDL. `-- FLAG:` comments mark brittle/exact-match-risky answers and parts left null for review.
+19. `024_sketch_graph_solutions.sql` — adds `solution_graph` JSONB specs to 4 sketch parts (DHS d0251001/d0251005, CJC b0250005, HCI c0251003) so the Solution tab renders a model graph. `jsonb_set` per part, label-guarded, no DDL. `-- FLAG:` lists sketch parts still without specs (Argand/scatter/normal-curve/unknown-f). Spec format: `x_range`/`y_range`/`curves[{expr (mathjs, var x), domain, label (LaTeX)}]`/`asymptotes`/`points` — compiled server-side by `graphService.compileGraph()` into polylines; `solution_graph` is stripped from public payloads (`stripSolution`) and served only via `GET /api/questions/:id/solution` as `graphs[]`, rendered by `SolutionGraph.tsx` (hand-rolled SVG + KaTeX labels, no chart deps).
 
 **After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
 
@@ -149,7 +150,7 @@ Desktops have no camera: "📱 Upload via phone" shows a QR; the phone opens `/m
 - **`MathField.tsx`** — wraps `<math-field>`. Exposes `insert(latex)`, `getValue()`, `focus()`. Suppresses built-in keyboard and hamburger menu.
 - **`MathKeyboard.tsx`** — 10-group symbol panel. Use `onMouseDown` (not `onClick`) to avoid stealing focus. Template strings use `#?` placeholders; pass `selectionMode: 'placeholder'` to `mf.insert()`.
 - **Correct answer display:** raw LaTeX → `<Latex>` directly, not `renderLatex()`.
-- **MathLive compact notation:** `\frac34` (not `\frac{3}{4}`) for single-char numerator/denominator. `normalizeLaTeX()` in `attemptService.ts` expands this automatically.
+- **MathLive compact notation:** `\frac34` (not `\frac{3}{4}`) for single-char numerator/denominator. `normalizeLaTeX()` in `answerChecker.ts` expands this automatically (unit-tested in `answerChecker.test.ts`; `npm test` in `backend/` runs vitest).
 
 ## Key Conventions
 

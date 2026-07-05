@@ -9,6 +9,7 @@ import {
   getGradingsForQuestion,
   GradingError,
 } from '../services/gradingService.js';
+import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
 
 const router = Router();
 
@@ -72,6 +73,7 @@ router.post('/', ...gate('photoGrading'), gradeLimiter, upload.array('images', M
     }
     const result = await gradeSolution({
       userId: req.user!.uid,
+      tier: req.user!.tier,
       question_id,
       time_taken_s,
       images: files.map((f) => ({ mimeType: f.mimetype, buffer: f.buffer })),
@@ -80,6 +82,10 @@ router.post('/', ...gate('photoGrading'), gradeLimiter, upload.array('images', M
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid request body', details: err.issues });
+      return;
+    }
+    if (err instanceof QuotaExceededError) {
+      sendQuotaError(res, err, req.user!.tier);
       return;
     }
     if (err instanceof GradingError) {
@@ -102,6 +108,7 @@ router.post('/text', ...gate('photoGrading'), gradeLimiter, async (req, res) => 
     const { question_id, transcription_latex, time_taken_s } = textBodySchema.parse(req.body);
     const result = await gradeTranscription({
       userId: req.user!.uid,
+      tier: req.user!.tier,
       question_id,
       transcription_latex,
       time_taken_s,
@@ -110,6 +117,10 @@ router.post('/text', ...gate('photoGrading'), gradeLimiter, async (req, res) => 
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid request body', details: err.issues });
+      return;
+    }
+    if (err instanceof QuotaExceededError) {
+      sendQuotaError(res, err, req.user!.tier);
       return;
     }
     if (err instanceof GradingError) {

@@ -27,7 +27,9 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   openLoginModal: (message?: string) => void
   openUpgradeModal: () => void
-  refreshTier: () => Promise<void>
+  // Force-refreshes the Firebase token and returns the fresh tier, so callers
+  // can poll until a webhook-granted upgrade lands.
+  refreshTier: () => Promise<Tier | null>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -74,10 +76,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
   const openUpgradeModal = () => setShowUpgrade(true)
 
-  const refreshTier = async () => {
-    if (!auth.currentUser) return
+  const refreshTier = async (): Promise<Tier | null> => {
+    if (!auth.currentUser) return null
     const result = await auth.currentUser.getIdTokenResult(true)
     applyTokenResult(result)
+    return result.claims['tier'] === 'paid' ? 'paid' : 'free'
   }
 
   useEffect(() => {

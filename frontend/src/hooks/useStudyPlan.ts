@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../lib/api'
-import { loadStoredPlan, savePlan, todayStr } from '../lib/studyPlan'
+import { loadStoredPlan, savePlan, type StoredPlan } from '../lib/studyPlan'
 import type { StudyPlanItem, QuestStatus } from '../types/api'
 
 export interface Quest extends StudyPlanItem {
@@ -34,8 +34,14 @@ export function useStudyPlan(isOpen: boolean) {
             if (!cancelled) { setQuests([]); setIsStale(false) }
             return
           }
-          savePlan({ date: todayStr(), items: fresh.items, reasoning: fresh.reasoning })
-          plan = { date: todayStr(), items: fresh.items, reasoning: fresh.reasoning }
+          const freshPlan: StoredPlan = {
+            date: fresh.date,
+            valid_until: fresh.valid_until,
+            items: fresh.items,
+            reasoning: fresh.reasoning,
+          }
+          savePlan(freshPlan)
+          plan = freshPlan
           stale = false
         }
         const planQuestionIds = new Set(plan.items.map(item => item.question_id))

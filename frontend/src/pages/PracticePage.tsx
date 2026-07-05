@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import type { Attempt, Difficulty } from '../types/api'
+import type { Attempt, Difficulty, SolutionGraphRender } from '../types/api'
 import { usePracticeSession } from '../hooks/usePracticeSession'
 import { QuestionCard } from '../components/question/QuestionCard'
 import { QuestionHeader } from '../components/question/QuestionHeader'
@@ -11,6 +11,7 @@ import { PhotoAnswer } from '../components/question/PhotoAnswer'
 import { GradingResult } from '../components/question/GradingResult'
 import { TranscriptionEditor } from '../components/question/TranscriptionEditor'
 import { SolutionReveal } from '../components/question/SolutionReveal'
+import { SolutionGraph } from '../components/question/SolutionGraph'
 import { StatsBar } from '../components/progress/StatsBar'
 import { Badge } from '../components/ui/Badge'
 import { Spinner } from '../components/ui/Spinner'
@@ -21,6 +22,8 @@ import { QrPairModal } from '../components/pair/QrPairModal'
 import { usePairSocket } from '../hooks/usePairSocket'
 import { ChatPanel } from '../components/chat/ChatPanel'
 import { useChatSession } from '../hooks/useChatSession'
+import { useUsage } from '../hooks/useUsage'
+import { useAuth } from '../contexts/AuthContext'
 import { api } from '../lib/api'
 import { renderLatex } from '../lib/renderLatex'
 import { cn, formatTime } from '../lib/utils'
@@ -65,6 +68,7 @@ export function PracticePage() {
 
   // Solution tab state
   const [solutionLatex, setSolutionLatex] = useState<string | null>(null)
+  const [solutionGraphs, setSolutionGraphs] = useState<SolutionGraphRender[]>([])
   const [solutionLoading, setSolutionLoading] = useState(false)
   const [solutionError, setSolutionError] = useState<string | null>(null)
 
@@ -72,6 +76,23 @@ export function PracticePage() {
 
   // One shared chat instance drives both the desktop side panel and the mobile Hints tab.
   const chat = useChatSession(session.question?.id)
+
+  // Free-tier daily quota counters ("N/10 left today"); paid tier has null limits.
+  const { openUpgradeModal } = useAuth()
+  const { usage, refresh: refreshUsage } = useUsage()
+  const scansRemaining = usage?.scans.limit != null ? usage.scans.remaining : null
+  const chatRemaining = usage?.chat.limit != null ? usage.chat.remaining : null
+  const scansExhausted = scansRemaining === 0
+  const chatExhausted = chatRemaining === 0
+  const chatQuotaNote =
+    chatRemaining != null && !chatExhausted
+      ? `${chatRemaining}/${usage!.chat.limit} free messages left today`
+      : null
+
+  // Keep counters current after every grading outcome or chat exchange.
+  useEffect(() => {
+    refreshUsage()
+  }, [session.gradingResult, session.gradingError, chat.messages.length, refreshUsage])
 
   // "Upload via phone" QR pairing — desktop only.
   const [pair, setPair] = useState<{ token: string; mobilePath: string } | null>(null)
@@ -107,6 +128,7 @@ export function PracticePage() {
     setActiveTab('question')
     setInputMode('photo')
     setSolutionLatex(null)
+    setSolutionGraphs([])
     setSolutionError(null)
   }, [session.question?.id])
 
@@ -115,7 +137,10 @@ export function PracticePage() {
     if (activeTab !== 'solution' || !session.question?.id || solutionLatex !== null || solutionError !== null) return
     setSolutionLoading(true)
     api.questions.solution(session.question.id)
-      .then((data) => setSolutionLatex(data.solution_latex ?? ''))
+      .then((data) => {
+        setSolutionLatex(data.solution_latex ?? '')
+        setSolutionGraphs(data.graphs ?? [])
+      })
       .catch((e: Error) => setSolutionError(e.message))
       .finally(() => setSolutionLoading(false))
   }, [activeTab, session.question?.id, solutionLatex, solutionError])
@@ -310,18 +335,29 @@ export function PracticePage() {
                         {session.gradingError}
                       </div>
                     )}
+                    {scansExhausted && (
+                      <div className="rounded-xl p-3 bg-amber-50 dark:bg-amber-900/25 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300 flex flex-wrap items-center justify-between gap-2">
+                        <span>You've used all {usage!.scans.limit} free AI scans today — they reset at midnight.</span>
+                        <Button size="sm" onClick={openUpgradeModal}>✦ Upgrade for unlimited</Button>
+                      </div>
+                    )}
                     <PhotoAnswer
                       onSubmit={session.submitPhotos}
-                      disabled={submitting}
+                      disabled={submitting || scansExhausted}
                       loading={submitting}
                     />
                     {/* No camera on this device? Pair a phone to snap photos straight onto the screen */}
                     <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
                       <span className="text-sm text-slate-500 dark:text-slate-400">On a computer?</span>
-                      <Button variant="secondary" size="sm" onClick={startPhonePairing} disabled={submitting}>
+                      <Button variant="secondary" size="sm" onClick={startPhonePairing} disabled={submitting || scansExhausted}>
                         📱 Upload via phone
                       </Button>
                       {pairError && <span className="text-sm text-red-500">{pairError}</span>}
+                      {scansRemaining != null && !scansExhausted && (
+                        <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">
+                          {scansRemaining}/{usage!.scans.limit} free scans left today
+                        </span>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -442,16 +478,24 @@ export function PracticePage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">
                 Solution
               </p>
-              {!solutionLatex ? (
+              {!solutionLatex && solutionGraphs.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   No solution available for this question.
                 </p>
               ) : (
                 <div className="flex flex-col gap-4">
-                  {solutionLatex.split(/\n\n+/).map((block, i) => (
+                  {(solutionLatex ?? '').split(/\n\n+/).filter(Boolean).map((block, i) => (
                     <div key={i} className="text-base leading-relaxed text-slate-800 dark:text-slate-100">
                       {renderLatex(block.trim())}
                     </div>
+                  ))}
+                  {solutionGraphs.map((g) => (
+                    <figure key={g.part_label} className="flex flex-col gap-2">
+                      <figcaption className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Part ({g.part_label}) — model sketch
+                      </figcaption>
+                      <SolutionGraph graph={g} />
+                    </figure>
                   ))}
                 </div>
               )}
@@ -462,7 +506,13 @@ export function PracticePage() {
 
       {/* Hints tab — chat panel on mobile (desktop uses the side rail) */}
       {hasActiveQuestion && activeTab === 'hints' && (
-        <ChatPanel chat={chat} className="lg:hidden h-[28rem]" />
+        <ChatPanel
+          chat={chat}
+          className="lg:hidden h-[28rem]"
+          quotaNote={chatQuotaNote}
+          sendDisabled={chatExhausted}
+          onUpgrade={openUpgradeModal}
+        />
       )}
 
       {session.phase === 'complete' && (
@@ -504,6 +554,9 @@ export function PracticePage() {
         <ChatPanel
           chat={chat}
           className="hidden lg:flex w-96 shrink-0 sticky top-8 self-start max-h-[calc(100vh-4rem)]"
+          quotaNote={chatQuotaNote}
+          sendDisabled={chatExhausted}
+          onUpgrade={openUpgradeModal}
         />
       )}
     </div>

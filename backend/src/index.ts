@@ -12,6 +12,7 @@ import chatRouter from './routes/chat.js';
 import gradeRouter from './routes/grade.js';
 import pairRouter from './routes/pair.js';
 import reviewRouter from './routes/review.js';
+import usageRouter from './routes/usage.js';
 import billingRouter from './routes/billing.js';
 import { initRealtime } from './realtime.js';
 
@@ -48,6 +49,7 @@ app.use('/api/chat', chatRouter);
 app.use('/api/grade', gradeRouter);
 app.use('/api/pair', pairRouter);
 app.use('/api/review', reviewRouter);
+app.use('/api/usage', usageRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
