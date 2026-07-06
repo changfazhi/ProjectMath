@@ -28,6 +28,7 @@ export interface GraphPoint {
   y: number
   label?: string | null
   kind?: 'min' | 'max' | 'intercept' | 'inflection' | 'point' | null
+  open?: boolean
 }
 
 export interface RenderedAsymptote {
@@ -37,6 +38,14 @@ export interface RenderedAsymptote {
   label?: string | null
 }
 
+export interface GraphSegment {
+  from: [number, number]
+  to: [number, number]
+  label?: string | null
+  style?: 'solid' | 'dashed' | null
+  arrow?: boolean
+}
+
 export interface SolutionGraphRender {
   part_label: string
   x_range: [number, number]
@@ -44,6 +53,10 @@ export interface SolutionGraphRender {
   curves: { segments: [number, number][][]; label?: string | null }[]
   asymptotes: RenderedAsymptote[]
   points: GraphPoint[]
+  segments: GraphSegment[]
+  shade: { polygon: [number, number][]; label?: string | null }[]
+  x_label?: string | null
+  y_label?: string | null
 }
 
 export interface Topic {

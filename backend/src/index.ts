@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import http from 'node:http';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import topicsRouter from './routes/topics.js';
@@ -54,6 +55,22 @@ app.use('/api/usage', usageRouter);
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// In production the container serves the built frontend from ../public (see Dockerfile),
+// keeping everything same-origin: relative /api fetches, the Socket.IO connection, and
+// the QR code built from window.location.origin all work unchanged.
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = process.env.FRONTEND_DIST ?? path.resolve(__dirname, '../public');
+  app.use(express.static(frontendDist));
+  // SPA fallback so client-side routes (/practice/..., /m/:token) survive a hard refresh.
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path === '/health') {
+      next();
+      return;
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 
 // http.Server (not app.listen) so Socket.IO can attach for live phone-upload pairing.
 const httpServer = http.createServer(app);

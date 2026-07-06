@@ -22,7 +22,11 @@ export type PartAnswerFieldPublic = Omit<PartAnswerField, 'correct_answer'>;
 // evaluated ONLY on the server (compiled to polylines before reaching a client).
 
 export interface GraphCurve {
-  expr: string;
+  expr?: string; // y = f(x); domain is an x-interval
+  // Parametric form (ellipses, loci, inverse-function reflections): when both
+  // are present, domain is the t-interval and `expr` is ignored.
+  x_expr?: string;
+  y_expr?: string;
   domain: [number, number];
   label?: string | null;
 }
@@ -39,14 +43,36 @@ export interface GraphPoint {
   y: number;
   label?: string | null;
   kind?: 'min' | 'max' | 'intercept' | 'inflection' | 'point' | null;
+  open?: boolean; // hollow marker — excluded endpoint of a piecewise domain
+}
+
+// Straight line drawn as-is (no expression) — Argand/vector diagrams, overlay
+// lines, and anything vertical that y = f(x) curves cannot express.
+export interface GraphSegment {
+  from: [number, number];
+  to: [number, number];
+  label?: string | null;
+  style?: 'solid' | 'dashed' | null;
+  arrow?: boolean; // arrowhead at `to` (vectors)
+}
+
+// Region filled between a curve and the x-axis over an x-interval.
+export interface GraphShade {
+  expr: string;
+  domain: [number, number];
+  label?: string | null;
 }
 
 export interface SolutionGraphSpec {
   x_range: [number, number];
   y_range: [number, number];
-  curves: GraphCurve[];
+  curves?: GraphCurve[] | null; // absent/empty for points-only sketches (scatter)
   asymptotes?: GraphAsymptote[] | null;
   points?: GraphPoint[] | null;
+  segments?: GraphSegment[] | null;
+  shade?: GraphShade[] | null;
+  x_label?: string | null; // LaTeX, rendered at the axis arrowheads
+  y_label?: string | null;
 }
 
 // Compiled, expression-free render data sent to the client after reveal.
@@ -64,6 +90,12 @@ export interface SolutionGraphRender {
   curves: { segments: [number, number][][]; label?: string | null }[];
   asymptotes: RenderedAsymptote[];
   points: GraphPoint[];
+  segments: GraphSegment[];
+  // Closed polygons (curve sampled over the shade domain + baseline back along
+  // the x-axis), ready to fill client-side.
+  shade: { polygon: [number, number][]; label?: string | null }[];
+  x_label?: string | null;
+  y_label?: string | null;
 }
 
 export interface QuestionPart {

@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/dist
+.git
+**/.env
+**/.env.*
+!**/.env.example
+.planning
+.claude
+2025
+images
+*.pdf
+dev.js

@@ -1,4 +1,4 @@
-import type { GraphPoint, RenderedAsymptote, SolutionGraphRender } from '../../types/api'
+import type { GraphPoint, GraphSegment, RenderedAsymptote, SolutionGraphRender } from '../../types/api'
 import { renderLatex } from '../../lib/renderLatex'
 
 // Fixed drawing surface — the svg scales responsively but keeps this aspect,
@@ -54,6 +54,23 @@ export function SolutionGraph({ graph }: { graph: SolutionGraphRender }) {
   const pointLabelShift = (p: GraphPoint) =>
     p.kind === 'min' ? 'translate(-50%, 30%)' : 'translate(-50%, -130%)'
 
+  // Arrowhead triangle at the `to` end of a segment, aligned to its direction.
+  const segmentArrow = (s: GraphSegment) => {
+    const dx = sx(s.to[0]) - sx(s.from[0])
+    const dy = sy(s.to[1]) - sy(s.from[1])
+    const len = Math.hypot(dx, dy) || 1
+    const [ux, uy] = [dx / len, dy / len]
+    const [tipX, tipY] = [sx(s.to[0]), sy(s.to[1])]
+    const [baseX, baseY] = [tipX - 10 * ux, tipY - 10 * uy]
+    return `M${tipX} ${tipY} L${baseX - 4 * uy} ${baseY + 4 * ux} L${baseX + 4 * uy} ${baseY - 4 * ux} z`
+  }
+
+  const shadeCentroid = (polygon: [number, number][]) => {
+    const cx = polygon.reduce((acc, [x]) => acc + x, 0) / polygon.length
+    const cy = polygon.reduce((acc, [, y]) => acc + y, 0) / polygon.length
+    return { x: cx, y: cy }
+  }
+
   return (
     <div className="relative w-full max-w-2xl">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto select-none" role="img">
@@ -88,6 +105,16 @@ export function SolutionGraph({ graph }: { graph: SolutionGraphRender }) {
           </g>
         ))}
 
+        {/* shaded regions — beneath everything else */}
+        {graph.shade.map((s, i) => (
+          <path
+            key={`sh${i}`}
+            d={`${path(s.polygon)} Z`}
+            className="fill-blue-500/15 dark:fill-blue-400/15"
+            stroke="none"
+          />
+        ))}
+
         {/* asymptotes */}
         {graph.asymptotes.map((a, i) =>
           a.kind === 'vertical' && a.x !== undefined ? (
@@ -120,13 +147,78 @@ export function SolutionGraph({ graph }: { graph: SolutionGraphRender }) {
           )),
         )}
 
-        {/* labelled points */}
-        {graph.points.map((p, i) => (
-          <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r={4} className="fill-slate-900 dark:fill-white" />
+        {/* straight segments (Argand/vector diagrams, overlay lines) */}
+        {graph.segments.map((s, i) => (
+          <g key={`sg${i}`}>
+            <line
+              x1={sx(s.from[0])} y1={sy(s.from[1])} x2={sx(s.to[0])} y2={sy(s.to[1])}
+              className="stroke-blue-600 dark:stroke-blue-400"
+              strokeWidth={2}
+              strokeDasharray={s.style === 'dashed' ? '6 4' : undefined}
+            />
+            {s.arrow && <path d={segmentArrow(s)} className="fill-blue-600 dark:fill-blue-400" />}
+          </g>
         ))}
+
+        {/* labelled points */}
+        {graph.points.map((p, i) =>
+          p.open ? (
+            <circle
+              key={i} cx={sx(p.x)} cy={sy(p.y)} r={4}
+              className="fill-white dark:fill-slate-900 stroke-slate-900 dark:stroke-white"
+              strokeWidth={2}
+            />
+          ) : (
+            <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r={4} className="fill-slate-900 dark:fill-white" />
+          ),
+        )}
       </svg>
 
       {/* KaTeX labels overlaid in HTML so they typeset like the rest of the app */}
+      {graph.x_label && (
+        <div
+          className="absolute text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap pointer-events-none"
+          style={{ left: `${((W - PAD / 2) / W) * 100}%`, top: `${(xAxisY / H) * 100}%`, transform: 'translate(-100%, 40%)' }}
+        >
+          {renderLatex(`\\(${graph.x_label}\\)`)}
+        </div>
+      )}
+      {graph.y_label && (
+        <div
+          className="absolute text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap pointer-events-none"
+          style={{ left: `${(yAxisX / W) * 100}%`, top: `${(PAD / 2 / H) * 100}%`, transform: 'translate(40%, -30%)' }}
+        >
+          {renderLatex(`\\(${graph.y_label}\\)`)}
+        </div>
+      )}
+      {graph.segments.map(
+        (s, i) =>
+          s.label && (
+            <div
+              key={`sgl${i}`}
+              className="absolute text-xs text-blue-600 dark:text-blue-400 whitespace-nowrap pointer-events-none"
+              style={{
+                ...labelPos((s.from[0] + s.to[0]) / 2, (s.from[1] + s.to[1]) / 2),
+                transform: 'translate(-50%, -130%)',
+              }}
+            >
+              {renderLatex(`\\(${s.label}\\)`)}
+            </div>
+          ),
+      )}
+      {graph.shade.map((s, i) => {
+        if (!s.label) return null
+        const c = shadeCentroid(s.polygon)
+        return (
+          <div
+            key={`shl${i}`}
+            className="absolute text-xs text-slate-700 dark:text-slate-200 whitespace-nowrap pointer-events-none"
+            style={{ ...labelPos(c.x, c.y), transform: 'translate(-50%, -50%)' }}
+          >
+            {renderLatex(`\\(${s.label}\\)`)}
+          </div>
+        )
+      })}
       {graph.points.map(
         (p, i) =>
           p.label && (
