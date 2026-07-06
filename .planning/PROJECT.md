@@ -28,7 +28,7 @@ Visitors can start a Premium upgrade directly from the landing page's pricing pi
 - ✓ Firebase Auth integration — existing
 - ✓ Quest items link directly to practice questions via `navigate('/practice/:topicId?question_id=...')` — existing
 - ✓ Persistent collapsible study plan sidebar in `RootLayout`, Firestore-synced, live quest status — shipped in v1.0 (Phases 1–2)
-- ✓ Stripe billing integration (test mode): card + PayNow, monthly/annual plans, checkout + customer portal + webhooks, tier gating for AI hints/grading via Firebase custom claims — existing (built outside GSD tracking, commit `bde11ff`)
+- ✓ Stripe billing integration (test mode): card + PayNow, monthly/semesterly (6-month) plans, checkout + customer portal + webhooks, tier gating for AI hints/grading via Firebase custom claims — existing (built outside GSD tracking, commit `bde11ff`)
 - ✓ "Get Premium" button in `Header.tsx` opens the upgrade modal via `openUpgradeModal()` (`useAuth()`) — existing, roadmap page only
 - ✓ `UpgradeModal` mounted globally at `AuthContext` provider root — callable from anywhere via `useAuth()` — existing
 

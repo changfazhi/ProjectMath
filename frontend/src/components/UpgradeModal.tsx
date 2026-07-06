@@ -18,9 +18,9 @@ interface PlanCardProps {
   subtext: string
   badge?: string
   note?: string
-  plan: 'monthly' | 'annual'
+  plan: 'monthly' | 'semesterly'
   loading: boolean
-  onClick: (plan: 'monthly' | 'annual') => void
+  onClick: (plan: 'monthly' | 'semesterly') => void
 }
 
 function PlanCard({ label, price, subtext, badge, note, plan, loading, onClick }: PlanCardProps) {
@@ -85,10 +85,10 @@ interface Props {
 
 export function UpgradeModal({ onClose }: Props) {
   const [method, setMethod] = useState<Method>('card')
-  const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'annual' | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'semesterly' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleSelect(plan: 'monthly' | 'annual') {
+  async function handleSelect(plan: 'monthly' | 'semesterly') {
     if (loadingPlan) return
     setLoadingPlan(plan)
     setError(null)
@@ -153,20 +153,20 @@ export function UpgradeModal({ onClose }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <PlanCard
             label="Monthly"
-            price="S$15"
+            price="S$5"
             subtext={method === 'card' ? '/ month' : 'one-time'}
             plan="monthly"
             loading={loadingPlan === 'monthly'}
             onClick={handleSelect}
           />
           <PlanCard
-            label="Annual"
-            price="S$144"
-            subtext={method === 'card' ? '/ year' : 'one-time'}
-            badge="Save 20%"
-            note={method === 'card' ? undefined : 'S$12 / month equivalent'}
-            plan="annual"
-            loading={loadingPlan === 'annual'}
+            label="Semesterly"
+            price="S$25"
+            subtext={method === 'card' ? '/ 6 months' : 'one-time'}
+            badge="Save 17%"
+            note={method === 'card' ? undefined : 'S$4.17 / month equivalent'}
+            plan="semesterly"
+            loading={loadingPlan === 'semesterly'}
             onClick={handleSelect}
           />
         </div>

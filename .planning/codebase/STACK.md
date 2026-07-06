@@ -87,8 +87,8 @@
 - `GEMINI_API_KEY` - Google Gemini API key (optional, graceful fallback if missing)
 - `STRIPE_SECRET_KEY` - Stripe secret key
 - `STRIPE_WEBHOOK_SECRET` - Webhook signature verification
-- `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL` - Stripe price IDs (card subscriptions)
-- `STRIPE_PRICE_MONTHLY_PAYNOW`, `STRIPE_PRICE_ANNUAL_PAYNOW` - Stripe price IDs (one-time PayNow)
+- `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_SEMESTERLY` - Stripe price IDs (card subscriptions)
+- `STRIPE_PRICE_MONTHLY_PAYNOW`, `STRIPE_PRICE_SEMESTERLY_PAYNOW` - Stripe price IDs (one-time PayNow)
 - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` - Firebase Admin SDK (server-side auth claims)
 - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` - Firebase client config
 - `PORT` - Backend HTTP port (default 3001)

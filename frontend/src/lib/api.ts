@@ -278,7 +278,7 @@ export const api = {
   },
 
   billing: {
-    checkout: (plan: 'monthly' | 'annual', method: 'card' | 'paynow' = 'card') =>
+    checkout: (plan: 'monthly' | 'semesterly', method: 'card' | 'paynow' = 'card') =>
       request<{ url: string }>('/api/billing/checkout', {
         method: 'POST',
         body: JSON.stringify({ plan, method }),
