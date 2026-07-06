@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { supabase } from '../db/supabase.js';
 import { GEMINI_MODEL } from '../db/gemini.js';
 import { getQuestionWithSolution } from './questionService.js';
@@ -26,15 +27,41 @@ function toPublic(m: ChatMessage): ChatMessagePublic {
   return { id: m.id, role: m.role, content: m.content, created_at: m.created_at };
 }
 
-export async function getChatHistory(
+/**
+ * Mints a new conversation scope. The client requests one every time it opens a
+ * question's chat (mount/refresh/new tab/new device) so the hint conversation always
+ * starts empty — but nothing is deleted, so the daily quota and the per-question cap
+ * below (both counted across ALL of a user's messages for a question, any thread)
+ * can't be reset by simply reopening the chat.
+ */
+export function newChatThread(): string {
+  return randomUUID();
+}
+
+/** All-time count for this user+question, across every thread — the anti-abuse cap. */
+async function countMessagesForQuestion(userId: string, questionId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('chat_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', userId)
+    .eq('question_id', questionId);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/** Messages belonging to one conversation scope only — what the client sees and what Gemini gets as context. */
+async function getThreadHistory(
   userId: string,
   questionId: string,
+  threadId: string,
 ): Promise<ChatMessagePublic[]> {
   const { data, error } = await supabase
     .from('chat_messages')
     .select('*')
     .eq('session_id', userId)
     .eq('question_id', questionId)
+    .eq('thread_id', threadId)
     .order('created_at', { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -79,14 +106,17 @@ ${question.solution_latex}`;
 export async function sendHintMessage(
   userId: string,
   questionId: string,
+  threadId: string,
   userMessage: string,
   tier: Tier,
 ): Promise<ChatSendResponse> {
   const question = await getQuestionWithSolution(questionId);
   if (!question) throw new Error(`Question ${questionId} not found`);
 
-  const history = await getChatHistory(userId, questionId);
-  if (history.length >= MAX_MESSAGES_PER_QUESTION) {
+  // Lifetime cap for this question, across every thread — reopening the chat clears
+  // what's shown, not this count.
+  const totalForQuestion = await countMessagesForQuestion(userId, questionId);
+  if (totalForQuestion >= MAX_MESSAGES_PER_QUESTION) {
     throw new ChatLimitError(
       'You have reached the hint limit for this question. Try working through it or reveal the solution.',
     );
@@ -99,9 +129,10 @@ export async function sendHintMessage(
   assertAndStampCooldown(userId, 'chat');
 
   const systemInstruction = buildSystemInstruction(question);
+  const threadHistory = await getThreadHistory(userId, questionId, threadId);
 
   const contents = [
-    ...history.map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
+    ...threadHistory.map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
     { role: 'user' as const, parts: [{ text: userMessage }] },
   ];
 
@@ -120,12 +151,12 @@ export async function sendHintMessage(
     throw err;
   }
 
-  // Persist the user turn and the model reply.
+  // Persist the user turn and the model reply, tagged to this thread.
   const { data, error } = await supabase
     .from('chat_messages')
     .insert([
-      { session_id: userId, question_id: questionId, role: 'user', content: userMessage },
-      { session_id: userId, question_id: questionId, role: 'model', content: replyText },
+      { session_id: userId, question_id: questionId, thread_id: threadId, role: 'user', content: userMessage },
+      { session_id: userId, question_id: questionId, thread_id: threadId, role: 'model', content: replyText },
     ])
     .select('*');
 
@@ -133,7 +164,7 @@ export async function sendHintMessage(
 
   const inserted = (data as ChatMessage[]).map(toPublic);
   const reply = inserted.find((m) => m.role === 'model')!;
-  const updatedHistory = [...history, ...inserted];
+  const updatedHistory = [...threadHistory, ...inserted];
 
   return { reply, history: updatedHistory };
 }

@@ -14,7 +14,7 @@
     - `backend/src/services/diagnosticService.ts` → `/api/review/diagnosis`, `/api/review/study-plan` (kind `'diagnosis'`)
   - Model selection: `GEMINI_MODEL` env var (default `gemini-2.5-flash`)
   - IP-based rate limits (unrelated to the Gemini gateway below): `CHAT_RATE_LIMIT_PER_MIN` (default 15), `GRADE_RATE_LIMIT_PER_MIN` (default 5)
-  - Per-question caps: `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40)
+  - Per-question caps: `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40) — counted across a user's *entire* history for that question (all "threads", see Session Management below), so it can't be reset by reopening the chat
   - **Gemini call gateway** (`geminiGateway.ts`, added 2026-07-06): single choke point pacing outbound calls under the key's real per-minute limit (`AI_OUTBOUND_RPM`, default 8, vs. the free tier's real 10 RPM), queueing bursts with `chat` prioritized over `grade`/`diagnosis`, retrying transient 503/500/network failures, and failing fast with `AI_DAILY_LIMIT` once the local daily counter (`AI_RPD_LIMIT`, default 250) is spent. In-memory — assumes a single backend instance (see `DEPLOYMENT.md`).
   - **Per-user cooldowns** (`cooldownService.ts`): `AI_CHAT_COOLDOWN_S` (default 5) and `AI_GRADE_COOLDOWN_S` (default 60) between a user's accepted requests; typed re-grades (`/api/grade/text`) are exempt. Cleared if the underlying Gemini call fails.
   - **Error mapping** (`aiErrors.ts`): every upstream failure (429/503/500/network/bad-model) is converted to a public-safe `AiUnavailableError` with a code (`AI_COOLDOWN` / `AI_BUSY` / `AI_DAILY_LIMIT` / `AI_ERROR`) before reaching the client — raw Gemini error bodies are logged server-side only, never sent to the browser.
@@ -42,7 +42,7 @@
   - Connection: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env vars
   - Client: `@supabase/supabase-js` (2.45.0)
   - Initialization: `backend/src/db/supabase.ts` (lazy singleton)
-  - Tables managed: `topics`, `questions`, `parts` (JSONB), `attempts`, `stars`, `chat_messages`, `gradings`, `users`, `topic_concepts`
+  - Tables managed: `topics`, `questions`, `parts` (JSONB), `attempts`, `stars`, `chat_messages` (incl. `thread_id`, migration `028`), `gradings`, `users`, `topic_concepts`
   - Grants: `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;` (required after each migration)
   - Backend entrypoint: `backend/src/routes/*` → `backend/src/services/*` → `supabase` queries (no direct calls in routes)
 
@@ -72,19 +72,14 @@
 
 **Authorization:**
 - Custom claims on Firebase: `tier` ('free' | 'paid'), `expires_at` (ISO string for PayNow expiry)
-- Tier-gated features:
-  - `practice` — Free (all users)
-  - `aiHints` — Paid (requires `tier: 'paid'` claim)
-  - `photoGrading` — Paid
-  - `pairUpload` — Paid
-  - `review` — Free
+- Feature gating (`config/featureTiers.ts`): every feature (`practice`, `aiHints`, `photoGrading`, `pairUpload`, `review`) is currently `'free'`-tier accessible. `paid` doesn't unlock features — it raises the per-tier **usage quotas** enforced in `services/usageService.ts` (`config/limits.ts`: free = 10 scans/day + 10 chat messages/day, paid = unlimited)
 - Backend middleware: `backend/src/middleware/auth.ts` (requireAuth handler, 401/402 responses)
 - Frontend callbacks: `setApiCallbacks()` in `frontend/src/lib/api.ts` (onUnauthorized → LoginModal, onPaymentRequired → UpgradeModal)
 
 **Session Management:**
-- No traditional server-side sessions
-- Frontend: UUID v4 stored in localStorage as `session_id` (loaded in `frontend/src/lib/session.ts`)
-- Stateless: Session ID passed in request body/query string to correlate attempts, chat history, gradings
+- No traditional server-side sessions, and no more anonymous `session_id` — every authenticated request carries a Firebase ID token (`Authorization: Bearer <token>`)
+- `requireAuth` (`backend/src/middleware/auth.ts`) verifies the token and upserts a `users` row keyed by `firebase_uid`; `req.user.uid` is that row's **internal `users.id`** (not the Firebase UID) — this is what's stored as `session_id` in `attempts`, `chat_messages`, `gradings`, `starred_questions`, etc., so data is keyed to the signed-in account, not a browser
+- **AI hint chat threads:** on top of that account-level key, `chat_messages` also carries a `thread_id` (added 2026-07-06, migration `028_chat_thread_id.sql`) scoping one *visible* conversation to one open of the chat — see the AI Hint Chat section in `ARCHITECTURE.md`. Nothing is deleted; `thread_id` only affects what's displayed/fed back to Gemini as context, not the daily quota or the 40-message cap above, both of which count every row for the account+question
 
 ## Monitoring & Observability
 

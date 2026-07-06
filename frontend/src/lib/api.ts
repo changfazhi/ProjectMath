@@ -1,7 +1,7 @@
 import type {
   Attempt,
-  ChatMessage,
   ChatSendResponse,
+  ChatThreadResponse,
   CreatePairResponse,
   DiagnosisStatus,
   Difficulty,
@@ -206,13 +206,15 @@ export const api = {
   },
 
   chat: {
-    history: (questionId: string) =>
-      request<ChatMessage[]>(`/api/chat?question_id=${questionId}`),
+    // Starts a fresh conversation scope — never returns past messages (the hint chat
+    // resets on every open: refresh, reopen, new tab, new device).
+    startThread: (questionId: string) =>
+      request<ChatThreadResponse>(`/api/chat?question_id=${questionId}`),
 
-    send: (questionId: string, message: string) =>
+    send: (questionId: string, threadId: string, message: string) =>
       request<ChatSendResponse>('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({ question_id: questionId, message }),
+        body: JSON.stringify({ question_id: questionId, thread_id: threadId, message }),
       }),
   },
 

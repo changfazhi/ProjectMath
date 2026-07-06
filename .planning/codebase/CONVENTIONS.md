@@ -277,10 +277,10 @@ export const api = {
 ## Cross-Cutting Concerns
 
 **Authentication:**
-- Firebase Auth on frontend (anonymous user)
+- Firebase Auth on frontend (Google OAuth or email/password sign-in — no anonymous mode)
 - Firebase Admin SDK on backend for token verification
 - Token passed in `Authorization: Bearer <token>` header
-- Middleware `gate(feature)` checks both auth and subscription tier
+- Middleware `gate(feature)` checks both auth and subscription tier (all features are currently `'free'`-tier accessible; `paid` raises usage quotas, not feature access)
 
 **LaTeX rendering:**
 - Math: `<Latex component>` for pure LaTeX or `renderLatex()` for mixed text+math
