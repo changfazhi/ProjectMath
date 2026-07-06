@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
 import { ChatLimitError, getChatHistory, sendHintMessage } from '../services/chatService.js';
 import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
+import { AiUnavailableError, sendAiError } from '../services/aiErrors.js';
 
 const router = Router();
 
@@ -32,7 +33,8 @@ router.get('/', ...gate('aiHints'), async (req, res) => {
       res.status(400).json({ error: 'question_id must be a valid UUID' });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    console.error('[chat] history error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 
@@ -55,7 +57,13 @@ router.post('/', ...gate('aiHints'), chatLimiter, async (req, res) => {
       res.status(429).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    if (err instanceof AiUnavailableError) {
+      sendAiError(res, err);
+      return;
+    }
+    // Never forward raw error messages (Gemini blobs, DB errors) to the client.
+    console.error('[chat] unexpected error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 

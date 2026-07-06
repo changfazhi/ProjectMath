@@ -6,6 +6,7 @@ import { gate } from '../middleware/auth.js';
 import { addImage, closePair, createPair, getValidPair, PairError } from '../services/pairService.js';
 import { gradeSolution, GradingError } from '../services/gradingService.js';
 import { assertScanQuota, QuotaExceededError, sendQuotaError } from '../services/usageService.js';
+import { AiUnavailableError } from '../services/aiErrors.js';
 import { getQuestionById } from '../services/questionService.js';
 import { emitToPair } from '../realtime.js';
 import type { CreatePairResponse, PairContext } from '../types/index.js';
@@ -135,11 +136,19 @@ router.post('/:token/done', pairLimiter, async (req, res) => {
     });
     emitToPair(pair.token, 'pair:graded', { grading });
   } catch (err) {
+    // AiUnavailableError messages are public-safe (cooldown/busy/daily limit); anything
+    // unexpected gets a generic message — never the raw error.
     const message =
-      err instanceof GradingError || err instanceof QuotaExceededError
+      err instanceof GradingError ||
+      err instanceof QuotaExceededError ||
+      err instanceof AiUnavailableError
         ? err.message
         : 'Grading failed — please try again on your computer.';
-    emitToPair(pair.token, 'pair:error', { message });
+    if (!(err instanceof GradingError || err instanceof QuotaExceededError || err instanceof AiUnavailableError)) {
+      console.error('[pair/done] unexpected error:', err);
+    }
+    const code = err instanceof AiUnavailableError ? err.code : undefined;
+    emitToPair(pair.token, 'pair:error', { message, ...(code ? { code } : {}) });
   } finally {
     closePair(pair.token);
   }

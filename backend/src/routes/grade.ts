@@ -10,6 +10,7 @@ import {
   GradingError,
 } from '../services/gradingService.js';
 import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
+import { AiUnavailableError, sendAiError } from '../services/aiErrors.js';
 
 const router = Router();
 
@@ -58,7 +59,8 @@ router.get('/', ...gate('photoGrading'), async (req, res) => {
       res.status(400).json({ error: 'question_id must be a valid UUID' });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    console.error('[grade] history error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 
@@ -92,12 +94,18 @@ router.post('/', ...gate('photoGrading'), gradeLimiter, upload.array('images', M
       res.status(400).json({ error: err.message });
       return;
     }
+    if (err instanceof AiUnavailableError) {
+      sendAiError(res, err);
+      return;
+    }
     // multer errors (file too large / too many / bad type) surface as plain Errors
     if (err instanceof Error && /file too large|too many files|unsupported file type/i.test(err.message)) {
       res.status(400).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    // Never forward raw error messages (Gemini blobs, DB errors) to the client.
+    console.error('[grade] unexpected error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 
@@ -127,7 +135,12 @@ router.post('/text', ...gate('photoGrading'), gradeLimiter, async (req, res) => 
       res.status(400).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    if (err instanceof AiUnavailableError) {
+      sendAiError(res, err);
+      return;
+    }
+    console.error('[grade/text] unexpected error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 

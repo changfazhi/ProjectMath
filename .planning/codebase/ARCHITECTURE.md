@@ -195,7 +195,7 @@ Math Trainer is a full-stack web application for Singapore H2 A-Level math pract
 7. Service persists in `chat_messages` table and returns to client
 8. **ChatPanel** appends to message list and rerenders
 
-**Rate limiting:** IP-based (`express-rate-limit`), 15/min default. Per-question cap of 40 messages → HTTP 429.
+**Rate limiting:** IP-based (`express-rate-limit`), 15/min default. Per-question cap of 40 messages → HTTP 429. Two more layers sit between the route and Gemini (added 2026-07-06, shared with photo grading/diagnosis): a per-user cooldown (`cooldownService.ts`, 5s chat / 60s grading, HTTP 429 `AI_COOLDOWN`) and a global pacing gateway (`geminiGateway.ts`) that queues/paces/retries calls against the Gemini key's real per-minute and per-day limits, surfacing `AI_BUSY`/`AI_DAILY_LIMIT` on exhaustion — see `INTEGRATIONS.md`.
 
 ### Tertiary Request Path: Phone Upload QR Pairing
 
@@ -280,7 +280,7 @@ Math Trainer is a full-stack web application for Singapore H2 A-Level math pract
 - **Global state:** Socket.IO server singleton in `realtime.ts` (module-level `let io`); pairService uses in-memory Map (resets on server restart)
 - **Module resolution:** TypeScript + `NodeNext` (esm by default); all imports must include `.js` extension
 - **Environment:** Backend relies on `.env` for Supabase, Gemini, Firebase, Stripe keys; never sent to browser
-- **Rate limiting:** IP-keyed via `express-rate-limit`; routes gate chat (15/min), grading (5/min) by IP
+- **Rate limiting:** IP-keyed via `express-rate-limit`; routes gate chat (15/min), grading (5/min) by IP. Layered with a per-user cooldown and a global Gemini-call pacing gateway (`cooldownService.ts`, `geminiGateway.ts`) — see the AI Hint Chat section above.
 - **Circular imports:** Generally avoided by organizing routes → services → db (no reverse deps); one exception: reviewService calls questionService, questionService calls topicService (safe, no cycle)
 - **RLS:** Supabase uses Row-Level Security; all queries run as `anon` or `service_role` context (frontend requests are `anon`, backend has service key for seeding)
 - **Type safety:** Strict TS throughout; Zod validates all external input (req.body, req.query, API responses expected locally)

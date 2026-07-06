@@ -71,7 +71,7 @@
 
 **Patterns:**
 - Zod validation in all routes for `req.body` and `req.query` parameters
-- Custom error classes for specific conditions: `ChatLimitError`, `GradingError`
+- Custom error classes for specific conditions: `ChatLimitError`, `GradingError`, `QuotaExceededError` (daily quota), `AiUnavailableError` (cooldown/busy/daily-limit from `aiErrors.ts` — the only error type Gemini-adjacent code may show the user verbatim)
 - Try-catch blocks wrap service calls; errors propagate as thrown exceptions
 - Routes catch errors and respond with HTTP status codes:
   - `400`: Zod validation failure or user-facing error (e.g., `GradingError`)

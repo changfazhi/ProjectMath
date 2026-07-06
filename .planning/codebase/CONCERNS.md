@@ -131,9 +131,14 @@
 ## Scaling Limits
 
 **Gemini API Quota**
-- Current capacity: Default API quotas apply (typically 1500 req/min for free tier, higher for billed projects). Rate limiting in code is 15 req/min for chat, 5 req/min for grading.
-- Limit: If 100 students all submit photos at once, grading queue backs up. Gemini quota could be hit. No async queue — all requests are synchronous, so students wait for grading (user experience degrades).
-- Scaling path: Add a job queue (Redis + Bull or AWS SQS). Grade async; socket.io notify when done. Scale to multiple Gemini projects or use batch API. Monitor quota usage and auto-scale rate limits.
+- Current capacity: `gemini-2.5-flash` free tier — 10 req/min, 250 req/day per the key (see `AI_RPM_LIMIT`/`AI_RPD_LIMIT` in `backend/src/config/aiLimits.ts`, added 2026-07-06). All four Gemini call sites (chat, photo grading, typed re-grade, diagnostics) are funneled through `geminiGateway.ts`, which paces outbound calls at `AI_OUTBOUND_RPM` (default 8/min, under the real limit), queues bursts with chat prioritized over grading, retries transient 503/500/network failures, and fails fast with an `AI_DAILY_LIMIT` error once the 250/day budget is spent rather than queueing forever.
+- Limit: The queue smooths minute-to-minute bursts but cannot manufacture daily capacity — once ~250 requests/day are spent (a handful of active students doing hints + photo grading), every request fails until the Pacific-time midnight reset, no matter how patiently it queues. Request bodies also stay held in memory for the queue's duration (not offloaded to a job store), so a large backlog under sustained load adds to per-instance memory pressure alongside the pairing images noted below.
+- Scaling path: Move to a billed Gemini tier (removes the 250 RPD ceiling) before real launch — a free key should not gate paying "premium" users. If usage grows further, consider a real job queue (Redis + BullMQ) instead of the in-memory gateway, multiple Gemini projects/keys with round-robin, or the batch API for grading. Monitor `dayCount`/queue length in production and alert before the daily cap is hit.
+
+**In-Memory AI Pacing State (Gateway Queue, Cooldowns, Daily Counter)**
+- Current capacity: `geminiGateway.ts`'s queue/dispatch-window/daily-counter and `cooldownService.ts`'s per-user cooldown timestamps are plain in-process `Map`/array state (added 2026-07-06), the same pattern as `pairService.ts`'s pairing `Map`.
+- Limit: Only correct with exactly one backend instance — the same constraint `DEPLOYMENT.md` already documents for pairing and rate-limit counters (`--max-instances=1` on Cloud Run). Multiple instances would each pace/count independently: two instances at 8 req/min outbound each would burst Google to 16/min, per-user cooldowns wouldn't apply across instances, and the daily counter would undercount the true total. A restart also silently resets the daily counter and drops any in-flight queue (rejected with `AI_BUSY`, no data loss — nothing is persisted until Gemini succeeds).
+- Scaling path: If Cloud Run ever needs `--max-instances` raised, migrate this state to Redis alongside the pairing-state migration already planned in `DEPLOYMENT.md`'s escape hatch (a shared sliding-window counter, a shared cooldown store, e.g. Redis `INCR`/`EXPIRE`). Do this together with the pairing migration, not separately — they share the same root cause.
 
 **Supabase Concurrent Connections**
 - Current capacity: Depends on Supabase tier. Free tier: 3 connections, ~50 req/s sustained.

@@ -14,10 +14,42 @@ interface Props {
   onUpgrade?: () => void
 }
 
+// Live seconds remaining until an ISO timestamp — drives the cooldown countdown.
+function useCountdown(resetAt?: string): number {
+  const [remaining, setRemaining] = useState(0)
+  useEffect(() => {
+    if (!resetAt) {
+      setRemaining(0)
+      return
+    }
+    const target = new Date(resetAt).getTime()
+    const tick = () => setRemaining(Math.max(0, Math.ceil((target - Date.now()) / 1000)))
+    tick()
+    const id = setInterval(tick, 500)
+    return () => clearInterval(id)
+  }, [resetAt])
+  return remaining
+}
+
 export function ChatPanel({ chat, className, quotaNote, sendDisabled, onUpgrade }: Props) {
   const { messages, loading, error, send } = chat
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  const isCooldown = error?.code === 'AI_COOLDOWN'
+  const cooldownS = useCountdown(isCooldown ? error?.resetAt : undefined)
+
+  // After a few seconds of waiting, reassure the user (the request may be queued
+  // behind other students during busy periods).
+  const [slowLoad, setSlowLoad] = useState(false)
+  useEffect(() => {
+    if (!loading) {
+      setSlowLoad(false)
+      return
+    }
+    const id = setTimeout(() => setSlowLoad(true), 4000)
+    return () => clearTimeout(id)
+  }, [loading])
 
   // Keep the latest message in view.
   useEffect(() => {
@@ -86,16 +118,28 @@ export function ChatPanel({ chat, className, quotaNote, sendDisabled, onUpgrade 
         ))}
 
         {loading && (
-          <div className="self-start rounded-2xl rounded-bl-sm bg-slate-100 dark:bg-slate-800 px-3 py-2">
+          <div className="self-start rounded-2xl rounded-bl-sm bg-slate-100 dark:bg-slate-800 px-3 py-2 flex items-center gap-2">
             <Spinner size="sm" />
+            {slowLoad && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                AI is thinking — busy period, hang tight…
+              </span>
+            )}
           </div>
         )}
       </div>
 
-      {/* Error */}
-      {error && (
-        <p className="px-4 pb-2 text-xs text-red-500">{error}</p>
-      )}
+      {/* Error — cooldowns get a live countdown that clears itself at zero. */}
+      {error &&
+        (isCooldown ? (
+          cooldownS > 0 && (
+            <p className="px-4 pb-2 text-xs text-amber-600 dark:text-amber-400">
+              AI is on cooldown — try again in {cooldownS} second{cooldownS === 1 ? '' : 's'}.
+            </p>
+          )
+        ) : (
+          <p className="px-4 pb-2 text-xs text-red-500">{error.message}</p>
+        ))}
 
       {/* Daily quota */}
       {sendDisabled ? (
