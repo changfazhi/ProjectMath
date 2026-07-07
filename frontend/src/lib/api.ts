@@ -5,6 +5,7 @@ import type {
   CreatePairResponse,
   DiagnosisStatus,
   Difficulty,
+  FeedbackRequest,
   Grading,
   GradeResponse,
   MathLevel,
@@ -286,5 +287,13 @@ export const api = {
 
     portal: () =>
       request<{ url: string }>('/api/billing/portal', { method: 'POST' }),
+  },
+
+  feedback: {
+    send: (body: FeedbackRequest) =>
+      request<{ ok: boolean }>('/api/feedback', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   },
 }
