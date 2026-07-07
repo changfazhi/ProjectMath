@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { getSocket } from '../lib/socket'
 import type { GradeResponse } from '../types/api'
+import type { GradingUiError } from './usePracticeSession'
 
 interface Handlers {
   onGradingStart?: () => void
   onGraded?: (grading: GradeResponse) => void
-  onGradingError?: (message: string) => void
+  onGradingError?: (error: GradingUiError) => void
 }
 
 export interface PairSocketState {
@@ -50,10 +51,10 @@ export function usePairSocket(token: string | null, handlers: Handlers = {}): Pa
       setGrading(false)
       handlersRef.current.onGraded?.(p.grading)
     }
-    const onError = (p: { message: string }) => {
+    const onError = (p: { message: string; code?: string; reset_at?: string }) => {
       setGrading(false)
       setError(p.message)
-      handlersRef.current.onGradingError?.(p.message)
+      handlersRef.current.onGradingError?.({ message: p.message, code: p.code, resetAt: p.reset_at })
     }
 
     socket.emit('pair:subscribe', { token })

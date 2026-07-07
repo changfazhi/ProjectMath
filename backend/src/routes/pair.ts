@@ -148,7 +148,12 @@ router.post('/:token/done', pairLimiter, async (req, res) => {
       console.error('[pair/done] unexpected error:', err);
     }
     const code = err instanceof AiUnavailableError ? err.code : undefined;
-    emitToPair(pair.token, 'pair:error', { message, ...(code ? { code } : {}) });
+    const resetAt = err instanceof AiUnavailableError ? err.resetAt : undefined;
+    emitToPair(pair.token, 'pair:error', {
+      message,
+      ...(code ? { code } : {}),
+      ...(resetAt ? { reset_at: resetAt } : {}),
+    });
   } finally {
     closePair(pair.token);
   }

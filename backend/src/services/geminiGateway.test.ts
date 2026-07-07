@@ -7,6 +7,8 @@ import type { AI_LIMITS } from '../config/aiLimits.js';
 
 const DAILY_429 =
   '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}';
+const MINUTE_429 =
+  '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[{"violations":[{"quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}]},{"retryDelay":"1s"}]}}';
 
 function makeLimits(overrides: Partial<typeof AI_LIMITS> = {}): typeof AI_LIMITS {
   return {
@@ -157,6 +159,57 @@ describe('GeminiGateway', () => {
     await vi.advanceTimersByTimeAsync(10_000); // covers both backoffs
     await assertion;
     expect(call).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+  });
+
+  it('a per-minute 429 does not consume the daily budget', async () => {
+    const call = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError({ message: MINUTE_429, status: 429 }))
+      .mockResolvedValue(ok('x'));
+    const gw = new GeminiGateway({ call, limits: makeLimits({ outboundRpm: 10, rpd: 2 }) });
+
+    const p = gw.generate('chat', params);
+    await vi.advanceTimersByTimeAsync(5000); // covers the 1s pause + 2s retry backoff
+    await expect(p).resolves.toEqual(ok('x'));
+    expect(call).toHaveBeenCalledTimes(2); // failed attempt + successful retry
+
+    // The 429'd attempt was refunded, so with rpd=2 a second request must still fit.
+    await expect(gw.generate('chat', params)).resolves.toEqual(ok('x'));
+  });
+
+  it('network failures never consume the daily budget', async () => {
+    const call = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+    const gw = new GeminiGateway({ call, limits: makeLimits({ outboundRpm: 10, rpd: 3 }) });
+
+    const p = gw.generate('chat', params);
+    const assertion = expectCode(p, 'AI_BUSY');
+    await vi.advanceTimersByTimeAsync(10_000); // exhausts all 3 attempts
+    await assertion;
+    expect(call).toHaveBeenCalledTimes(3);
+
+    // All 3 attempts refunded — the full rpd=3 budget is still available.
+    call.mockResolvedValue(ok('x'));
+    await expect(
+      Promise.all([
+        gw.generate('chat', params),
+        gw.generate('chat', params),
+        gw.generate('chat', params),
+      ]),
+    ).resolves.toHaveLength(3);
+  });
+
+  it('5xx failures still count against the daily budget (they reached Google)', async () => {
+    const call = vi.fn().mockRejectedValue(new ApiError({ message: 'down', status: 503 }));
+    const gw = new GeminiGateway({ call, limits: makeLimits({ outboundRpm: 10, rpd: 3 }) });
+
+    const p = gw.generate('grade', params);
+    const assertion = expectCode(p, 'AI_BUSY');
+    await vi.advanceTimersByTimeAsync(10_000); // 3 attempts spend the whole budget
+    await assertion;
+    expect(call).toHaveBeenCalledTimes(3);
+
+    await expectCode(gw.generate('chat', params), 'AI_DAILY_LIMIT');
+    expect(call).toHaveBeenCalledTimes(3);
   });
 
   it('an upstream per-day 429 blocks everything until the PT reset', async () => {

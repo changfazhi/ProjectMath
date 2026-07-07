@@ -20,6 +20,7 @@ import { Button } from '../components/ui/Button'
 import { StreakNotification } from '../components/ui/StreakNotification'
 import { QrPairModal } from '../components/pair/QrPairModal'
 import { usePairSocket } from '../hooks/usePairSocket'
+import { useCountdown, useSlowLoad } from '../hooks/useCountdown'
 import { ChatPanel } from '../components/chat/ChatPanel'
 import { useChatSession } from '../hooks/useChatSession'
 import { useUsage } from '../hooks/useUsage'
@@ -73,6 +74,12 @@ export function PracticePage() {
   const [solutionError, setSolutionError] = useState<string | null>(null)
 
   const session = usePracticeSession(topicId ?? '', difficulty)
+
+  // Grading can be held server-side through the per-user cooldown before it even reaches
+  // Gemini — after a few seconds, reassure the student that the AI is working on it.
+  const gradingSlow = useSlowLoad(session.phase === 'submitted')
+  // Cooldown rejections (second submission while one is held) carry a resetAt countdown.
+  const gradingRetryS = useCountdown(session.gradingError?.resetAt)
 
   // One shared chat instance drives both the desktop side panel and the mobile Hints tab.
   const chat = useChatSession(session.question?.id)
@@ -332,7 +339,14 @@ export function PracticePage() {
                   <div className="flex flex-col gap-4">
                     {session.gradingError && (
                       <div className="rounded-xl p-3 bg-amber-50 dark:bg-amber-900/25 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300">
-                        {session.gradingError}
+                        {session.gradingError.message}
+                        {gradingRetryS > 0 && ` Try again in ${gradingRetryS}s.`}
+                      </div>
+                    )}
+                    {submitting && gradingSlow && (
+                      <div className="rounded-xl p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                        <Spinner size="sm" />
+                        <span>AI is thinking — busy period, hang tight…</span>
                       </div>
                     )}
                     {scansExhausted && (

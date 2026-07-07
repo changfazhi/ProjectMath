@@ -65,6 +65,12 @@ export interface MappedAiError {
   pauseMs?: number;
   /** True when Google says the key's daily quota is spent. */
   dailyExhausted?: boolean;
+  /**
+   * True when the failed attempt did not consume Google's daily quota (per-minute
+   * throttled before accounting, or never reached Google) — the gateway should
+   * refund its dayCount increment.
+   */
+  refundDaily?: boolean;
 }
 
 /**
@@ -103,6 +109,7 @@ export function mapAiError(err: unknown): MappedAiError {
       ),
       retryable: true,
       pauseMs: (retryDelayS ?? 15) * 1000,
+      refundDaily: true,
     };
   }
 
@@ -141,6 +148,7 @@ export function mapAiError(err: unknown): MappedAiError {
         503,
       ),
       retryable: true,
+      refundDaily: true,
     };
   }
 

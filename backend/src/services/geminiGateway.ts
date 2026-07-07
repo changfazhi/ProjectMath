@@ -141,6 +141,13 @@ export class GeminiGateway {
         const mapped = mapAiError(err);
         const now = Date.now();
 
+        // Attempts that never consumed Google's daily quota (per-minute 429, network
+        // failure) must not burn our local budget — otherwise RPM churn masquerades
+        // as the daily limit. Pacing (callTimes) still counts the attempt.
+        if (mapped.refundDaily) {
+          this.dayCount = Math.max(0, this.dayCount - 1);
+        }
+
         if (mapped.dailyExhausted) {
           // Google is authoritative — our local counter missed some usage (e.g. a restart).
           this.blockDaily(now);

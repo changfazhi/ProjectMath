@@ -1,19 +1,28 @@
 import { AI_LIMITS } from '../config/aiLimits.js';
 import { AiUnavailableError } from './aiErrors.js';
 
-// Per-user pacing between accepted AI requests (chat hints / photo grading). In-memory —
-// correct only while the backend runs as a single instance (same constraint as pairService).
-// Typed re-grades (/api/grade/text) are exempt by design: they're a correction flow.
+// Per-user pacing between accepted AI requests. In-memory — correct only while the
+// backend runs as a single instance (same constraint as pairService).
+//
+// Two mechanisms:
+//  - Chat: check-and-stamp — a request inside the window is rejected with AI_COOLDOWN.
+//  - Grade: slot reservation — a photo grade inside the window is HELD (acquireGradeSlot
+//    sleeps until the slot frees) instead of rejected; at most one waiter per user, a
+//    further submission is rejected. Typed re-grades (/api/grade/text) are exempt by
+//    design: they're a correction flow.
 export type CooldownKind = 'chat' | 'grade';
 
-const lastAccepted = new Map<string, number>(); // `${kind}:${uid}` → epoch ms
 const PRUNE_THRESHOLD = 5000;
 
 function cooldownMs(kind: CooldownKind): number {
   return (kind === 'chat' ? AI_LIMITS.chatCooldownS : AI_LIMITS.gradeCooldownS) * 1000;
 }
 
-function prune(now: number): void {
+// ---- chat: reject inside the window ----
+
+const lastAccepted = new Map<string, number>(); // `${kind}:${uid}` → epoch ms
+
+function pruneChat(now: number): void {
   if (lastAccepted.size < PRUNE_THRESHOLD) return;
   const maxAge = Math.max(cooldownMs('chat'), cooldownMs('grade'));
   for (const [key, ts] of lastAccepted) {
@@ -42,7 +51,7 @@ export function assertAndStampCooldown(uid: string, kind: CooldownKind, now = Da
   }
 
   lastAccepted.set(key, now);
-  prune(now);
+  pruneChat(now);
 }
 
 /**
@@ -53,7 +62,81 @@ export function clearCooldown(uid: string, kind: CooldownKind): void {
   lastAccepted.delete(`${kind}:${uid}`);
 }
 
+// ---- grade: hold inside the window ----
+
+interface GradeSlot {
+  nextFreeAt: number; // epoch ms when the next accepted grade may start
+  waiting: boolean; // a held request is already waiting for nextFreeAt's predecessor slot
+}
+
+const gradeSlots = new Map<string, GradeSlot>(); // uid → slot
+
+function pruneGradeSlots(now: number): void {
+  if (gradeSlots.size < PRUNE_THRESHOLD) return;
+  for (const [uid, slot] of gradeSlots) {
+    if (!slot.waiting && now >= slot.nextFreeAt) gradeSlots.delete(uid);
+  }
+}
+
+/**
+ * Reserve the user's next grade slot. Synchronous check-and-set, so two concurrent
+ * requests from the same user can't both take the waiter position.
+ *
+ * - Slot free (or window expired) → run now, next request must wait a full window.
+ * - Inside the window, no waiter yet → become the single waiter; returns how long to
+ *   sleep before running. The window chains so a request after this one waits its turn.
+ * - A waiter already exists → AI_COOLDOWN (429): one held grading per user.
+ */
+export function reserveGradeSlot(uid: string, now = Date.now()): { waitMs: number } {
+  const windowMs = cooldownMs('grade');
+  const slot = gradeSlots.get(uid);
+
+  if (!slot || now >= slot.nextFreeAt) {
+    gradeSlots.set(uid, { nextFreeAt: now + windowMs, waiting: false });
+    pruneGradeSlots(now);
+    return { waitMs: 0 };
+  }
+
+  if (slot.waiting) {
+    throw new AiUnavailableError(
+      'You already have a grading in progress — wait for it to finish before submitting again.',
+      'AI_COOLDOWN',
+      429,
+      new Date(slot.nextFreeAt).toISOString(),
+    );
+  }
+
+  const runAt = slot.nextFreeAt;
+  slot.nextFreeAt = runAt + windowMs;
+  slot.waiting = true;
+  return { waitMs: runAt - now };
+}
+
+/**
+ * Reserve a slot and, if the cooldown is still running, hold the request until the
+ * slot frees. Resolves when the grade may proceed to the Gemini gateway.
+ */
+export async function acquireGradeSlot(uid: string, now = Date.now()): Promise<void> {
+  const { waitMs } = reserveGradeSlot(uid, now);
+  if (waitMs <= 0) return;
+  await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+  const slot = gradeSlots.get(uid);
+  if (slot) slot.waiting = false; // the waiter is now the runner — free the wait position
+}
+
+/**
+ * Refund after a failed grading so an error (upstream outage, junk-photo rejection, …)
+ * doesn't also cost the user their cooldown. If another request is already waiting
+ * behind the failed one, its reservation stands and nothing is refunded.
+ */
+export function refundGradeSlot(uid: string): void {
+  const slot = gradeSlots.get(uid);
+  if (!slot || slot.waiting) return;
+  gradeSlots.delete(uid);
+}
+
 /** Test helper. */
 export function resetAllCooldowns(): void {
   lastAccepted.clear();
+  gradeSlots.clear();
 }

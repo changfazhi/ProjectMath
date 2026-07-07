@@ -44,6 +44,7 @@ describe('mapAiError', () => {
     expect(mapped.retryable).toBe(true);
     expect(mapped.pauseMs).toBe(2000); // ceil(1.49s)
     expect(mapped.dailyExhausted).toBeUndefined();
+    expect(mapped.refundDaily).toBe(true); // rejected before daily accounting
   });
 
   it('maps a per-day 429 to non-retryable AI_DAILY_LIMIT', () => {
@@ -51,6 +52,7 @@ describe('mapAiError', () => {
     expect(mapped.error.code).toBe('AI_DAILY_LIMIT');
     expect(mapped.retryable).toBe(false);
     expect(mapped.dailyExhausted).toBe(true);
+    expect(mapped.refundDaily).toBeUndefined();
   });
 
   it('maps 503 (high demand) to retryable AI_BUSY', () => {
@@ -60,6 +62,7 @@ describe('mapAiError', () => {
     expect(mapped.error.code).toBe('AI_BUSY');
     expect(mapped.error.httpStatus).toBe(503);
     expect(mapped.retryable).toBe(true);
+    expect(mapped.refundDaily).toBeUndefined(); // reached Google — still counts
   });
 
   it('maps 404 (unknown/retired model) to non-retryable AI_ERROR', () => {
@@ -74,6 +77,7 @@ describe('mapAiError', () => {
     const mapped = mapAiError(new TypeError('fetch failed'));
     expect(mapped.error.code).toBe('AI_BUSY');
     expect(mapped.retryable).toBe(true);
+    expect(mapped.refundDaily).toBe(true); // never reached Google
   });
 
   it('maps unknown errors to non-retryable AI_ERROR', () => {

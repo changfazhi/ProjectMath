@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatSession } from '../../hooks/useChatSession'
+import { useCountdown, useSlowLoad } from '../../hooks/useCountdown'
 import { renderLatex } from '../../lib/renderLatex'
 import { cn } from '../../lib/utils'
 import { Spinner } from '../ui/Spinner'
@@ -14,23 +15,6 @@ interface Props {
   onUpgrade?: () => void
 }
 
-// Live seconds remaining until an ISO timestamp — drives the cooldown countdown.
-function useCountdown(resetAt?: string): number {
-  const [remaining, setRemaining] = useState(0)
-  useEffect(() => {
-    if (!resetAt) {
-      setRemaining(0)
-      return
-    }
-    const target = new Date(resetAt).getTime()
-    const tick = () => setRemaining(Math.max(0, Math.ceil((target - Date.now()) / 1000)))
-    tick()
-    const id = setInterval(tick, 500)
-    return () => clearInterval(id)
-  }, [resetAt])
-  return remaining
-}
-
 export function ChatPanel({ chat, className, quotaNote, sendDisabled, onUpgrade }: Props) {
   const { messages, loading, error, send } = chat
   const [input, setInput] = useState('')
@@ -41,15 +25,7 @@ export function ChatPanel({ chat, className, quotaNote, sendDisabled, onUpgrade 
 
   // After a few seconds of waiting, reassure the user (the request may be queued
   // behind other students during busy periods).
-  const [slowLoad, setSlowLoad] = useState(false)
-  useEffect(() => {
-    if (!loading) {
-      setSlowLoad(false)
-      return
-    }
-    const id = setTimeout(() => setSlowLoad(true), 4000)
-    return () => clearTimeout(id)
-  }, [loading])
+  const slowLoad = useSlowLoad(loading)
 
   // Keep the latest message in view.
   useEffect(() => {

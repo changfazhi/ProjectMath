@@ -5,7 +5,7 @@ import { GEMINI_MODEL } from '../db/gemini.js';
 import { getQuestionWithSolution } from './questionService.js';
 import { assertScanQuota } from './usageService.js';
 import { aiGenerate } from './geminiGateway.js';
-import { assertAndStampCooldown, clearCooldown } from './cooldownService.js';
+import { acquireGradeSlot, refundGradeSlot } from './cooldownService.js';
 import type { Tier } from '../config/featureTiers.js';
 import type {
   GradeResponse,
@@ -300,17 +300,19 @@ async function runGrading(opts: Parameters<typeof runGradingCore>[0]): Promise<G
   // for all three entry points (photo, typed re-grade, phone pair flow).
   await assertScanQuota(params.userId, params.tier);
 
-  // Per-user pacing. Typed re-grades are exempt: correcting a mis-scanned transcription
-  // is a continuation of the same submission, not a new solve. Cleared on any failure
+  // Per-user pacing. A photo grade inside the cooldown window is HELD here until its
+  // slot frees (one waiter per user — a further submission gets AI_COOLDOWN), then
+  // proceeds normally. Typed re-grades are exempt: correcting a mis-scanned transcription
+  // is a continuation of the same submission, not a new solve. Refunded on any failure
   // (upstream outage, junk-photo rejection) so an error doesn't also cost the cooldown —
   // the per-IP rate limiter still caps hammering.
   const cooled = mode === 'photo';
-  if (cooled) assertAndStampCooldown(params.userId, 'grade');
+  if (cooled) await acquireGradeSlot(params.userId);
 
   try {
     return await runGradingCore(opts);
   } catch (err) {
-    if (cooled) clearCooldown(params.userId, 'grade');
+    if (cooled) refundGradeSlot(params.userId);
     throw err;
   }
 }
