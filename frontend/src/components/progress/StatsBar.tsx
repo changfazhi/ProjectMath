@@ -16,8 +16,17 @@ export function StatsBar({ correct, total, streak }: Props) {
         {total > 0 && <span className="text-xs">({pct}%)</span>}
       </span>
       {streak > 1 && (
-        <span className="text-amber-600 dark:text-amber-400 font-medium">
-          🔥 Streak: {streak}
+        // Outer span: mount-only slide-in (stable across increments).
+        <span className="inline-flex animate-slide-in-right motion-reduce:animate-none">
+          {/* key={streak} remounts on each increment to replay bounce/wiggle/pop */}
+          <span
+            key={streak}
+            className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-lg shadow-amber-500/30 dark:shadow-amber-500/20 animate-pill-bounce motion-reduce:animate-none"
+          >
+            <span className="animate-flame-wiggle motion-reduce:animate-none">🔥</span>
+            <span>Streak</span>
+            <span className="tabular-nums text-sm animate-num-pop motion-reduce:animate-none">{streak}</span>
+          </span>
         </span>
       )}
     </div>

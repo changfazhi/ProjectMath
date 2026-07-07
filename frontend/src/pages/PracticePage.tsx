@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { Attempt, Difficulty, SolutionGraphRender } from '../types/api'
 import { usePracticeSession } from '../hooks/usePracticeSession'
@@ -18,6 +18,7 @@ import { Spinner } from '../components/ui/Spinner'
 import { ErrorMessage } from '../components/ui/ErrorMessage'
 import { Button } from '../components/ui/Button'
 import { StreakNotification } from '../components/ui/StreakNotification'
+import { CorrectCelebration } from '../components/ui/CorrectCelebration'
 import { QrPairModal } from '../components/pair/QrPairModal'
 import { usePairSocket } from '../hooks/usePairSocket'
 import { useCountdown, useSlowLoad } from '../hooks/useCountdown'
@@ -61,6 +62,9 @@ export function PracticePage() {
     show: false,
     streakCount: 0,
   })
+  const [celebrating, setCelebrating] = useState(false)
+  const celebratedQuestionRef = useRef<string | null>(null)
+  const handleCelebrationDone = useCallback(() => setCelebrating(false), [])
 
   // Attempts tab state
   const [attemptsList, setAttemptsList] = useState<Attempt[]>([])
@@ -163,6 +167,19 @@ export function PracticePage() {
       .catch((e: Error) => setAttemptsError(e.message))
       .finally(() => setAttemptsLoading(false))
   }, [activeTab, session.question?.id])
+
+  // Fire the big-tick celebration once per question, on the reveal moment.
+  // Covers all three reveal paths (typed, photo-graded, multi-part all-correct)
+  // because every path synthesizes result.is_correct in the reducer. The ref
+  // guard keeps it idempotent under StrictMode and still lets a re-grade that
+  // flips incorrect→correct celebrate.
+  useEffect(() => {
+    if (session.phase !== 'revealed' || !session.result?.is_correct) return
+    const qid = session.question?.id
+    if (!qid || celebratedQuestionRef.current === qid) return
+    celebratedQuestionRef.current = qid
+    setCelebrating(true)
+  }, [session.phase, session.result, session.question?.id])
 
   // Show streak notification once per day on first correct answer
   useEffect(() => {
@@ -550,6 +567,8 @@ export function PracticePage() {
       {session.phase === 'error' && session.error && (
         <ErrorMessage message={session.error} onRetry={session.reset} />
       )}
+
+      {celebrating && <CorrectCelebration onDone={handleCelebrationDone} />}
 
       {notification.show && (
         <StreakNotification
