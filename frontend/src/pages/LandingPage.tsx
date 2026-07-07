@@ -389,8 +389,8 @@ const MARKUP = `
           <ul style="list-style:none;padding:0;margin:24px 0 0;display:flex;flex-direction:column;gap:13px">
             <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Full roadmap access</li>
             <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Practice questions for every topic</li>
-            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>5 AI Scans / month</li>
-            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>10 AI Tutor messages / day</li>
+            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>3 AI Scans / day</li>
+            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>3 AI Tutor messages / day</li>
           </ul>
         </div>
         <!-- Pro -->

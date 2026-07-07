@@ -39,17 +39,17 @@ describe('isOverLimit', () => {
 
 describe('assertScanQuota', () => {
   it('passes for free tier below the limit', async () => {
-    state.count = 9;
+    state.count = 2;
     await expect(assertScanQuota('user-1', 'free')).resolves.toBeUndefined();
   });
 
   it('throws QuotaExceededError at the limit with payload fields', async () => {
-    state.count = 10;
+    state.count = 3;
     const err = await assertScanQuota('user-1', 'free').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(QuotaExceededError);
     const q = err as InstanceType<typeof QuotaExceededError>;
     expect(q.quota).toBe('scans');
-    expect(q.limit).toBe(10);
+    expect(q.limit).toBe(3);
     expect(new Date(q.resetAt).getTime()).toBeGreaterThan(Date.now());
   });
 
@@ -62,7 +62,7 @@ describe('assertScanQuota', () => {
 
 describe('assertChatQuota', () => {
   it('throws at the free limit', async () => {
-    state.count = 10;
+    state.count = 3;
     await expect(assertChatQuota('user-1', 'free')).rejects.toBeInstanceOf(QuotaExceededError);
   });
 
@@ -75,10 +75,10 @@ describe('assertChatQuota', () => {
 
 describe('getUsageSummary', () => {
   it('reports used/limit/remaining for free tier', async () => {
-    state.count = 4;
+    state.count = 2;
     const summary = await getUsageSummary('user-1', 'free');
-    expect(summary.scans).toEqual({ used: 4, limit: 10, remaining: 6 });
-    expect(summary.chat).toEqual({ used: 4, limit: 10, remaining: 6 });
+    expect(summary.scans).toEqual({ used: 2, limit: 3, remaining: 1 });
+    expect(summary.chat).toEqual({ used: 2, limit: 3, remaining: 1 });
     expect(new Date(summary.resets_at).getTime()).toBeGreaterThan(Date.now());
   });
 
