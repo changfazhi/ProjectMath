@@ -13,6 +13,7 @@ import {
   getPersonalisedStudyPlan,
 } from '../services/diagnosticService.js';
 import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
+import { AiUnavailableError, sendAiError } from '../services/aiErrors.js';
 
 const router = Router();
 
@@ -81,12 +82,17 @@ router.post('/diagnosis', ...gate('review'), async (req, res) => {
       sendQuotaError(res, err, req.user!.tier);
       return;
     }
+    if (err instanceof AiUnavailableError) {
+      sendAiError(res, err);
+      return;
+    }
     const msg = (err as Error).message;
     if (msg.includes('Attempt at least')) {
       res.status(403).json({ error: msg });
       return;
     }
-    res.status(500).json({ error: msg });
+    console.error('[review/diagnosis] unexpected error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 
@@ -95,7 +101,12 @@ router.get('/study-plan', ...gate('review'), async (req, res) => {
     const result = await getPersonalisedStudyPlan(req.user!.uid, req.user!.tier);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    if (err instanceof AiUnavailableError) {
+      sendAiError(res, err);
+      return;
+    }
+    console.error('[review/study-plan] unexpected error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
   }
 });
 

@@ -1,6 +1,7 @@
 import { QRCodeSVG } from 'qrcode.react'
 import { Button } from '../ui/Button'
 import { Spinner } from '../ui/Spinner'
+import { useSlowLoad } from '../../hooks/useCountdown'
 import type { PairSocketState } from '../../hooks/usePairSocket'
 
 interface Props {
@@ -12,9 +13,13 @@ interface Props {
 export function QrPairModal({ mobilePath, pair, onClose }: Props) {
   const url = `${window.location.origin}${mobilePath}`
 
+  // Grading may be held through the per-user cooldown server-side — reassure after a while.
+  const slowGrading = useSlowLoad(pair.grading)
+
   let status: string
   if (pair.error) status = pair.error
-  else if (pair.grading) status = 'Grading your solution…'
+  else if (pair.grading)
+    status = slowGrading ? 'AI is thinking — busy period, hang tight…' : 'Grading your solution…'
   else if (pair.images.length > 0)
     status = `${pair.images.length} photo${pair.images.length > 1 ? 's' : ''} received — tap Done on your phone when finished.`
   else if (pair.phoneConnected) status = 'Phone connected — take your photos.'

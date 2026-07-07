@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Type } from '@google/genai';
 import { supabase } from '../db/supabase.js';
-import { getGemini, GEMINI_MODEL } from '../db/gemini.js';
+import { GEMINI_MODEL } from '../db/gemini.js';
 import { getQuestionWithSolution } from './questionService.js';
 import { assertScanQuota } from './usageService.js';
+import { aiGenerate } from './geminiGateway.js';
+import { acquireGradeSlot, refundGradeSlot } from './cooldownService.js';
 import type { Tier } from '../config/featureTiers.js';
 import type {
   GradeResponse,
@@ -290,7 +292,32 @@ type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: str
 
 // Shared grading core for both entry points (photo upload and typed-text re-grade). Calls Gemini,
 // rejects irrelevant submissions BEFORE any write, then persists the grading row + attempts.
-async function runGrading(opts: {
+async function runGrading(opts: Parameters<typeof runGradingCore>[0]): Promise<GradeResponse> {
+  const { params, mode } = opts;
+
+  // Daily scan quota (free tier) — checked before the Gemini call so a blocked
+  // attempt costs nothing and writes nothing. This is the single enforcement point
+  // for all three entry points (photo, typed re-grade, phone pair flow).
+  await assertScanQuota(params.userId, params.tier);
+
+  // Per-user pacing. A photo grade inside the cooldown window is HELD here until its
+  // slot frees (one waiter per user — a further submission gets AI_COOLDOWN), then
+  // proceeds normally. Typed re-grades are exempt: correcting a mis-scanned transcription
+  // is a continuation of the same submission, not a new solve. Refunded on any failure
+  // (upstream outage, junk-photo rejection) so an error doesn't also cost the cooldown —
+  // the per-IP rate limiter still caps hammering.
+  const cooled = mode === 'photo';
+  if (cooled) await acquireGradeSlot(params.userId);
+
+  try {
+    return await runGradingCore(opts);
+  } catch (err) {
+    if (cooled) refundGradeSlot(params.userId);
+    throw err;
+  }
+}
+
+async function runGradingCore(opts: {
   params: GradeCoreParams;
   mode: 'photo' | 'text';
   userParts: GeminiPart[];
@@ -305,17 +332,12 @@ async function runGrading(opts: {
 }): Promise<GradeResponse> {
   const { params, mode } = opts;
 
-  // Daily scan quota (free tier) — checked before the Gemini call so a blocked
-  // attempt costs nothing and writes nothing. This is the single enforcement point
-  // for all three entry points (photo, typed re-grade, phone pair flow).
-  await assertScanQuota(params.userId, params.tier);
-
   const question = await getQuestionWithSolution(params.question_id);
   if (!question) throw new Error(`Question ${params.question_id} not found`);
 
   // 1. Ask Gemini to grade. We grade BEFORE persisting so a rejected (irrelevant/blank) submission
   //    never writes a junk image, grading row, or attempt.
-  const response = await getGemini().models.generateContent({
+  const response = await aiGenerate('grade', {
     model: GEMINI_MODEL,
     config: {
       systemInstruction: buildGradingInstruction(question, mode),

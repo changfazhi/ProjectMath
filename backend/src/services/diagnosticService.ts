@@ -1,6 +1,8 @@
 import { Type } from '@google/genai';
 import { supabase } from '../db/supabase.js';
-import { getGemini, GEMINI_MODEL } from '../db/gemini.js';
+import { GEMINI_MODEL } from '../db/gemini.js';
+import { aiGenerate } from './geminiGateway.js';
+import { AiUnavailableError } from './aiErrors.js';
 import { TIER_LIMITS } from '../config/limits.js';
 import type { Tier } from '../config/featureTiers.js';
 import { cooldownEndsAt, DAY_MS, nextSgtMidnightUtc, sgtDateStr } from '../lib/sgTime.js';
@@ -140,7 +142,7 @@ For each topic, write one specific, actionable ai_insight for a Singapore H2 A-L
 
 Write overall_summary in 2–3 sentences: biggest strength, biggest weakness, and one concrete study tip.`;
 
-  const response = await getGemini().models.generateContent({
+  const response = await aiGenerate('diagnosis', {
     model: GEMINI_MODEL,
     contents: [{ role: 'user', parts: [{ text: promptText }] }],
     config: {
@@ -149,11 +151,25 @@ Write overall_summary in 2–3 sentences: biggest strength, biggest weakness, an
     },
   });
 
-  const raw = response.text?.trim() ?? '{}';
-  const parsed = JSON.parse(raw) as {
+  // Guard against empty / safety-blocked / truncated model output — never let a parse
+  // failure bubble a raw error to the client.
+  const raw = response.text?.trim();
+  let parsed: {
     topics: Array<{ topic_id: string; strength_level: string; ai_insight: string }>;
     overall_summary: string;
   };
+  try {
+    if (!raw) throw new Error('empty response');
+    parsed = JSON.parse(raw) as typeof parsed;
+    if (!Array.isArray(parsed.topics)) throw new Error('missing topics array');
+  } catch (err) {
+    console.error('[diagnosis] unusable model output:', err, raw?.slice(0, 200));
+    throw new AiUnavailableError(
+      "The AI couldn't generate your diagnosis just now — please try again.",
+      'AI_BUSY',
+      503,
+    );
+  }
 
   const insightMap = new Map(
     parsed.topics.map(t => [t.topic_id, { strength_level: t.strength_level, ai_insight: t.ai_insight }]),

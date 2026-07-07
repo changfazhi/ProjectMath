@@ -5,15 +5,19 @@
 ## APIs & External Services
 
 **AI & ML:**
-- **Google Gemini 2.5 Flash** - LLM for Socratic hints and photo-based solution grading
+- **Google Gemini 2.5 Flash** - LLM for Socratic hints, photo-based solution grading, and weakness diagnosis
   - SDK/Client: `@google/genai` (2.9.0)
   - Auth: `GEMINI_API_KEY` env var
-  - Usage: `backend/src/db/gemini.ts` (lazy singleton), consumed by:
-    - `backend/src/services/chatService.ts` → `/api/chat` (hints via `sendHintMessage()`)
-    - `backend/src/services/gradingService.ts` → `/api/grade` (photo grading via `gradeSolution()` and `gradeTranscription()`)
+  - Usage: `backend/src/db/gemini.ts` (lazy singleton client), but **calls are never made directly against it** — every call site goes through `backend/src/services/geminiGateway.ts` (`aiGenerate(kind, params)`), consumed by:
+    - `backend/src/services/chatService.ts` → `/api/chat` (hints via `sendHintMessage()`, kind `'chat'`)
+    - `backend/src/services/gradingService.ts` → `/api/grade` (photo grading via `gradeSolution()` and `gradeTranscription()`, kind `'grade'`)
+    - `backend/src/services/diagnosticService.ts` → `/api/review/diagnosis`, `/api/review/study-plan` (kind `'diagnosis'`)
   - Model selection: `GEMINI_MODEL` env var (default `gemini-2.5-flash`)
-  - Rate limits: `CHAT_RATE_LIMIT_PER_MIN` (default 15), `GRADE_RATE_LIMIT_PER_MIN` (default 5)
+  - IP-based rate limits (unrelated to the Gemini gateway below): `CHAT_RATE_LIMIT_PER_MIN` (default 15), `GRADE_RATE_LIMIT_PER_MIN` (default 5)
   - Per-question caps: `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40)
+  - **Gemini call gateway** (`geminiGateway.ts`, added 2026-07-06): single choke point pacing outbound calls under the key's real per-minute limit (`AI_OUTBOUND_RPM`, default 8, vs. the free tier's real 10 RPM), queueing bursts with `chat` prioritized over `grade`/`diagnosis`, retrying transient 503/500/network failures, and failing fast with `AI_DAILY_LIMIT` once the local daily counter (`AI_RPD_LIMIT`, default 250) is spent. In-memory — assumes a single backend instance (see `DEPLOYMENT.md`).
+  - **Per-user cooldowns** (`cooldownService.ts`): `AI_CHAT_COOLDOWN_S` (default 5) and `AI_GRADE_COOLDOWN_S` (default 60) between a user's accepted requests; typed re-grades (`/api/grade/text`) are exempt. Cleared if the underlying Gemini call fails.
+  - **Error mapping** (`aiErrors.ts`): every upstream failure (429/503/500/network/bad-model) is converted to a public-safe `AiUnavailableError` with a code (`AI_COOLDOWN` / `AI_BUSY` / `AI_DAILY_LIMIT` / `AI_ERROR`) before reaching the client — raw Gemini error bodies are logged server-side only, never sent to the browser.
 
 **Payments & Billing:**
 - **Stripe** - Payment processing for subscriptions and one-time purchases
@@ -109,6 +113,7 @@
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `GEMINI_API_KEY` (optional if hints/grading disabled)
 - `GEMINI_MODEL` (optional, default `gemini-2.5-flash`)
+- Gemini gateway/cooldown tuning (optional, all default to the `gemini-2.5-flash` free tier): `AI_RPM_LIMIT`, `AI_RPD_LIMIT`, `AI_OUTBOUND_RPM`, `AI_CHAT_COOLDOWN_S`, `AI_GRADE_COOLDOWN_S`, `AI_CHAT_QUEUE_MAX_WAIT_S`, `AI_GRADE_QUEUE_MAX_WAIT_S`, `AI_QUEUE_MAX_LENGTH` — see `backend/src/config/aiLimits.ts`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRICE_MONTHLY`

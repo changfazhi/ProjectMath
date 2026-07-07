@@ -11,7 +11,8 @@
 │   │   ├── index.ts         # Entry point; Express app setup + routes
 │   │   ├── realtime.ts      # Socket.IO initialization
 │   │   ├── config/
-│   │   │   └── featureTiers.ts  # Subscription tier definitions
+│   │   │   ├── featureTiers.ts  # Subscription tier definitions
+│   │   │   └── aiLimits.ts  # Gemini gateway/cooldown tuning (env-driven, per-model defaults)
 │   │   ├── db/
 │   │   │   ├── supabase.ts  # Supabase client
 │   │   │   ├── gemini.ts    # Gemini AI client
@@ -37,6 +38,9 @@
 │   │   │   ├── attemptService.ts    # Answer grading (exact/range/mcq)
 │   │   │   ├── chatService.ts       # Gemini Socratic tutor
 │   │   │   ├── gradingService.ts    # Photo grading (Gemini vision)
+│   │   │   ├── geminiGateway.ts     # Single choke point for all Gemini calls: pacing, queue, retries, daily cap
+│   │   │   ├── cooldownService.ts   # Per-user cooldown between accepted AI requests
+│   │   │   ├── aiErrors.ts          # Maps upstream Gemini failures to public-safe errors
 │   │   │   ├── starService.ts       # Favorite/bookmark management
 │   │   │   ├── streakService.ts     # Streak + heatmap data
 │   │   │   ├── pairService.ts       # Phone upload token management

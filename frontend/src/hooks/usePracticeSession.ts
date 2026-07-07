@@ -1,8 +1,16 @@
 import { useCallback, useReducer, useRef } from 'react'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import type { Difficulty, GradeResponse, QuestionPublic, SubmitAttemptResponse } from '../types/api'
 
 type PracticePhase = 'loading' | 'answering' | 'submitted' | 'revealed' | 'complete' | 'error'
+
+// Rich grading error — `code`/`resetAt` drive the cooldown countdown UI (mirrors ChatError).
+export interface GradingUiError {
+  message: string
+  code?: string
+  /** ISO timestamp — when the user may try again (AI_COOLDOWN / AI_DAILY_LIMIT). */
+  resetAt?: string
+}
 
 export interface PartState {
   phase: 'idle' | 'submitting' | 'done'
@@ -15,7 +23,7 @@ interface PracticeState {
   question: QuestionPublic | null
   result: SubmitAttemptResponse | null
   gradingResult: GradeResponse | null
-  gradingError: string | null
+  gradingError: GradingUiError | null
   partStates: Record<string, PartState>
   error: string | null
   sessionCorrect: number
@@ -32,7 +40,7 @@ type Action =
   | { type: 'SUBMIT_SUCCESS'; result: SubmitAttemptResponse }
   | { type: 'GRADE_START' }
   | { type: 'GRADE_SUCCESS'; grading: GradeResponse }
-  | { type: 'GRADE_REJECTED'; message: string }
+  | { type: 'GRADE_REJECTED'; error: GradingUiError }
   | { type: 'PART_SUBMIT_START'; partLabel: string }
   | { type: 'PART_SUBMIT_DONE'; partLabel: string; isCorrect: boolean; correctAnswer: string; solutionLatex: string | null }
   | { type: 'ERROR'; message: string }
@@ -77,7 +85,7 @@ function reducer(state: PracticeState, action: Action): PracticeState {
 
     case 'GRADE_REJECTED':
       // Soft, non-penalising error — keep the student on the question to retake the photo.
-      return { ...state, phase: 'answering', gradingError: action.message }
+      return { ...state, phase: 'answering', gradingError: action.error }
 
     case 'GRADE_SUCCESS': {
       const correct = action.grading.is_correct
@@ -282,7 +290,14 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
       } catch (err) {
         // Photo failures (irrelevant/blank photo, transient errors) are recoverable — keep the
         // student on the question to retake rather than dropping to the global error screen.
-        dispatch({ type: 'GRADE_REJECTED', message: (err as Error).message })
+        // ApiError keeps code/resetAt so cooldown rejections render a live countdown.
+        dispatch({
+          type: 'GRADE_REJECTED',
+          error:
+            err instanceof ApiError
+              ? { message: err.message, code: err.code, resetAt: err.resetAt }
+              : { message: (err as Error).message },
+        })
       }
     },
     [state.question, state.questionStartTime],
@@ -314,8 +329,8 @@ export function usePracticeSession(topicId: string, difficulty?: Difficulty) {
     dispatch({ type: 'GRADE_SUCCESS', grading })
   }, [])
 
-  const rejectExternalGrading = useCallback((message: string) => {
-    dispatch({ type: 'GRADE_REJECTED', message })
+  const rejectExternalGrading = useCallback((error: GradingUiError) => {
+    dispatch({ type: 'GRADE_REJECTED', error })
   }, [])
 
   const nextQuestion = useCallback(() => {

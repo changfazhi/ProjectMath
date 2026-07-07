@@ -1,7 +1,9 @@
 import { supabase } from '../db/supabase.js';
-import { getGemini, GEMINI_MODEL } from '../db/gemini.js';
+import { GEMINI_MODEL } from '../db/gemini.js';
 import { getQuestionWithSolution } from './questionService.js';
 import { assertChatQuota } from './usageService.js';
+import { aiGenerate } from './geminiGateway.js';
+import { assertAndStampCooldown, clearCooldown } from './cooldownService.js';
 import type { Tier } from '../config/featureTiers.js';
 import type {
   ChatMessage,
@@ -93,6 +95,9 @@ export async function sendHintMessage(
   // Daily cross-question cap for the free tier — checked before the Gemini call.
   await assertChatQuota(userId, tier);
 
+  // Per-user pacing — stamped on acceptance, un-stamped below if the AI call fails.
+  assertAndStampCooldown(userId, 'chat');
+
   const systemInstruction = buildSystemInstruction(question);
 
   const contents = [
@@ -100,15 +105,20 @@ export async function sendHintMessage(
     { role: 'user' as const, parts: [{ text: userMessage }] },
   ];
 
-  const response = await getGemini().models.generateContent({
-    model: GEMINI_MODEL,
-    config: { systemInstruction },
-    contents,
-  });
-
-  const replyText =
-    response.text?.trim() ||
-    "I couldn't come up with a hint just then — try rephrasing what you're stuck on.";
+  let replyText: string;
+  try {
+    const response = await aiGenerate('chat', {
+      model: GEMINI_MODEL,
+      config: { systemInstruction },
+      contents,
+    });
+    replyText =
+      response.text?.trim() ||
+      "I couldn't come up with a hint just then — try rephrasing what you're stuck on.";
+  } catch (err) {
+    clearCooldown(userId, 'chat');
+    throw err;
+  }
 
   // Persist the user turn and the model reply.
   const { data, error } = await supabase
