@@ -54,7 +54,7 @@ const MARKUP = `
       </div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:18px">
         __AUTH_LINK__
-        <a href="/roadmap" class="pm-hov-navcta" style="display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:11px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;box-shadow:0 8px 18px -6px var(--accent);transition:transform .15s,box-shadow .15s">Start free</a>
+        __CTA_BUTTON__
       </div>
     </nav>
   </header>
@@ -77,13 +77,6 @@ const MARKUP = `
         </div>
         <div style="margin-top:34px">
           <div style="font-size:13px;color:#8a90ab;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Sourced from real 2025 JC Prelim &amp; A-Level papers</div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
-            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">ASRJC</span>
-            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">DHS</span>
-            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">HCI</span>
-            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">ACJC</span>
-            <span style="padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;font-weight:700;font-size:13px;color:#46496b">CJC</span>
-          </div>
         </div>
       </div>
       <!-- right visual -->
@@ -298,7 +291,7 @@ const MARKUP = `
         <ul style="list-style:none;padding:0;margin:22px 0 0;display:flex;flex-direction:column;gap:13px">
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Spots method &amp; sign errors in your working</li>
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Flags presentation marks you'd otherwise lose</li>
-          <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Explains <em>why</em>, with the corrected step</li>
+          <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span><span>Explains <em>why</em>, with the corrected step</span></li>
         </ul>
       </div>
     </div>
@@ -402,8 +395,8 @@ const MARKUP = `
           <a href="#" data-goto-pro class="pm-hov-lift" style="display:block;text-align:center;padding:13px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:700;font-size:15px;transition:transform .15s">Go Pro</a>
           <ul style="list-style:none;padding:0;margin:24px 0 0;display:flex;flex-direction:column;gap:13px">
             <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span>Everything in Free</li>
-            <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span><b>Unlimited</b> AI Scans</li>
-            <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span><b>Unlimited</b> AI Tutor</li>
+            <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span><span><b>Unlimited</b> AI Scans</span></li>
+            <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span><span><b>Unlimited</b> AI Tutor</span></li>
             <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span>Personalised daily study plans</li>
             <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span>Weakness diagnosis &amp; targeted drills</li>
             <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span>Priority support</li>
@@ -474,7 +467,7 @@ const MARKUP = `
 
 export function LandingPage() {
   const navigate = useNavigate()
-  const { user, loading, openLoginModal, openUpgradeModal } = useAuth()
+  const { user, tier, loading, openLoginModal, openUpgradeModal } = useAuth()
 
   // Marks "the login now in progress was triggered by a 'Go Pro' click" so the transition
   // effect below knows to auto-open the upgrade modal instead of redirecting to /roadmap.
@@ -504,7 +497,10 @@ export function LandingPage() {
   //  - the "Log in" link (data-login) opens the auth modal
   //  - the "Go Pro" CTA (data-goto-pro) opens the upgrade modal instantly if logged in, or
   //    opens the login modal first (auto-opening the upgrade modal after sign-in) if logged out
-  //  - CTAs that funnel into the app carry href="/roadmap" → router navigate (no reload)
+  //  - CTAs that funnel into the app carry href="/roadmap" → router navigate (no reload),
+  //    except when signed out: those are marketing "Start..." CTAs promising app access the
+  //    visitor doesn't have yet, so they open the login modal instead (the nav's own "Go to
+  //    roadmap" link only renders once signed in, so it's unaffected by this branch)
   //  - in-page #section links smooth-scroll (slide) to that section
   function handleClick(e: MouseEvent<HTMLDivElement>) {
     const anchor = (e.target as HTMLElement).closest('a')
@@ -523,7 +519,11 @@ export function LandingPage() {
       }
     } else if (href === '/roadmap') {
       e.preventDefault()
-      navigate('/roadmap')
+      if (user) {
+        navigate('/roadmap')
+      } else {
+        openLoginModal()
+      }
     } else if (href && href.length > 1 && href.startsWith('#')) {
       const target = document.getElementById(href.slice(1))
       if (target) {
@@ -539,10 +539,27 @@ export function LandingPage() {
     ? '<a href="/roadmap" style="font-weight:600;font-size:15px;color:#3d4264;cursor:pointer" class="pm-hov-accent">Go to roadmap</a>'
     : '<a href="#" data-login style="font-weight:600;font-size:15px;color:#3d4264;cursor:pointer" class="pm-hov-accent">Log in</a>'
 
+  // Top-right CTA button: "Sign up" (opens the login modal, same as "Log in") when signed out;
+  // "Get premium" (opens the upgrade modal directly, same as the roadmap header's button) for a
+  // signed-in free-tier user; hidden entirely for a signed-in paid-tier user. If premium later
+  // expires, the server-side tier claim drops back to 'free' and this reverts automatically.
+  const ctaButtonStyle =
+    'display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:11px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;box-shadow:0 8px 18px -6px var(--accent);transition:transform .15s,box-shadow .15s'
+  const ctaButton = !user
+    ? `<a href="#" data-login class="pm-hov-navcta" style="${ctaButtonStyle}">Sign up</a>`
+    : tier === 'free'
+      ? `<a href="#" data-goto-pro class="pm-hov-navcta" style="${ctaButtonStyle}">Get premium</a>`
+      : ''
+
   return (
     <div className="pm-landing">
       <style>{STYLES}</style>
-      <div onClick={handleClick} dangerouslySetInnerHTML={{ __html: MARKUP.replace('__AUTH_LINK__', authLink) }} />
+      <div
+        onClick={handleClick}
+        dangerouslySetInnerHTML={{
+          __html: MARKUP.replace('__AUTH_LINK__', authLink).replace('__CTA_BUTTON__', ctaButton),
+        }}
+      />
     </div>
   )
 }
