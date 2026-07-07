@@ -217,17 +217,24 @@ export interface ChatMessage {
   id: string;
   session_id: string;
   question_id: string;
+  thread_id: string;
   role: ChatRole;
   content: string;
   created_at: string;
 }
 
-// Chat message shape returned to client (no session_id/question_id needed)
+// Chat message shape returned to client (no session_id/question_id/thread_id needed)
 export type ChatMessagePublic = Pick<ChatMessage, 'id' | 'role' | 'content' | 'created_at'>;
 
 export interface ChatSendResponse {
   reply: ChatMessagePublic;
   history: ChatMessagePublic[];
+}
+
+// A fresh AI-hint conversation scope, minted every time the client opens the
+// question's chat (mount/refresh/new tab/new device) — see chatService.ts.
+export interface ChatThreadResponse {
+  thread_id: string;
 }
 
 // ── Photo-based AI grading ──────────────────────────────────────────────

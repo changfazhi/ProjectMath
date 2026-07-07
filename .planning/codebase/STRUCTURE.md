@@ -217,7 +217,7 @@
 - No test files present (TDD not implemented)
 
 **Database:**
-- Schema: `backend/supabase/migrations/` (001_initial_schema.sql → 021_enable_typed_submissions.sql)
+- Schema: `backend/supabase/migrations/` (001_initial_schema.sql → 028_chat_thread_id.sql)
 - Questions: Auto-loaded from Supabase on app startup (no fixtures)
 
 ## Naming Conventions
@@ -237,8 +237,8 @@
 - API endpoints: `api.topics.list()`, `api.questions.get()`, `api.attempts.submit()` (nested object, lowercase, matching REST semantics)
 
 **Variables:**
-- Session: `sessionId` (UUIDv4, stored in localStorage under key 'session_id')
-- User: `req.user` (injected by auth middleware, contains `{ uid, firebaseUid, email, tier }`)
+- User: `req.user` (injected by auth middleware, contains `{ uid, firebaseUid, email, tier }`); `uid` is the internal `users.id`, stored as `session_id` in `attempts`/`chat_messages`/`gradings`/etc. — no anonymous localStorage session_id anymore, every request carries a Firebase ID token
+- AI hint chat: `thread_id` (UUIDv4, minted per chat-open by `GET /api/chat`) scopes one visible conversation within a user+question; unrelated to the `session_id`/quota keying above
 - State: `phase`, `question`, `result`, `gradingResult` (specific domain names, not generic `state`)
 - React state: `const [isLoading, setIsLoading] = useState(false)` (boolean with is/set prefix)
 

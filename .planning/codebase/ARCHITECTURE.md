@@ -186,16 +186,19 @@ Math Trainer is a full-stack web application for Singapore H2 A-Level math pract
 
 ### Secondary Request Path: AI Hint Chat
 
-1. Student opens **Hints tab** on **PracticePage**, types question
-2. **ChatPanel** component calls `chat.send(questionId, message)`
-3. **useChatSession** hook calls `api.chat.send(questionId, message)`
-4. **Route** (`backend/src/routes/chat.ts`) passes to `chatService.getChatResponse()`
-5. **chatService** builds system instruction with question + solution (server-only) and calls Gemini
+0. Student opens **Hints tab** on **PracticePage** (mount, page refresh, new tab, or new device all trigger this): **useChatSession** calls `api.chat.startThread(questionId)` → `GET /api/chat` mints a random `thread_id` and returns it *without* any stored history — the visible conversation always starts empty, on purpose (see "Chat history reset" below)
+1. Student types a message in **ChatPanel**
+2. **ChatPanel** component calls `chat.send(message)`
+3. **useChatSession** hook calls `api.chat.send(questionId, threadId, message)`
+4. **Route** (`backend/src/routes/chat.ts`) passes to `chatService.sendHintMessage(userId, questionId, threadId, message, tier)`
+5. **chatService** builds system instruction with question + solution (server-only), fetches only this thread's prior messages as conversation context, and calls Gemini
 6. Gemini returns Socratic hint (guardrail: never the answer)
-7. Service persists in `chat_messages` table and returns to client
+7. Service persists both turns in `chat_messages`, tagged with the current `thread_id`, and returns the thread's message list to the client
 8. **ChatPanel** appends to message list and rerenders
 
-**Rate limiting:** IP-based (`express-rate-limit`), 15/min default. Per-question cap of 40 messages → HTTP 429. Two more layers sit between the route and Gemini (added 2026-07-06, shared with photo grading/diagnosis): a per-user cooldown (`cooldownService.ts`, 5s chat / 60s grading, HTTP 429 `AI_COOLDOWN`) and a global pacing gateway (`geminiGateway.ts`) that queues/paces/retries calls against the Gemini key's real per-minute and per-day limits, surfacing `AI_BUSY`/`AI_DAILY_LIMIT` on exhaustion — see `INTEGRATIONS.md`.
+**Chat history reset (added 2026-07-06):** the hint conversation is scoped to a `thread_id` that's re-minted every time the chat is opened — refreshing the page, closing/reopening the question, opening a new tab, or opening the same question on a different device all start a visually empty conversation, and Gemini only sees the current thread as context. Rows are never deleted: `chat_messages` keeps every message a user has ever sent for a question (across all threads) so the anti-abuse counters below can't be reset by reopening the chat. Migration: `028_chat_thread_id.sql`.
+
+**Rate limiting:** IP-based (`express-rate-limit`), 15/min default. Per-question cap of 40 messages (`CHAT_MAX_MESSAGES_PER_QUESTION`) → HTTP 429 — counted across **all** of a user's messages for that question, regardless of thread. Two more layers sit between the route and Gemini (added 2026-07-06, shared with photo grading/diagnosis): a per-user cooldown (`cooldownService.ts`, 5s chat / 60s grading, HTTP 429 `AI_COOLDOWN`) and a global pacing gateway (`geminiGateway.ts`) that queues/paces/retries calls against the Gemini key's real per-minute and per-day limits, surfacing `AI_BUSY`/`AI_DAILY_LIMIT` on exhaustion — see `INTEGRATIONS.md`.
 
 ### Tertiary Request Path: Phone Upload QR Pairing
 
@@ -346,8 +349,8 @@ Math Trainer is a full-stack web application for Singapore H2 A-Level math pract
 - Backend: Zod schemas on all HTTP inputs; db constraints (NOT NULL, unique indexes) on writes
 
 **Authentication:**
-- Frontend: Firebase anonymous (free) or signed-in (paid). ID token in Authorization header.
-- Backend: `requireAuth` middleware verifies token, upserts user row, injects `req.user`. Routes call `gate('feature')` to enforce tier.
+- Frontend: Firebase Authentication (Google OAuth or email/password — no anonymous mode). ID token in Authorization header.
+- Backend: `requireAuth` middleware verifies token, upserts user row, injects `req.user`. Routes call `gate('feature')` to enforce tier — currently every feature is `'free'`-accessible (`config/featureTiers.ts`); `paid` buys higher usage quotas, not feature access (see `INTEGRATIONS.md`).
 
 **Answer Grading:**
 - Exact (LaTeX): normalize, try numeric eval, try symbolic eval (multi-point substitution)

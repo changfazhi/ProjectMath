@@ -27,18 +27,25 @@ export function useChatSession(questionId: string | undefined): ChatSession {
   // Set only on a successful send — a failed request clears the server-side cooldown,
   // so it shouldn't arm the local one either.
   const lastSentOkAt = useRef(0)
+  // Current conversation scope — reminted every time this effect runs (mount, question
+  // change, refresh, new tab/device), so the hint chat always starts empty. Nothing is
+  // deleted server-side: past messages still count toward the daily quota and the
+  // per-question hint cap, they just aren't shown or fed back to the AI as context.
+  const threadId = useRef<string | null>(null)
 
   useEffect(() => {
+    threadId.current = null
     if (!questionId) {
       setMessages([])
       return
     }
     let cancelled = false
     setError(null)
+    setMessages([])
     api.chat
-      .history(questionId)
-      .then((history) => {
-        if (!cancelled) setMessages(history)
+      .startThread(questionId)
+      .then(({ thread_id }) => {
+        if (!cancelled) threadId.current = thread_id
       })
       .catch((e: Error) => {
         if (!cancelled) setError({ message: e.message })
@@ -51,7 +58,7 @@ export function useChatSession(questionId: string | undefined): ChatSession {
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim()
-      if (!trimmed || !questionId || loading) return
+      if (!trimmed || !questionId || !threadId.current || loading) return
 
       // Instant local cooldown check — saves a round-trip; server enforces regardless.
       const sinceLast = (Date.now() - lastSentOkAt.current) / 1000
@@ -77,7 +84,7 @@ export function useChatSession(questionId: string | undefined): ChatSession {
       setError(null)
 
       try {
-        const res = await api.chat.send(questionId, trimmed)
+        const res = await api.chat.send(questionId, threadId.current, trimmed)
         lastSentOkAt.current = Date.now()
         setMessages(res.history)
       } catch (e) {

@@ -180,6 +180,11 @@ export interface ChatSendResponse {
   history: ChatMessage[]
 }
 
+// Returned by GET /api/chat — a fresh conversation scope, never past history.
+export interface ChatThreadResponse {
+  thread_id: string
+}
+
 // ── Photo-based AI grading ──────────────────────────────────────────────
 
 export type GradingVerdict = 'correct' | 'partial' | 'incorrect'
