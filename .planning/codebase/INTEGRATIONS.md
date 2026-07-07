@@ -30,9 +30,9 @@
     - Webhooks: `/api/billing/webhook` (handles `checkout.session.completed`, `customer.subscription.updated/deleted`, `customer.deleted`)
   - Price configurations:
     - `STRIPE_PRICE_MONTHLY` - Card monthly subscription
-    - `STRIPE_PRICE_ANNUAL` - Card annual subscription
+    - `STRIPE_PRICE_SEMESTERLY` - Card semesterly (6-month) subscription
     - `STRIPE_PRICE_MONTHLY_PAYNOW` - One-time PayNow monthly access (30 days)
-    - `STRIPE_PRICE_ANNUAL_PAYNOW` - One-time PayNow annual access (365 days)
+    - `STRIPE_PRICE_SEMESTERLY_PAYNOW` - One-time PayNow semesterly access (180 days)
   - Customer lifecycle: Lookup via `stripe_customer_id` in `users` table; guards against deleted customers on Portal/Checkout
 
 ## Data Storage
@@ -112,9 +112,9 @@
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRICE_MONTHLY`
-- `STRIPE_PRICE_ANNUAL`
+- `STRIPE_PRICE_SEMESTERLY`
 - `STRIPE_PRICE_MONTHLY_PAYNOW`
-- `STRIPE_PRICE_ANNUAL_PAYNOW`
+- `STRIPE_PRICE_SEMESTERLY_PAYNOW`
 - `FIREBASE_PROJECT_ID`
 - `FIREBASE_CLIENT_EMAIL`
 - `FIREBASE_PRIVATE_KEY`

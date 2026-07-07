@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 // marketing HTML (unrelated to the app's component system), so it's rendered
 // verbatim. The two dynamic bits from the .dc logic are reproduced without JS:
 //   - accent theme  -> the default "Indigo" palette is set as CSS vars on the root
-//   - pricing toggle -> a CSS-only radio switch (Monthly / Yearly)
+//   - pricing toggle -> a CSS-only radio switch (Monthly / Semesterly)
 // `style-hover="..."` attributes become the `.pm-hov-*` hover classes below.
 
 const STYLES = `
@@ -29,10 +29,10 @@ const STYLES = `
 .pm-landing .pm-period-radio{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
 .pm-landing .pm-tab{flex:1;text-align:center;padding:9px 12px;border-radius:9px;font-weight:700;font-size:13.5px;cursor:pointer;border:none;background:transparent;color:#6b7194;font-family:inherit;transition:all .15s}
 .pm-landing #pm-monthly:checked ~ .pm-toggle-wrap .pm-tab-monthly,
-.pm-landing #pm-annual:checked ~ .pm-toggle-wrap .pm-tab-annual{background:#fff;color:var(--accent-ink);box-shadow:0 2px 7px rgba(17,20,43,.1)}
+.pm-landing #pm-semesterly:checked ~ .pm-toggle-wrap .pm-tab-semesterly{background:#fff;color:var(--accent-ink);box-shadow:0 2px 7px rgba(17,20,43,.1)}
 .pm-landing .pm-price-monthly,.pm-landing .pm-sub-monthly{display:none}
-.pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-price-annual,
-.pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-sub-annual{display:none}
+.pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-price-semesterly,
+.pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-sub-semesterly{display:none}
 .pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-price-monthly,
 .pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-sub-monthly{display:inline}
 `
@@ -366,7 +366,7 @@ const MARKUP = `
   <section id="pricing" style="background:#fff">
     <div style="max-width:1180px;margin:0 auto;padding:84px 24px">
       <input type="radio" name="pmperiod" id="pm-monthly" class="pm-period-radio">
-      <input type="radio" name="pmperiod" id="pm-annual" class="pm-period-radio" checked>
+      <input type="radio" name="pmperiod" id="pm-semesterly" class="pm-period-radio" checked>
       <div style="text-align:center;max-width:560px;margin:0 auto">
         <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Pricing</div>
         <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Start free. Go Pro when you're ready.</h2>
@@ -375,7 +375,7 @@ const MARKUP = `
       <div class="pm-toggle-wrap" style="display:flex;justify-content:center;margin-top:30px">
         <div style="display:flex;gap:4px;background:#f1f2f9;border-radius:13px;padding:5px;width:280px">
           <label for="pm-monthly" class="pm-tab pm-tab-monthly">Monthly</label>
-          <label for="pm-annual" class="pm-tab pm-tab-annual">Yearly &middot; save 20%</label>
+          <label for="pm-semesterly" class="pm-tab pm-tab-semesterly">Semesterly &middot; save 17%</label>
         </div>
       </div>
 
@@ -389,8 +389,8 @@ const MARKUP = `
           <ul style="list-style:none;padding:0;margin:24px 0 0;display:flex;flex-direction:column;gap:13px">
             <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Full roadmap access</li>
             <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Practice questions for every topic</li>
-            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>5 AI Scans / month</li>
-            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>10 AI Tutor messages / day</li>
+            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>3 AI Scans / day</li>
+            <li style="display:flex;gap:11px;font-size:14.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>3 AI Tutor messages / day</li>
           </ul>
         </div>
         <!-- Pro -->
@@ -398,7 +398,7 @@ const MARKUP = `
           <div style="position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:700;font-size:12px;padding:6px 14px;border-radius:999px;white-space:nowrap">&#9733; Most popular</div>
           <div style="font-weight:700;font-size:18px">Pro</div>
           <p style="font-size:14px;color:#aab0d6;margin:6px 0 0">Unlimited AI, plans built around you.</p>
-          <div style="margin:22px 0;display:flex;align-items:flex-end;gap:5px"><span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:46px;line-height:1"><span class="pm-price-annual">S$15</span><span class="pm-price-monthly">S$19</span></span><span style="font-size:14px;color:#aab0d6;margin-bottom:8px"><span class="pm-sub-annual">/mo &middot; billed S$180/yr</span><span class="pm-sub-monthly">/month</span></span></div>
+          <div style="margin:22px 0;display:flex;align-items:flex-end;gap:5px"><span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:46px;line-height:1"><span class="pm-price-semesterly">S$4.17</span><span class="pm-price-monthly">S$5</span></span><span style="font-size:14px;color:#aab0d6;margin-bottom:8px"><span class="pm-sub-semesterly">/mo &middot; billed S$25 / 6mo</span><span class="pm-sub-monthly">/month</span></span></div>
           <a href="#" data-goto-pro class="pm-hov-lift" style="display:block;text-align:center;padding:13px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:700;font-size:15px;transition:transform .15s">Go Pro</a>
           <ul style="list-style:none;padding:0;margin:24px 0 0;display:flex;flex-direction:column;gap:13px">
             <li style="display:flex;gap:11px;font-size:14.5px;color:#e7e9f7"><span style="color:#34d399;font-weight:800">&#10003;</span>Everything in Free</li>

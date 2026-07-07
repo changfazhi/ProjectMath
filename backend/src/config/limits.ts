@@ -12,8 +12,8 @@ export interface TierLimits {
 
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
   free: {
-    scansPerDay: 10,
-    chatMessagesPerDay: 10,
+    scansPerDay: 3,
+    chatMessagesPerDay: 3,
     diagnosisCooldown: { kind: 'rollingDays', days: 7 },
     studyPlanCadence: { kind: 'rollingDays', days: 7 },
   },

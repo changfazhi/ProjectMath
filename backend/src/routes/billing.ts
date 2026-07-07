@@ -11,7 +11,7 @@ import {
 const router = Router();
 
 const checkoutSchema = z.object({
-  plan: z.enum(['monthly', 'annual']),
+  plan: z.enum(['monthly', 'semesterly']),
   method: z.enum(['card', 'paynow']).default('card'),
 });
 
@@ -24,15 +24,15 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     const parsed = checkoutSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: 'plan must be "monthly" or "annual"; method must be "card" or "paynow"' });
+      res.status(400).json({ error: 'plan must be "monthly" or "semesterly"; method must be "card" or "paynow"' });
       return;
     }
 
     const { plan, method } = parsed.data;
 
     const priceId = method === 'paynow'
-      ? (plan === 'monthly' ? process.env.STRIPE_PRICE_MONTHLY_PAYNOW : process.env.STRIPE_PRICE_ANNUAL_PAYNOW)
-      : (plan === 'monthly' ? process.env.STRIPE_PRICE_MONTHLY : process.env.STRIPE_PRICE_ANNUAL);
+      ? (plan === 'monthly' ? process.env.STRIPE_PRICE_MONTHLY_PAYNOW : process.env.STRIPE_PRICE_SEMESTERLY_PAYNOW)
+      : (plan === 'monthly' ? process.env.STRIPE_PRICE_MONTHLY : process.env.STRIPE_PRICE_SEMESTERLY);
 
     if (!priceId) {
       res.status(500).json({ error: 'Stripe price not configured' });

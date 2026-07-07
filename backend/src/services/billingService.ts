@@ -12,7 +12,7 @@ export async function createCheckoutSession(
   email: string,
   priceId: string,
   method: 'card' | 'paynow',
-  plan: 'monthly' | 'annual',
+  plan: 'monthly' | 'semesterly',
 ): Promise<{ url: string }> {
   const stripe = getStripe();
 
@@ -178,9 +178,9 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       if (session.mode === 'subscription') {
         await grantPaidTier(firebaseUid, userId);
       } else if (session.mode === 'payment') {
-        const paynowPlan = session.metadata?.paynow_plan as 'monthly' | 'annual' | undefined;
-        const msToAdd = paynowPlan === 'annual'
-          ? 365 * 24 * 60 * 60 * 1000
+        const paynowPlan = session.metadata?.paynow_plan as 'monthly' | 'semesterly' | undefined;
+        const msToAdd = paynowPlan === 'semesterly'
+          ? 180 * 24 * 60 * 60 * 1000
           : 30 * 24 * 60 * 60 * 1000;
         const expiresAt = new Date(Date.now() + msToAdd);
         await grantPayNowTier(firebaseUid, userId, expiresAt);
