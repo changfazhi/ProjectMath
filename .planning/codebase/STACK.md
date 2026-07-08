@@ -31,7 +31,7 @@
 **Frontend:**
 - React 19.2.6 - UI framework
 - Vite 8.0.12 - Build tool and dev server
-- React Router DOM 7.17.0 - Client-side routing (`/`, `/practice/:topicId`, `/history`, `/starred`, `/stats`, `/m/:token`)
+- React Router DOM 7.17.0 - Client-side routing (`/`, `/practice/:topicId`, `/history`, `/starred`, `/profile` (`/stats` redirects here), `/m/:token`)
 
 **Styling & Math:**
 - Tailwind CSS 3.4.19 - Utility-first CSS styling

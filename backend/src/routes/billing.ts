@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import {
   createCheckoutSession,
   createPortalSession,
+  getBillingStatus,
   handleWebhookEvent,
 } from '../services/billingService.js';
 
@@ -69,6 +70,21 @@ router.post(
     } catch (err) {
       console.error('Portal session error:', err);
       res.status(500).json({ error: 'Failed to create portal session' });
+    }
+  },
+);
+
+// GET /api/billing/status
+router.get(
+  '/status',
+  requireAuth as express.RequestHandler,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await getBillingStatus(req.user!.uid);
+      res.json(result);
+    } catch (err) {
+      console.error('Billing status error:', err);
+      res.status(500).json({ error: 'Failed to load billing status' });
     }
   },
 );

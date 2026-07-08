@@ -106,6 +106,50 @@ export async function createCheckoutSession(
   return { url: session.url };
 }
 
+export interface BillingStatus {
+  subscriptionStatus: string | null;
+  accessExpiresAt: string | null; // PayNow: stored expiry (no auto-renewal)
+  renewsAt: string | null; // Card: live current_period_end from Stripe (auto-renews)
+}
+
+export async function getBillingStatus(userId: string): Promise<BillingStatus> {
+  const { data: userData } = await supabase
+    .from('users')
+    .select('stripe_customer_id, subscription_status, access_expires_at')
+    .eq('id', userId)
+    .single();
+
+  const row = userData as {
+    stripe_customer_id: string | null;
+    subscription_status: string | null;
+    access_expires_at: string | null;
+  } | null;
+
+  if (!row) return { subscriptionStatus: null, accessExpiresAt: null, renewsAt: null };
+
+  // PayNow access has a stored expiry and never auto-renews — no need to hit Stripe.
+  if (row.access_expires_at) {
+    return { subscriptionStatus: row.subscription_status, accessExpiresAt: row.access_expires_at, renewsAt: null };
+  }
+
+  // Card subscriptions auto-renew and their period end isn't persisted anywhere —
+  // fetch it live from Stripe so "days left" stays accurate without a webhook/column to keep in sync.
+  if (row.subscription_status === 'active' && row.stripe_customer_id) {
+    const stripe = getStripe();
+    const activeSub = await findActiveSubscription(stripe, row.stripe_customer_id);
+    const currentPeriodEnd = activeSub?.items.data[0]?.current_period_end;
+    if (currentPeriodEnd) {
+      return {
+        subscriptionStatus: row.subscription_status,
+        accessExpiresAt: null,
+        renewsAt: new Date(currentPeriodEnd * 1000).toISOString(),
+      };
+    }
+  }
+
+  return { subscriptionStatus: row.subscription_status, accessExpiresAt: null, renewsAt: null };
+}
+
 export async function createPortalSession(userId: string): Promise<{ url: string }> {
   const stripe = getStripe();
 

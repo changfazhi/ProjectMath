@@ -317,6 +317,14 @@ export interface UsageSummary {
   chat: UsageBucket
 }
 
+// ── Billing status (GET /api/billing/status) ──────────────────────────────────
+
+export interface BillingStatus {
+  subscriptionStatus: string | null
+  accessExpiresAt: string | null // PayNow: stored expiry, no auto-renewal
+  renewsAt: string | null // Card: live current_period_end, auto-renews
+}
+
 // ── Feedback (POST /api/feedback) ─────────────────────────────────────────────
 
 export type FeedbackCategory = 'bug' | 'idea' | 'question' | 'other'

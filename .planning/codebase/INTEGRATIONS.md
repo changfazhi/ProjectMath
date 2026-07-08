@@ -27,6 +27,7 @@
   - Usage:
     - Checkout sessions: `backend/src/services/billingService.ts` → `/api/billing/checkout` (card or PayNow)
     - Billing portal: `backend/src/services/billingService.ts` → `/api/billing/portal`
+    - Status: `backend/src/services/billingService.ts` → `GET /api/billing/status` (subscription status + PayNow expiry or live-fetched card `current_period_end`; powers the days-left display on `/profile`)
     - Webhooks: `/api/billing/webhook` (handles `checkout.session.completed`, `customer.subscription.updated/deleted`, `customer.deleted`)
   - Price configurations:
     - `STRIPE_PRICE_MONTHLY` - Card monthly subscription

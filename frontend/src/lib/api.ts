@@ -1,5 +1,6 @@
 import type {
   Attempt,
+  BillingStatus,
   ChatSendResponse,
   ChatThreadResponse,
   CreatePairResponse,
@@ -287,6 +288,8 @@ export const api = {
 
     portal: () =>
       request<{ url: string }>('/api/billing/portal', { method: 'POST' }),
+
+    status: () => request<BillingStatus>('/api/billing/status'),
   },
 
   feedback: {

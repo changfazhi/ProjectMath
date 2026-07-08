@@ -110,6 +110,7 @@ All endpoints below require `Authorization: Bearer <firebase-id-token>` **except
 | GET | `/api/usage` | Today's scan/chat quota usage + reset time for the signed-in user |
 | GET/POST | `/api/review/*` | Corrections, weak-topics, speed-drills, spaced-repetition, AI diagnosis, study plan (see [Authentication & Tiers](#authentication--tiers)) |
 | POST | `/api/billing/checkout` \| `/portal` \| `/webhook` | Stripe Checkout/Portal session creation + webhook (see [Authentication & Tiers](#authentication--tiers)) |
+| GET | `/api/billing/status` | Subscription status + renewal info for the signed-in user: PayNow's stored `access_expires_at`, or a live-fetched Stripe `current_period_end` (`renewsAt`) for card subscriptions (no expiry is persisted for those). Powers the days-left display on `/profile` |
 
 `POST /api/attempts` body: `{ question_id, answer_given, part_label?, field_answers?, time_taken_s? }`. Include `part_label` for multi-part questions; include `field_answers: [{ key, value }]` for multi-box parts. `solution_latex` in the response is `null` until all graded parts of the question are submitted.
 
@@ -181,14 +182,15 @@ Four classes of account/billing emails, sent via **Resend** (`db/resend.ts`, laz
 
 ## Frontend Architecture
 
-- **Routes:** `/` (roadmap + TopicDrawer), `/practice/:topicId`, `/history`, `/starred` (bookmarked questions), `/stats` (streak heatmap + analytics)
+- **Routes:** `/` (roadmap + TopicDrawer), `/practice/:topicId`, `/history`, `/starred` (bookmarked questions), `/profile` (account, plan/billing, usage, streak heatmap + analytics; `/stats` redirects here)
 - **Session:** Firebase Authentication (`lib/firebase.ts`) — the signed-in user's ID token is attached to every API call (`lib/api.ts`). See [Authentication & Tiers](#authentication--tiers).
 - **Roadmap:** Pan/zoom tree layout. Node click → `TopicDrawer` (right panel, concepts + question list). Row click → `/practice/:topicId?question_id=<uuid>`.
 - **PracticePage:** `?question_id=` → `loadSpecific(id)`; otherwise `loadNext()`. Both idempotent — safe under StrictMode double-invoke. Never use a `firstLoad` ref. Has difficulty filter (Any/Easy/Medium/Hard), 3-tab layout (Question | Attempts | Hints), and a `StatsBar` showing session correct/total and streak count.
 - **Practice state machine:** `loading → answering → submitted → revealed → complete | error`
 - **Multi-part flow:** `question.parts != null` → `<MultiPartQuestion>` renders per-part boxes with inline ✓/✗; on all graded parts done → phase transitions to `revealed` and `<SolutionReveal>` appears.
 - **Stars:** Optimistic UI — flip locally, sync to server, revert on failure. `/starred` page lists all starred questions with latest attempt via `GET /api/stars/all`.
-- **Streaks:** `StreakNotification` modal fires once per day on first correct answer. `/stats` page shows current/best streak cards and a GitHub-style weekly heatmap (daily activity from `GET /api/streaks`).
+- **Streaks:** `StreakNotification` modal fires once per day on first correct answer. `/profile` page shows current/best streak cards and a GitHub-style weekly heatmap (daily activity from `GET /api/streaks`).
+- **Account menu:** Header's "Your Account" dropdown (`AccountMenu.tsx`) replaces the old flat Sign-out button — **Profile** (→ `/profile`) and **Sign out**. `/profile` also surfaces email, member-since date, plan (Free/Premium) with days-left-to-renewal (`GET /api/billing/status`), a "Manage subscription" Stripe portal link, and today's AI usage (`useUsage()`).
 
 ## Math Input (MathLive)
 
@@ -217,7 +219,7 @@ Quick reference for `answer_type`:
 
 ## Status
 
-**Built:** Full backend + frontend, Firebase Authentication with free/paid tiers, Stripe/PayNow subscription billing, per-tier usage quotas + per-user cooldowns + a shared Gemini gateway pacer for all AI calls, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC + 22 DHS + 23 HCI + 24 ACJC + 22 CJC Prelim 2025 questions (Papers 1 & 2 each), streak system with daily heatmap (/stats), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question, history persists per signed-in account), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow, ignores irrelevant/blank photos), "upload via phone" QR pairing with live Socket.IO photo transfer, model solution graphs for every sketch question (44 parts incl. scatter/Argand/normal/parametric; migrations 024+027), review system (corrections/weak-topics/speed-drills/spaced-repetition + AI weakness diagnosis + AI study plan), transactional emails via Resend (welcome/induction, first-purchase congrats, PayNow expiry reminder cron, transaction receipts incl. renewals).
+**Built:** Full backend + frontend, Firebase Authentication with free/paid tiers, Stripe/PayNow subscription billing, per-tier usage quotas + per-user cooldowns + a shared Gemini gateway pacer for all AI calls, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC + 22 DHS + 23 HCI + 24 ACJC + 22 CJC Prelim 2025 questions (Papers 1 & 2 each), streak system with daily heatmap, profile page (/profile — account, plan/billing incl. days-left-to-renewal, usage, streak heatmap, per-topic accuracy; /stats redirects here) with a "Your Account" header dropdown (Profile/Sign out), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question, history persists per signed-in account), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow, ignores irrelevant/blank photos), "upload via phone" QR pairing with live Socket.IO photo transfer, model solution graphs for every sketch question (44 parts incl. scatter/Argand/normal/parametric; migrations 024+027), review system (corrections/weak-topics/speed-drills/spaced-repetition + AI weakness diagnosis + AI study plan), transactional emails via Resend (welcome/induction, first-purchase congrats, PayNow expiry reminder cron, transaction receipts incl. renewals).
 
 **Not built:** Timed mock mode, admin question editor, "mistake log" page (data already captured in `gradings`).
 
