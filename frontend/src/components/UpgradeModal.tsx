@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif"
 
 const BENEFITS = [
-  'Unlimited AI scans of handwritten solutions',
+  'Unlimited AI scans of handwritten solutions (free: 3/day each)',
   'Unlimited AI tutor hints (free: 3/day each)',
   'Daily weakness diagnosis (free: weekly)',
   'Fresh study plan every day (free: weekly)',

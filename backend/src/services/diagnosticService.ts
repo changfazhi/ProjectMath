@@ -100,13 +100,13 @@ async function buildTopicStats(userId: string): Promise<TopicStat[]> {
   const topicNameMap = new Map<string, string>();
   for (const t of topics) topicNameMap.set(t.id, t.name);
 
-  const statsByTopic = new Map<string, { correct: number; attempted: Set<string> }>();
+  const statsByTopic = new Map<string, { solved: Set<string>; attempted: Set<string> }>();
   for (const a of attempts) {
     const topicId = qTopicMap.get(a.question_id);
     if (!topicId) continue;
-    const s = statsByTopic.get(topicId) ?? { correct: 0, attempted: new Set<string>() };
+    const s = statsByTopic.get(topicId) ?? { solved: new Set<string>(), attempted: new Set<string>() };
     s.attempted.add(a.question_id);
-    if (a.is_correct) s.correct++;
+    if (a.is_correct) s.solved.add(a.question_id);
     statsByTopic.set(topicId, s);
   }
 
@@ -114,7 +114,7 @@ async function buildTopicStats(userId: string): Promise<TopicStat[]> {
     .map(([topicId, s]) => ({
       topic_id: topicId,
       topic_name: topicNameMap.get(topicId) ?? topicId,
-      accuracy: s.attempted.size > 0 ? s.correct / s.attempted.size : 0,
+      accuracy: s.attempted.size > 0 ? s.solved.size / s.attempted.size : 0,
       questions_attempted: s.attempted.size,
     }))
     .filter(s => s.questions_attempted > 0)
@@ -210,6 +210,20 @@ interface DiagnosisRow {
   generated_at: string;
 }
 
+// Older stored diagnoses (pre-fix) may have accuracy > 1 from a since-corrected
+// bug in buildTopicStats; clamp on read so already-persisted rows display correctly
+// without waiting for the next regeneration.
+function clampDiagnosis(result: DiagnosisResult): DiagnosisResult {
+  const clampTopics = (topics: TopicDiagnosis[]) =>
+    topics.map(t => ({ ...t, accuracy: Math.max(0, Math.min(1, t.accuracy)) }));
+  return {
+    ...result,
+    weak_topics: clampTopics(result.weak_topics),
+    moderate_topics: clampTopics(result.moderate_topics),
+    strong_topics: clampTopics(result.strong_topics),
+  };
+}
+
 function toDiagnosisStatus(row: DiagnosisRow | null, tier: Tier): DiagnosisStatus {
   if (!row) {
     return { diagnosis: null, generated_at: null, can_generate: true, next_allowed_at: null };
@@ -217,7 +231,7 @@ function toDiagnosisStatus(row: DiagnosisRow | null, tier: Tier): DiagnosisStatu
   const allowedAt = cooldownEndsAt(new Date(row.generated_at), TIER_LIMITS[tier].diagnosisCooldown);
   const canGenerate = Date.now() >= allowedAt.getTime();
   return {
-    diagnosis: row.result,
+    diagnosis: clampDiagnosis(row.result),
     generated_at: row.generated_at,
     can_generate: canGenerate,
     next_allowed_at: canGenerate ? null : allowedAt.toISOString(),
@@ -306,7 +320,17 @@ export async function getPersonalisedStudyPlan(
     }
   }
 
-  const statsArr = await buildTopicStats(userId);
+  let statsArr: TopicStat[];
+  try {
+    statsArr = await buildTopicStats(userId);
+  } catch (err) {
+    if ((err as Error).message.includes('Attempt at least')) {
+      // Not enough attempt history yet to prioritise topics — no plan to offer,
+      // not an error. Leave nothing persisted so the next attempt can regenerate.
+      return { items: [], reasoning: '', date: today, valid_until: today };
+    }
+    throw err;
+  }
 
   const [questionsRes, attemptsRes, topicsRes2] = await Promise.all([
     supabase.from('questions').select('id, topic_id, name'),
