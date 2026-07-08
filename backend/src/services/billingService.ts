@@ -3,6 +3,7 @@ import { getStripe } from '../db/stripe.js';
 import { supabase } from '../db/supabase.js';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirebaseAdmin } from '../db/firebase.js';
+import { sendFirstPurchaseEmail, sendReceiptEmail } from './emailService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 
@@ -168,13 +169,34 @@ async function revokePaidTier(firebaseUid: string, userId: string, status: strin
     .eq('id', userId);
 }
 
-async function lookupUserByCustomer(customerId: string): Promise<{ id: string; firebase_uid: string } | null> {
+async function lookupUserByCustomer(
+  customerId: string,
+): Promise<{ id: string; firebase_uid: string; email: string | null } | null> {
   const { data } = await supabase
     .from('users')
-    .select('id, firebase_uid')
+    .select('id, firebase_uid, email')
     .eq('stripe_customer_id', customerId)
     .single();
-  return data as { id: string; firebase_uid: string } | null;
+  return data as { id: string; firebase_uid: string; email: string | null } | null;
+}
+
+// Marks the once-ever "first purchase" flag atomically (only the caller that flips it from
+// NULL actually sends) and, only then, sends the congrats email. If the send fails, the
+// claim is rolled back so the next transaction retries instead of the account being
+// permanently marked "congratulated" with nothing ever delivered.
+async function sendFirstPurchaseEmailIfNeeded(userId: string, email: string): Promise<void> {
+  const { data: claimed } = await supabase
+    .from('users')
+    .update({ first_purchase_email_sent_at: new Date().toISOString() })
+    .eq('id', userId)
+    .is('first_purchase_email_sent_at', null)
+    .select('id');
+  if (claimed && claimed.length > 0) {
+    const sent = await sendFirstPurchaseEmail(email);
+    if (!sent) {
+      await supabase.from('users').update({ first_purchase_email_sent_at: null }).eq('id', userId);
+    }
+  }
 }
 
 export async function handleWebhookEvent(rawBody: Buffer, signature: string): Promise<void> {
@@ -196,6 +218,18 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       const firebaseUid = session.metadata?.firebase_uid;
       if (!userId || !firebaseUid) break;
 
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('email, access_expires_at, stripe_customer_id')
+        .eq('id', userId)
+        .single();
+      const row = userRow as {
+        email: string | null;
+        access_expires_at: string | null;
+        stripe_customer_id: string | null;
+      } | null;
+      const email = session.customer_details?.email ?? row?.email ?? null;
+
       if (session.mode === 'subscription') {
         await grantPaidTier(firebaseUid, userId);
       } else if (session.mode === 'payment') {
@@ -203,13 +237,6 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
         const msToAdd = paynowPlan === 'semesterly'
           ? 180 * 24 * 60 * 60 * 1000
           : 30 * 24 * 60 * 60 * 1000;
-
-        const { data: userRow } = await supabase
-          .from('users')
-          .select('access_expires_at, stripe_customer_id')
-          .eq('id', userId)
-          .single();
-        const row = userRow as { access_expires_at: string | null; stripe_customer_id: string | null } | null;
 
         // Stack onto remaining PayNow access; otherwise roll over from an active card
         // subscription (canceling it at period end) so there's no gap or overlap.
@@ -229,6 +256,45 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
         const expiresAt = new Date(baselineMs + msToAdd);
         await grantPayNowTier(firebaseUid, userId, expiresAt);
       }
+
+      // Email side-effects — fire-and-forget, must never fail the webhook response.
+      if (email) {
+        sendFirstPurchaseEmailIfNeeded(userId, email).catch(() => {});
+        if (session.amount_total != null && session.currency) {
+          const description = session.mode === 'subscription'
+            ? 'ProjectMath Premium — card subscription'
+            : `ProjectMath Premium — PayNow (${session.metadata?.paynow_plan ?? 'plan'})`;
+          sendReceiptEmail(email, {
+            reference: session.id,
+            date: new Date(event.created * 1000),
+            description,
+            amountCents: session.amount_total,
+            currency: session.currency,
+          }).catch(() => {});
+        }
+      }
+      break;
+    }
+
+    case 'invoice.payment_succeeded': {
+      // Only recurring renewal charges — the first invoice on a new subscription
+      // (billing_reason 'subscription_create') is already receipted above via
+      // checkout.session.completed, so sending here too would double up.
+      const invoice = event.data.object as Stripe.Invoice;
+      if (invoice.billing_reason !== 'subscription_cycle') break;
+
+      const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+      if (!customerId) break;
+      const user = await lookupUserByCustomer(customerId);
+      if (!user?.email) break;
+
+      await sendReceiptEmail(user.email, {
+        reference: invoice.id,
+        date: new Date(event.created * 1000),
+        description: 'ProjectMath Premium — subscription renewal',
+        amountCents: invoice.amount_paid,
+        currency: invoice.currency,
+      });
       break;
     }
 
