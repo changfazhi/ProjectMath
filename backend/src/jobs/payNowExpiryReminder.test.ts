@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { daysUntil } from './payNowExpiryReminder.js';
+import { describe, expect, it, vi } from 'vitest';
+
+// payNowExpiryReminder.ts imports the real supabase client at module load, which throws
+// without SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY — CI's test env doesn't set them.
+vi.mock('../db/supabase.js', () => ({ supabase: {} }));
+
+const { daysUntil } = await import('./payNowExpiryReminder.js');
 
 describe('daysUntil', () => {
   const from = new Date('2026-07-08T00:00:00Z');
