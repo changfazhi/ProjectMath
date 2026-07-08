@@ -316,3 +316,13 @@ export interface UsageSummary {
   scans: UsageBucket
   chat: UsageBucket
 }
+
+// ── Feedback (POST /api/feedback) ─────────────────────────────────────────────
+
+export type FeedbackCategory = 'bug' | 'idea' | 'question' | 'other'
+
+export interface FeedbackRequest {
+  message: string
+  category?: FeedbackCategory
+  page?: string
+}

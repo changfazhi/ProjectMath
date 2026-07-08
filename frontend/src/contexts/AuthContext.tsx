@@ -13,6 +13,7 @@ import { auth } from '../lib/firebase'
 import { setApiCallbacks } from '../lib/api'
 import { LoginModal } from '../components/LoginModal'
 import { UpgradeModal } from '../components/UpgradeModal'
+import { FeedbackModal } from '../components/FeedbackModal'
 
 type Tier = 'free' | 'paid'
 
@@ -27,6 +28,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   openLoginModal: (message?: string) => void
   openUpgradeModal: () => void
+  openFeedbackModal: () => void
   // Force-refreshes the Firebase token and returns the fresh tier, so callers
   // can poll until a webhook-granted upgrade lands.
   refreshTier: () => Promise<Tier | null>
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loginMessage, setLoginMessage] = useState<string | undefined>()
   const [showLogin, setShowLogin] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
 
   function applyTokenResult(result: { claims: Record<string, unknown> }) {
     setTier(result.claims['tier'] === 'paid' ? 'paid' : 'free')
@@ -75,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setShowLogin(true)
   }
   const openUpgradeModal = () => setShowUpgrade(true)
+  const openFeedbackModal = () => setShowFeedback(true)
 
   const refreshTier = async (): Promise<Tier | null> => {
     if (!auth.currentUser) return null
@@ -113,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, tier, accessExpiresAt, loading, signInWithGoogle, signInWithEmail, signUp, signOut, openLoginModal, openUpgradeModal, refreshTier }}
+      value={{ user, tier, accessExpiresAt, loading, signInWithGoogle, signInWithEmail, signUp, signOut, openLoginModal, openUpgradeModal, openFeedbackModal, refreshTier }}
     >
       {children}
       {showLogin && (
@@ -126,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         />
       )}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
+      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
     </AuthContext.Provider>
   )
 }
