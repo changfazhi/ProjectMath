@@ -7,6 +7,7 @@ import {
   createPortalSession,
   getBillingStatus,
   handleWebhookEvent,
+  WebhookSignatureError,
 } from '../services/billingService.js';
 
 const router = Router();
@@ -105,7 +106,13 @@ router.post(
       res.json({ received: true });
     } catch (err) {
       console.error('Webhook error:', err);
-      res.status(400).json({ error: String(err) });
+      // A bad signature means the payload isn't from Stripe — nothing to retry. Everything
+      // else is a 500 so Stripe redelivers and the claim in handleWebhookEvent re-runs the work.
+      if (err instanceof WebhookSignatureError) {
+        res.status(400).json({ error: 'Invalid signature' });
+        return;
+      }
+      res.status(500).json({ error: 'Webhook processing failed' });
     }
   },
 );
