@@ -1,6 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { api } from '../../lib/api'
 
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif"
 
@@ -14,15 +13,6 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean }[] = [
 
 export function Header() {
   const { user, tier, openLoginModal, openUpgradeModal, openFeedbackModal, signOut } = useAuth()
-
-  async function handleManageBilling() {
-    try {
-      const { url } = await api.billing.portal()
-      window.location.href = url
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not open billing portal. Please try again.')
-    }
-  }
 
   return (
     <header
@@ -92,10 +82,10 @@ export function Header() {
 
           {user && tier === 'paid' && (
             <button
-              onClick={handleManageBilling}
+              onClick={openUpgradeModal}
               className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors"
               style={{ color: '#f59e0b' }}
-              title="Manage your subscription"
+              title="Extend, switch, or manage your subscription"
             >
               ✦ Premium
             </button>

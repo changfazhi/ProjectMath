@@ -6,6 +6,11 @@ import { getFirebaseAdmin } from '../db/firebase.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 
+async function findActiveSubscription(stripe: Stripe, customerId: string): Promise<Stripe.Subscription | null> {
+  const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 10 });
+  return subs.data.find((s) => s.status === 'active' || s.status === 'trialing') ?? null;
+}
+
 export async function createCheckoutSession(
   userId: string,
   firebaseUid: string,
@@ -27,15 +32,6 @@ export async function createCheckoutSession(
     subscription_status: string | null;
     access_expires_at: string | null;
   } | null;
-
-  // Block duplicate active subscriptions; allow PayNow repurchase after expiry.
-  if (row?.subscription_status === 'active') {
-    const isExpiredPayNow =
-      row.access_expires_at !== null && new Date(row.access_expires_at) <= new Date();
-    if (!isExpiredPayNow) {
-      throw new Error('You already have an active subscription. Use the Premium button to manage it.');
-    }
-  }
 
   let customerId = row?.stripe_customer_id ?? null;
 
@@ -65,6 +61,8 @@ export async function createCheckoutSession(
   }
 
   if (method === 'paynow') {
+    // Always allowed — stacks on top of any remaining access and cancels an active
+    // card subscription at period end (see the webhook handler for both).
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'payment',
@@ -78,11 +76,27 @@ export async function createCheckoutSession(
     return { url: session.url };
   }
 
-  // Card subscription
+  // Card subscription — block only a genuine duplicate (another card subscription already running).
+  const activeCardSub = await findActiveSubscription(stripe, customerId);
+  if (activeCardSub) {
+    throw new Error(
+      'You already have an active card subscription. Manage or cancel it from the billing portal before starting a new one.',
+    );
+  }
+
+  // If PayNow access is still running, delay the first charge until it runs out instead
+  // of double-billing during the overlap.
+  const payNowExpiryMs = row?.access_expires_at ? new Date(row.access_expires_at).getTime() : null;
+  const trialEnd =
+    payNowExpiryMs !== null && payNowExpiryMs > Date.now() + 60_000
+      ? Math.floor(payNowExpiryMs / 1000)
+      : undefined;
+
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
+    subscription_data: trialEnd ? { trial_end: trialEnd } : undefined,
     success_url: `${FRONTEND_URL}/roadmap?checkout=success`,
     cancel_url: `${FRONTEND_URL}/roadmap?checkout=canceled`,
     metadata: { user_id: userId, firebase_uid: firebaseUid },
@@ -140,6 +154,13 @@ async function grantPayNowTier(firebaseUid: string, userId: string, expiresAt: D
 }
 
 async function revokePaidTier(firebaseUid: string, userId: string, status: string): Promise<void> {
+  // A card subscription can end because it was scheduled to cancel at period end after the
+  // user rolled over to PayNow (see checkout.session.completed above) — if PayNow access is
+  // still running, leave the tier alone instead of clobbering it.
+  const { data } = await supabase.from('users').select('access_expires_at').eq('id', userId).single();
+  const accessExpiresAt = (data as { access_expires_at: string | null } | null)?.access_expires_at;
+  if (accessExpiresAt && new Date(accessExpiresAt) > new Date()) return;
+
   await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'free' });
   await supabase
     .from('users')
@@ -182,7 +203,30 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
         const msToAdd = paynowPlan === 'semesterly'
           ? 180 * 24 * 60 * 60 * 1000
           : 30 * 24 * 60 * 60 * 1000;
-        const expiresAt = new Date(Date.now() + msToAdd);
+
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('access_expires_at, stripe_customer_id')
+          .eq('id', userId)
+          .single();
+        const row = userRow as { access_expires_at: string | null; stripe_customer_id: string | null } | null;
+
+        // Stack onto remaining PayNow access; otherwise roll over from an active card
+        // subscription (canceling it at period end) so there's no gap or overlap.
+        let baselineMs = Date.now();
+        const existingExpiryMs = row?.access_expires_at ? new Date(row.access_expires_at).getTime() : null;
+        if (existingExpiryMs !== null && existingExpiryMs > baselineMs) {
+          baselineMs = existingExpiryMs;
+        } else if (row?.stripe_customer_id) {
+          const activeSub = await findActiveSubscription(stripe, row.stripe_customer_id);
+          const currentPeriodEnd = activeSub?.items.data[0]?.current_period_end;
+          if (activeSub && currentPeriodEnd) {
+            baselineMs = currentPeriodEnd * 1000;
+            await stripe.subscriptions.update(activeSub.id, { cancel_at_period_end: true });
+          }
+        }
+
+        const expiresAt = new Date(baselineMs + msToAdd);
         await grantPayNowTier(firebaseUid, userId, expiresAt);
       }
       break;

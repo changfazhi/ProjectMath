@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
 
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif"
 
@@ -84,9 +85,13 @@ interface Props {
 }
 
 export function UpgradeModal({ onClose }: Props) {
+  const { tier, accessExpiresAt } = useAuth()
   const [method, setMethod] = useState<Method>('card')
   const [loadingPlan, setLoadingPlan] = useState<'monthly' | 'semesterly' | null>(null)
+  const [loadingPortal, setLoadingPortal] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const isPaid = tier === 'paid'
 
   async function handleSelect(plan: 'monthly' | 'semesterly') {
     if (loadingPlan) return
@@ -98,6 +103,19 @@ export function UpgradeModal({ onClose }: Props) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
       setLoadingPlan(null)
+    }
+  }
+
+  async function handleManagePortal() {
+    if (loadingPortal) return
+    setLoadingPortal(true)
+    setError(null)
+    try {
+      const { url } = await api.billing.portal()
+      window.location.href = url
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open billing portal. Please try again.')
+      setLoadingPortal(false)
     }
   }
 
@@ -121,12 +139,32 @@ export function UpgradeModal({ onClose }: Props) {
         <div className="text-center mb-6">
           <div className="text-3xl mb-3">✦</div>
           <h2 className="text-2xl font-extrabold text-white" style={{ fontFamily: BRICOLAGE }}>
-            Upgrade to Premium
+            {isPaid ? 'Manage Premium' : 'Upgrade to Premium'}
           </h2>
           <p className="mt-2 text-sm text-[#aab0d6]">
-            Unlock AI-powered tools to practise smarter.
+            Unlock AI-powered tools to practise smarter. Switch between Card and PayNow anytime — your access carries over.
           </p>
         </div>
+
+        {isPaid && (
+          <div
+            className="mb-6 rounded-xl px-4 py-3 text-sm text-[#c7cbff]"
+            style={{ background: 'rgba(79,70,229,0.12)', border: '1px solid #2a2f5a' }}
+          >
+            {accessExpiresAt ? (
+              <>
+                You're on <strong>PayNow</strong>, active until{' '}
+                <strong>{accessExpiresAt.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                Buy another period below to extend it, or switch to Card — billing only starts once this period ends.
+              </>
+            ) : (
+              <>
+                You have an active <strong>Card</strong> subscription. Buy a PayNow period below to switch —
+                your card will stop billing at the end of the current period.
+              </>
+            )}
+          </div>
+        )}
 
         {/* Payment method toggle */}
         <div
@@ -175,8 +213,20 @@ export function UpgradeModal({ onClose }: Props) {
         <p className="mt-4 text-center text-xs text-[#6b7280]">
           {method === 'card'
             ? 'Card payments auto-renew each period. You can cancel anytime from the billing portal — no questions asked.'
-            : 'PayNow is a one-time payment with no auto-renewal. Access is granted for the selected period.'}
+            : 'PayNow is a one-time payment with no auto-renewal. Access is granted for the selected period. Rollover your current plan at any time by adding on another period — it stacks on top of your remaining access.'}
         </p>
+
+        {isPaid && (
+          <p className="mt-4 text-center text-xs">
+            <button
+              onClick={handleManagePortal}
+              disabled={loadingPortal}
+              className="text-[#aab0d6] hover:text-white underline transition-colors disabled:opacity-50"
+            >
+              {loadingPortal ? 'Opening billing portal…' : 'Manage or cancel current subscription'}
+            </button>
+          </p>
+        )}
 
         {error && (
           <p className="mt-4 text-center text-sm text-red-400">{error}</p>

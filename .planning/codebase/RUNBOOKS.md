@@ -117,6 +117,28 @@ The user must sign out and back in (or wait up to 1 hour for token cache to expi
 
 ---
 
+## Stripe: PayNow Stacking & Card/PayNow Switching
+
+**What changed:** Checkout used to reject any purchase while `subscription_status === 'active'`. It no longer does — PayNow purchases always stack, and switching between card and PayNow is allowed at any point, in either direction. Logic lives in `backend/src/services/billingService.ts`.
+
+**Scenarios and what happens:**
+
+| Starting state | Action | Result |
+|---|---|---|
+| PayNow, N days left | Buy another PayNow plan | New period's duration is added on top of the existing `access_expires_at` (stacks, does not restart from today) |
+| PayNow, N days left | Start a card subscription | Checkout session is created with `subscription_data.trial_end = access_expires_at` — card isn't charged until the PayNow period actually ends. Tier flips to `paid` immediately (already was), `access_expires_at` clears to `null` since the Stripe subscription is now the source of truth |
+| Active card subscription | Buy a PayNow plan | The card subscription is set to `cancel_at_period_end: true` (no double-billing next cycle); the PayNow period is computed from that subscription item's `current_period_end`, not from today |
+| Active card subscription | Start another card subscription | Blocked — `findActiveSubscription()` finds the existing active/trialing subscription and throws. This is the only remaining checkout block; user is directed to the billing portal |
+
+**Where to look when debugging:**
+- `findActiveSubscription()` — lists a customer's subscriptions and returns one with status `active` or `trialing`.
+- `checkout.session.completed` webhook handler, `mode === 'payment'` branch — computes the PayNow stacking baseline (existing `access_expires_at` if still future, else an active card subscription's `items.data[0].current_period_end`, else now).
+- `revokePaidTier()` — before downgrading on `customer.subscription.updated`/`deleted` (canceled/past_due/unpaid), it checks whether `access_expires_at` is still in the future and no-ops if so. This matters because a card→PayNow rollover's scheduled `cancel_at_period_end` fires its own cancellation webhook later — without this guard it would wipe out the PayNow access that already replaced it.
+
+**Testing locally:** with `stripe listen` forwarding (see below), buy PayNow, then immediately buy PayNow again — check `users.access_expires_at` advanced by a full extra period rather than resetting. Then start a card subscription — check the Stripe Dashboard shows the subscription as `trialing` with `trial_end` matching `access_expires_at`, not charged yet. Stripe's [test clocks](https://docs.stripe.com/billing/testing/test-clocks) are useful for fast-forwarding past a trial/period end without waiting in real time.
+
+---
+
 ## Stripe: Dev Webhook Forwarding
 
 Run in a separate terminal whenever testing any checkout or billing flow locally. Must be running for webhooks to reach `localhost`.
