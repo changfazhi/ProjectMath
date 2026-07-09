@@ -3,6 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirebaseAdmin } from '../db/firebase.js';
 import { supabase } from '../db/supabase.js';
 import { FEATURE_TIERS } from '../config/featureTiers.js';
+import { sendWelcomeEmail } from '../services/emailService.js';
 
 declare global {
   namespace Express {
@@ -30,7 +31,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         { firebase_uid: decoded.uid, email: decoded.email ?? null },
         { onConflict: 'firebase_uid' },
       )
-      .select('id, access_expires_at')
+      .select('id, access_expires_at, welcome_email_sent_at')
       .single();
 
     if (error || !data) {
@@ -38,7 +39,31 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    const row = data as { id: string; access_expires_at: string | null };
+    const row = data as { id: string; access_expires_at: string | null; welcome_email_sent_at: string | null };
+
+    // Induction email, once per account — fire-and-forget so it never delays the request.
+    // The conditional update atomically "claims" the send: under concurrent first-login
+    // requests (the frontend fires several API calls at once), only the request whose
+    // update actually matches a NULL flag proceeds, so we never double-send. If the send
+    // itself fails, the claim is rolled back so the next login retries instead of the
+    // account being permanently marked "welcomed" with nothing ever delivered.
+    if (!row.welcome_email_sent_at && decoded.email) {
+      const email = decoded.email;
+      const userId = row.id;
+      supabase
+        .from('users')
+        .update({ welcome_email_sent_at: new Date().toISOString() })
+        .eq('id', userId)
+        .is('welcome_email_sent_at', null)
+        .select('id')
+        .then(async ({ data: claimed }) => {
+          if (!claimed || claimed.length === 0) return;
+          const sent = await sendWelcomeEmail(email);
+          if (!sent) {
+            supabase.from('users').update({ welcome_email_sent_at: null }).eq('id', userId).then(() => {}, () => {});
+          }
+        }, () => {});
+    }
 
     // Enforce PayNow expiry server-side: downgrade if access_expires_at has passed.
     if (tier === 'paid' && row.access_expires_at && new Date(row.access_expires_at) <= new Date()) {

@@ -17,6 +17,7 @@ import usageRouter from './routes/usage.js';
 import billingRouter from './routes/billing.js';
 import feedbackRouter from './routes/feedback.js';
 import { initRealtime } from './realtime.js';
+import { startPayNowExpiryReminderCron } from './jobs/payNowExpiryReminder.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -77,6 +78,7 @@ if (process.env.NODE_ENV === 'production') {
 // http.Server (not app.listen) so Socket.IO can attach for live phone-upload pairing.
 const httpServer = http.createServer(app);
 initRealtime(httpServer);
+startPayNowExpiryReminderCron();
 
 httpServer.listen(PORT, () => {
   console.log(`Math Trainer backend running on http://localhost:${PORT}`);

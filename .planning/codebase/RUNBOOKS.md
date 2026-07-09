@@ -36,6 +36,7 @@ Test-mode price IDs are invalid in live mode. In live mode Dashboard:
   - `customer.subscription.updated`
   - `customer.subscription.deleted`
   - `customer.deleted`
+  - `invoice.payment_succeeded` (drives the renewal-charge receipt email — see [Transactional Emails: Resend Setup](#transactional-emails-resend-setup))
 - Copy the `whsec_...` signing secret shown after creation
 
 ### Step 4 — Configure the Stripe Customer Portal
@@ -148,3 +149,65 @@ stripe listen --forward-to localhost:3001/api/billing/webhook
 ```
 
 Copy the printed `whsec_...` into `backend/.env` as `STRIPE_WEBHOOK_SECRET`. Each developer gets their own unique `whsec_...` — the Stripe secret key and price IDs are shared across the team, but `STRIPE_WEBHOOK_SECRET` is per-machine.
+
+`stripe listen` with no `--events` flag forwards every event type, so `invoice.payment_succeeded` (renewal receipts) reaches `localhost` automatically — no extra config needed for local dev.
+
+---
+
+## Transactional Emails: Resend Setup
+
+**When:** Before the welcome, first-purchase, PayNow-expiry-reminder, or receipt emails can actually deliver to real inboxes (see `CLAUDE.md` → Transactional Emails). Code ships with placeholder env vars and works for local testing against Resend's own sandbox, but production sending needs a verified domain.
+
+### Step 1 — Create a Resend API key
+
+Dashboard → API Keys → Create API Key. Copy the `re_...` value into `backend/.env` as `RESEND_API_KEY`.
+
+Without any domain verification, Resend still lets you send test emails **from `onboarding@resend.dev` to the email address on your own Resend account only** — enough to sanity-check templates locally, not enough for real users.
+
+**Multiple developers testing locally, before a domain is verified:** this restriction is per Resend account, not per project — there's no way to allowlist a teammate's inbox on your account. Each teammate should sign up for their own free Resend account and put their own `re_...` key in their own local `backend/.env` (never committed); each of you then only ever receives test sends in your own inbox. Once a domain is verified (see below), this stops mattering — swap everyone back to a single shared production key and any real recipient works.
+
+### Step 2 — Verify a sending domain
+
+Dashboard → Domains → Add Domain. Resend gives you a handful of DNS records (SPF/DKIM, and DMARC if you opt in) to add at your domain registrar. Verification typically takes a few minutes to a few hours depending on DNS propagation.
+
+### Step 3 — Set `EMAIL_FROM`
+
+Once the domain shows "Verified":
+
+```
+EMAIL_FROM="ProjectMath <noreply@yourdomain.com>"
+```
+
+The local part (`noreply`) can be anything; the domain must match the one just verified.
+
+### Step 4 — Fill in receipt/business identity env vars
+
+```
+BUSINESS_NAME=Your Actual Business Name Pte. Ltd.
+BUSINESS_UEN=                # optional — leave blank if not applicable
+SUPPORT_EMAIL=support@yourdomain.com
+```
+
+These appear on every email footer and on the receipt. This is a best-effort simple receipt (reference number, date, description, amount) — it does not implement GST/IRAS tax-invoice formatting; consult an accountant before treating it as a compliant tax invoice if the business becomes GST-registered.
+
+### Step 5 — Smoke-test each of the four classes
+
+**Do this step twice: once now (sandbox, pre-domain) with your own Resend account email as the recipient, and once again after Step 2's domain shows "Verified," using a *different* real inbox — ideally a teammate's, or a second personal address on a different provider (Gmail vs. Outlook).** The first pass only proves the code logic (trigger conditions, content, dedup) is correct — it can't prove arbitrary users will actually receive anything, because sandbox mode only ever delivers to the account owner's own address regardless of what the code does. The second pass, after verification, is what actually confirms the point of getting a domain: that any real user's inbox works, not just yours. Skipping this second pass means deploying with the domain-verified path completely untested.
+
+- **Welcome:** sign in with a brand-new Firebase account (or a test account whose `users.welcome_email_sent_at` you've nulled out) — fires from any authenticated request.
+- **First-purchase + receipt:** run through `POST /api/billing/checkout` with a [Stripe test card](https://docs.stripe.com/testing) or PayNow test flow, with `stripe listen` running (see above).
+- **Renewal receipt:** use a Stripe [test clock](https://docs.stripe.com/billing/testing/test-clocks) to fast-forward a card subscription past its period end and trigger `invoice.payment_succeeded`.
+- **PayNow expiry reminder:** the cron only runs once/day at 09:00 SGT, so to test on demand, set a test account's expiry into the reminder window and call the job directly:
+
+  ```bash
+  # In Supabase SQL Editor — pull a PayNow test account's expiry into the reminder window
+  UPDATE users SET access_expires_at = now() + interval '2 days', subscription_status = 'active'
+  WHERE email = 'test@example.com';
+  ```
+
+  ```bash
+  # Then, from backend/, run the reminder job directly instead of waiting for the cron tick
+  npx tsx -e "import('./src/jobs/payNowExpiryReminder.js').then(m => m.runPayNowExpiryReminders())"
+  ```
+
+  Re-running it the same day should be a no-op (dedup via `last_expiry_reminder_sent_on`) — reset that column to `null` on the test row to force a re-send while iterating.
