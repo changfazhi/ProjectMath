@@ -7,6 +7,15 @@ import { sendFirstPurchaseEmail, sendReceiptEmail } from './emailService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 
+// Raised when the payload didn't come from Stripe — the route answers 400 and there is
+// nothing to retry. Every other webhook failure is a 500 so Stripe redelivers.
+export class WebhookSignatureError extends Error {
+  constructor() {
+    super('Webhook signature verification failed');
+    this.name = 'WebhookSignatureError';
+  }
+}
+
 async function findActiveSubscription(stripe: Stripe, customerId: string): Promise<Stripe.Subscription | null> {
   const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 10 });
   return subs.data.find((s) => s.status === 'active' || s.status === 'trialing') ?? null;
@@ -182,9 +191,17 @@ export async function createPortalSession(userId: string): Promise<{ url: string
   return { url: session.url };
 }
 
+// supabase-js reports failures on the result object rather than throwing. An unchecked
+// write here would leave the user holding a `tier: 'paid'` claim with no matching row state
+// — and, because the webhook would still return 2xx, no retry would ever correct it.
+async function updateUserOrThrow(userId: string, patch: Record<string, string | null>): Promise<void> {
+  const { error } = await supabase.from('users').update(patch).eq('id', userId);
+  if (error) throw new Error(`Failed to update user ${userId}: ${error.message}`);
+}
+
 async function grantPaidTier(firebaseUid: string, userId: string): Promise<void> {
   await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'paid' });
-  await supabase.from('users').update({ subscription_status: 'active', access_expires_at: null }).eq('id', userId);
+  await updateUserOrThrow(userId, { subscription_status: 'active', access_expires_at: null });
 }
 
 async function grantPayNowTier(firebaseUid: string, userId: string, expiresAt: Date): Promise<void> {
@@ -192,10 +209,10 @@ async function grantPayNowTier(firebaseUid: string, userId: string, expiresAt: D
     tier: 'paid',
     expires_at: expiresAt.toISOString(),
   });
-  await supabase
-    .from('users')
-    .update({ subscription_status: 'active', access_expires_at: expiresAt.toISOString() })
-    .eq('id', userId);
+  await updateUserOrThrow(userId, {
+    subscription_status: 'active',
+    access_expires_at: expiresAt.toISOString(),
+  });
 }
 
 async function revokePaidTier(firebaseUid: string, userId: string, status: string): Promise<void> {
@@ -207,10 +224,7 @@ async function revokePaidTier(firebaseUid: string, userId: string, status: strin
   if (accessExpiresAt && new Date(accessExpiresAt) > new Date()) return;
 
   await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'free' });
-  await supabase
-    .from('users')
-    .update({ subscription_status: status, access_expires_at: null })
-    .eq('id', userId);
+  await updateUserOrThrow(userId, { subscription_status: status, access_expires_at: null });
 }
 
 async function lookupUserByCustomer(
@@ -243,6 +257,69 @@ async function sendFirstPurchaseEmailIfNeeded(userId: string, email: string): Pr
   }
 }
 
+const UNIQUE_VIOLATION = '23505';
+
+// How long a claimed-but-unfinished event is left alone before another delivery may take
+// it over. Bounds the damage from a process that dies mid-handler.
+const CLAIM_LEASE_MS = 5 * 60_000;
+
+/**
+ * Take exclusive ownership of a Stripe event before any side effect runs.
+ *
+ * Stripe delivers at-least-once, and the PayNow grant is relative (it adds a period onto the
+ * stored expiry), so replaying one payment's event would hand out a second period. The primary
+ * key on `stripe_events` makes the claim atomic without a lock.
+ *
+ * Returns true when this delivery owns the event, false when it was already fulfilled (the
+ * caller should ack with 2xx so Stripe stops retrying). Throws when another delivery holds a
+ * live claim, so Stripe backs off and retries rather than running the handler twice.
+ */
+async function claimEvent(event: Stripe.Event): Promise<boolean> {
+  const { error } = await supabase.from('stripe_events').insert({ id: event.id, type: event.type });
+  if (!error) return true;
+  if (error.code !== UNIQUE_VIOLATION) {
+    throw new Error(`Failed to claim event ${event.id}: ${error.message}`);
+  }
+
+  const { data } = await supabase
+    .from('stripe_events')
+    .select('status, claimed_at')
+    .eq('id', event.id)
+    .maybeSingle();
+  const row = data as { status: string; claimed_at: string } | null;
+
+  if (!row) throw new Error(`Event ${event.id} conflicted but could not be read back`);
+  if (row.status === 'completed') return false;
+
+  // Still 'processing': either a concurrent delivery is mid-flight, or a previous one died
+  // before finishing. Only take over once its lease has expired.
+  const staleBefore = new Date(Date.now() - CLAIM_LEASE_MS);
+  if (new Date(row.claimed_at).getTime() > staleBefore.getTime()) {
+    throw new Error(`Event ${event.id} is already being processed`);
+  }
+
+  const { data: taken } = await supabase
+    .from('stripe_events')
+    .update({ claimed_at: new Date().toISOString() })
+    .eq('id', event.id)
+    .eq('status', 'processing')
+    .lt('claimed_at', staleBefore.toISOString())
+    .select('id');
+
+  if (!taken || taken.length === 0) throw new Error(`Event ${event.id} was claimed by another delivery`);
+  return true;
+}
+
+// Promotes the claim to 'completed'. Only reached once the handler has fully succeeded — a
+// throw anywhere above leaves the row 'processing' so the lease expires and Stripe's retry re-runs it.
+async function completeEvent(eventId: string): Promise<void> {
+  const { error } = await supabase
+    .from('stripe_events')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', eventId);
+  if (error) throw new Error(`Failed to complete event ${eventId}: ${error.message}`);
+}
+
 export async function handleWebhookEvent(rawBody: Buffer, signature: string): Promise<void> {
   const stripe = getStripe();
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -252,8 +329,11 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch {
-    throw new Error('Webhook signature verification failed');
+    throw new WebhookSignatureError();
   }
+
+  // Must precede every side effect below, including the Stripe API calls (cancel_at_period_end).
+  if (!(await claimEvent(event))) return;
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -367,11 +447,10 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       const user = await lookupUserByCustomer(customer.id);
       if (!user) break;
       await revokePaidTier(user.firebase_uid, user.id, 'canceled');
-      await supabase
-        .from('users')
-        .update({ stripe_customer_id: null })
-        .eq('id', user.id);
+      await updateUserOrThrow(user.id, { stripe_customer_id: null });
       break;
     }
   }
+
+  await completeEvent(event.id);
 }
