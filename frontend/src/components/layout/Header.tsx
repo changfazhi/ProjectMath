@@ -64,7 +64,7 @@ export function Header() {
 
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={() => (user ? openFeedbackModal() : openLoginModal('Sign in to send feedback'))}
+            onClick={() => (user ? openFeedbackModal() : openLoginModal({ message: 'Sign in to send feedback' }))}
             className="px-3 py-1.5 rounded-lg text-sm font-semibold text-[#aab0d6] hover:text-white transition-colors"
           >
             Feedback
