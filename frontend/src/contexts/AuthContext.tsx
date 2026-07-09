@@ -11,7 +11,7 @@ import {
 } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { setApiCallbacks } from '../lib/api'
-import { LoginModal } from '../components/LoginModal'
+import { LoginModal, type AuthMode } from '../components/LoginModal'
 import { UpgradeModal } from '../components/UpgradeModal'
 import { FeedbackModal } from '../components/FeedbackModal'
 
@@ -26,7 +26,9 @@ interface AuthContextValue {
   signInWithEmail: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
-  openLoginModal: (message?: string) => void
+  // `mode` seeds the modal's signin/signup state from the caller's intent — a marketing
+  // CTA means "signup", an expired session means "signin". Defaults to 'signin'.
+  openLoginModal: (options?: { mode?: AuthMode; message?: string }) => void
   openUpgradeModal: () => void
   openFeedbackModal: () => void
   // Force-refreshes the Firebase token and returns the fresh tier, so callers
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessExpiresAt, setAccessExpiresAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [loginMessage, setLoginMessage] = useState<string | undefined>()
+  const [loginMode, setLoginMode] = useState<AuthMode>('signin')
   const [showLogin, setShowLogin] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
@@ -73,8 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub
   }, [])
 
-  const openLoginModal = (message?: string) => {
-    setLoginMessage(message)
+  const openLoginModal = (options?: { mode?: AuthMode; message?: string }) => {
+    setLoginMessage(options?.message)
+    setLoginMode(options?.mode ?? 'signin')
     setShowLogin(true)
   }
   const openUpgradeModal = () => setShowUpgrade(true)
@@ -126,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           onGoogleSignIn={signInWithGoogle}
           onEmailSignIn={signInWithEmail}
           onSignUp={signUp}
+          initialMode={loginMode}
           message={loginMessage}
         />
       )}

@@ -31,7 +31,7 @@
 │   │   │   ├── grade.ts     # POST /api/grade (photo grading)
 │   │   │   ├── pair.ts      # POST /api/pair (phone QR pairing)
 │   │   │   ├── review.ts    # GET /api/review/* (study recommendations)
-│   │   │   └── billing.ts   # POST /api/billing (Stripe checkout)
+│   │   │   └── billing.ts   # POST /api/billing/checkout|portal|webhook, GET /api/billing/status
 │   │   ├── services/        # Business logic
 │   │   │   ├── topicService.ts      # Topic listing + progress calculation
 │   │   │   ├── questionService.ts   # Question loading + solution stripping
@@ -97,6 +97,7 @@
 │   │   │   │   └── PhonePreview.tsx
 │   │   │   ├── layout/     # Page structure
 │   │   │   │   ├── Header.tsx       # Nav bar + auth
+│   │   │   │   ├── AccountMenu.tsx  # "Your Account" dropdown (Profile, Sign out)
 │   │   │   │   └── StudyPlanSidebar.tsx
 │   │   │   ├── sidebar/    # Topic sidebar
 │   │   │   │   └── QuestItem.tsx
@@ -116,7 +117,7 @@
 │   │   │   ├── HomePage.tsx      # Roadmap (/roadmap)
 │   │   │   ├── PracticePage.tsx  # Question solver (/practice/:topicId)
 │   │   │   ├── HistoryPage.tsx   # Attempt history (/history)
-│   │   │   ├── StatsPage.tsx     # Streak + heatmap (/stats)
+│   │   │   ├── ProfilePage.tsx   # Account, plan/billing, usage, streak + heatmap (/profile; /stats redirects here)
 │   │   │   ├── StarredPage.tsx   # Bookmarks (/starred)
 │   │   │   ├── ReviewPage.tsx    # Study recommendations (/review)
 │   │   │   ├── StudyPlanPage.tsx # Roadmap alternative (/study-plan)

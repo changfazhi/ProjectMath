@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
+import { useUsage } from '../hooks/useUsage'
 import { Spinner } from '../components/ui/Spinner'
 import { AccuracyTable } from '../components/topic/AccuracyTable'
-import type { DailyActivity, StreakStats } from '../types/api'
+import type { BillingStatus, DailyActivity, StreakStats } from '../types/api'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -26,6 +28,14 @@ function getTimeUntilReset(): string {
   const m = Math.floor((diff % 3600000) / 60000)
   const s = Math.floor((diff % 60000) / 1000)
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function daysLeft(date: Date): number {
+  return Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 // ── Heatmap grid builder ───────────────────────────────────────────────────────
@@ -92,13 +102,120 @@ function monthOf(dateStr: string): string {
   return MONTHS[parseInt(dateStr.slice(5, 7), 10) - 1]
 }
 
-function formatDays(n: number): string {
+function formatDaysCount(n: number): string {
   return `${n} ${n === 1 ? 'day' : 'days'}`
+}
+
+// ── Account & plan section ──────────────────────────────────────────────────────
+
+function AccountSection() {
+  const { user, tier, accessExpiresAt, openUpgradeModal } = useAuth()
+  const [billing, setBilling] = useState<BillingStatus | null>(null)
+  const [loadingPortal, setLoadingPortal] = useState(false)
+  const [portalError, setPortalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (tier !== 'paid') return
+    api.billing.status().then(setBilling).catch(() => {})
+  }, [tier])
+
+  async function handleManagePortal() {
+    if (loadingPortal) return
+    setLoadingPortal(true)
+    setPortalError(null)
+    try {
+      const { url } = await api.billing.portal()
+      window.location.href = url
+    } catch (err) {
+      setPortalError(err instanceof Error ? err.message : 'Could not open billing portal. Please try again.')
+      setLoadingPortal(false)
+    }
+  }
+
+  const memberSince = user?.metadata.creationTime ? formatDate(new Date(user.metadata.creationTime)) : null
+
+  let planDetail: string | null = null
+  if (tier === 'paid') {
+    if (accessExpiresAt) {
+      planDetail = `Access expires in ${formatDaysCount(daysLeft(accessExpiresAt))} (${formatDate(accessExpiresAt)})`
+    } else if (billing?.renewsAt) {
+      const renewsAt = new Date(billing.renewsAt)
+      planDetail = `Renews in ${formatDaysCount(daysLeft(renewsAt))} (${formatDate(renewsAt)})`
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col gap-2">
+        <span className="text-xs text-slate-500 dark:text-slate-400">Account</span>
+        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{user?.email}</span>
+        {memberSince && (
+          <span className="text-xs text-slate-500 dark:text-slate-400">Member since {memberSince}</span>
+        )}
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col gap-2">
+        <span className="text-xs text-slate-500 dark:text-slate-400">Plan</span>
+        <span
+          className="text-sm font-semibold truncate"
+          style={tier === 'paid' ? { color: '#d97706' } : undefined}
+        >
+          {tier === 'paid' ? '✦ Premium' : 'Free'}
+        </span>
+        {planDetail && (
+          <span className="text-xs text-slate-500 dark:text-slate-400">{planDetail}</span>
+        )}
+        {tier === 'paid' ? (
+          <button
+            onClick={handleManagePortal}
+            disabled={loadingPortal}
+            className="mt-1 self-start text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
+          >
+            {loadingPortal ? 'Opening billing portal…' : 'Manage subscription'}
+          </button>
+        ) : (
+          <button
+            onClick={openUpgradeModal}
+            className="mt-1 self-start text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            Upgrade to Premium
+          </button>
+        )}
+        {portalError && <span className="text-xs text-red-500">{portalError}</span>}
+      </div>
+    </div>
+  )
+}
+
+function UsageSection() {
+  const { usage } = useUsage()
+  if (!usage) return null
+
+  const rows = [
+    { label: 'AI Scans Today', bucket: usage.scans },
+    { label: 'AI Tutor Hints Today', bucket: usage.chat },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {rows.map(({ label, bucket }) => (
+        <div
+          key={label}
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col gap-1"
+        >
+          <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
+          <span className="text-xl font-bold text-slate-900 dark:text-slate-100">
+            {bucket.used}{bucket.limit !== null ? ` / ${bucket.limit}` : ' (unlimited)'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function StatsPage() {
+export function ProfilePage() {
   const [stats, setStats] = useState<StreakStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -144,13 +261,16 @@ export function StatsPage() {
   const statCards = [
     { label: 'Total Submissions', value: String(stats.totalAttempts) },
     { label: 'Total Solved', value: `${stats.totalSolved} / ${stats.totalQuestions}` },
-    { label: 'Current Streak', value: formatDays(stats.currentStreak) },
-    { label: 'Best Streak', value: formatDays(stats.bestStreak) },
+    { label: 'Current Streak', value: formatDaysCount(stats.currentStreak) },
+    { label: 'Best Streak', value: formatDaysCount(stats.bestStreak) },
   ]
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 flex flex-col gap-8">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Stats</h1>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Profile</h1>
+
+      <AccountSection />
+      <UsageSection />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

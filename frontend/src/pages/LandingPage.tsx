@@ -493,14 +493,16 @@ export function LandingPage() {
     }
   }, [user, loading, navigate, openUpgradeModal])
 
-  // Clicks inside the static markup are delegated here:
-  //  - the "Log in" link (data-login) opens the auth modal
+  // Clicks inside the static markup are delegated here. Every branch that opens the auth modal
+  // passes the mode its CTA implies, so the modal never contradicts the button just clicked:
+  //  - the "Log in" link (data-login) opens it in sign-in mode
+  //  - the "Sign up" nav CTA (data-signup) opens it in sign-up mode
   //  - the "Go Pro" CTA (data-goto-pro) opens the upgrade modal instantly if logged in, or
   //    opens the login modal first (auto-opening the upgrade modal after sign-in) if logged out
   //  - CTAs that funnel into the app carry href="/roadmap" → router navigate (no reload),
   //    except when signed out: those are marketing "Start..." CTAs promising app access the
-  //    visitor doesn't have yet, so they open the login modal instead (the nav's own "Go to
-  //    roadmap" link only renders once signed in, so it's unaffected by this branch)
+  //    visitor doesn't have yet, so they open the login modal in sign-up mode instead (the nav's
+  //    own "Go to roadmap" link only renders once signed in, so it's unaffected by this branch)
   //  - in-page #section links smooth-scroll (slide) to that section
   function handleClick(e: MouseEvent<HTMLDivElement>) {
     const anchor = (e.target as HTMLElement).closest('a')
@@ -508,21 +510,25 @@ export function LandingPage() {
     const href = anchor.getAttribute('href')
     if (anchor.dataset.login !== undefined) {
       e.preventDefault()
-      openLoginModal()
+      openLoginModal({ mode: 'signin' })
+    } else if (anchor.dataset.signup !== undefined) {
+      e.preventDefault()
+      openLoginModal({ mode: 'signup' })
     } else if (anchor.dataset.gotoPro !== undefined) {
       e.preventDefault()
       if (user) {
         openUpgradeModal()
       } else {
         goProIntentRef.current = true
-        openLoginModal('Log in to continue to Premium checkout.')
+        // Worded to hold up in either mode — the visitor can toggle to sign-in from here.
+        openLoginModal({ mode: 'signup', message: "You'll need an account to continue to Premium checkout." })
       }
     } else if (href === '/roadmap') {
       e.preventDefault()
       if (user) {
         navigate('/roadmap')
       } else {
-        openLoginModal()
+        openLoginModal({ mode: 'signup' })
       }
     } else if (href && href.length > 1 && href.startsWith('#')) {
       const target = document.getElementById(href.slice(1))
@@ -539,14 +545,14 @@ export function LandingPage() {
     ? '<a href="/roadmap" style="font-weight:600;font-size:15px;color:#3d4264;cursor:pointer" class="pm-hov-accent">Go to roadmap</a>'
     : '<a href="#" data-login style="font-weight:600;font-size:15px;color:#3d4264;cursor:pointer" class="pm-hov-accent">Log in</a>'
 
-  // Top-right CTA button: "Sign up" (opens the login modal, same as "Log in") when signed out;
+  // Top-right CTA button: "Sign up" (opens the login modal in sign-up mode) when signed out;
   // "Get premium" (opens the upgrade modal directly, same as the roadmap header's button) for a
   // signed-in free-tier user; hidden entirely for a signed-in paid-tier user. If premium later
   // expires, the server-side tier claim drops back to 'free' and this reverts automatically.
   const ctaButtonStyle =
     'display:inline-flex;align-items:center;gap:7px;padding:10px 20px;border-radius:11px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;box-shadow:0 8px 18px -6px var(--accent);transition:transform .15s,box-shadow .15s'
   const ctaButton = !user
-    ? `<a href="#" data-login class="pm-hov-navcta" style="${ctaButtonStyle}">Sign up</a>`
+    ? `<a href="#" data-signup class="pm-hov-navcta" style="${ctaButtonStyle}">Sign up</a>`
     : tier === 'free'
       ? `<a href="#" data-goto-pro class="pm-hov-navcta" style="${ctaButtonStyle}">Get premium</a>`
       : ''

@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { AccountMenu } from './AccountMenu'
 
 const BRICOLAGE = "'Bricolage Grotesque', sans-serif"
 
@@ -8,11 +9,10 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean }[] = [
   { to: '/history', label: 'History' },
   { to: '/starred', label: 'Starred' },
   { to: '/review', label: 'Review' },
-  { to: '/stats', label: 'Stats' },
 ]
 
 export function Header() {
-  const { user, tier, openLoginModal, openUpgradeModal, openFeedbackModal, signOut } = useAuth()
+  const { user, tier, openLoginModal, openUpgradeModal, openFeedbackModal } = useAuth()
 
   return (
     <header
@@ -64,7 +64,7 @@ export function Header() {
 
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={() => (user ? openFeedbackModal() : openLoginModal('Sign in to send feedback'))}
+            onClick={() => (user ? openFeedbackModal() : openLoginModal({ message: 'Sign in to send feedback' }))}
             className="px-3 py-1.5 rounded-lg text-sm font-semibold text-[#aab0d6] hover:text-white transition-colors"
           >
             Feedback
@@ -92,13 +92,7 @@ export function Header() {
           )}
 
           {user ? (
-            <button
-              onClick={() => signOut()}
-              title={user.email ?? undefined}
-              className="px-3 py-1.5 rounded-lg text-sm font-semibold text-[#aab0d6] hover:text-white transition-colors"
-            >
-              Sign out
-            </button>
+            <AccountMenu />
           ) : (
             <button
               onClick={() => openLoginModal()}

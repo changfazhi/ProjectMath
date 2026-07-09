@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom'
 import { Header } from './components/layout/Header'
 import { StudyPlanSidebar } from './components/layout/StudyPlanSidebar'
 import { PremiumExpiryBanner } from './components/PremiumExpiryBanner'
@@ -6,7 +6,7 @@ import { useAuth } from './contexts/AuthContext'
 import { HomePage } from './pages/HomePage'
 import { PracticePage } from './pages/PracticePage'
 import { HistoryPage } from './pages/HistoryPage'
-import { StatsPage } from './pages/StatsPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { StarredPage } from './pages/StarredPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { StudyPlanPage } from './pages/StudyPlanPage'
@@ -41,7 +41,8 @@ const router = createBrowserRouter([
       { path: 'roadmap', element: <HomePage /> },
       { path: 'practice/:topicId', element: <PracticePage /> },
       { path: 'history', element: <HistoryPage /> },
-      { path: 'stats', element: <StatsPage /> },
+      { path: 'profile', element: <ProfilePage /> },
+      { path: 'stats', element: <Navigate to="/profile" replace /> },
       { path: 'starred', element: <StarredPage /> },
       { path: 'review', element: <ReviewPage /> },
       { path: 'study-plan', element: <StudyPlanPage /> },
