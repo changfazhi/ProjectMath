@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
 import { toggleStar, getStarredIds, getStarredQuestions } from '../services/starService.js';
 import { getQuestionsByTopicWithStatus } from '../services/questionService.js';
+import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.post('/', ...gate('practice'), async (req, res) => {
       res.status(400).json({ error: 'Invalid request body', details: err.issues });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'POST /api/stars', err);
   }
 });
 
@@ -31,7 +32,7 @@ router.get('/all', ...gate('practice'), async (req, res) => {
     const rows = await getStarredQuestions(req.user!.uid);
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/stars/all', err);
   }
 });
 
@@ -48,7 +49,7 @@ router.get('/', ...gate('practice'), async (req, res) => {
       res.status(400).json({ error: 'topic_id must be a valid UUID' });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/stars', err);
   }
 });
 

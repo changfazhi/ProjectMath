@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { getAllTopics, getTopicById, getTopicsAccuracy, getTopicsProgress } from '../services/topicService.js';
+import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/', async (req, res) => {
       res.status(400).json({ error: 'level must be H1 or H2' });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/topics', err);
   }
 });
 
@@ -28,7 +29,7 @@ router.get('/progress', requireAuth, async (req, res) => {
     const progress = await getTopicsProgress(req.user!.uid);
     res.json(progress);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/topics/progress', err);
   }
 });
 
@@ -38,7 +39,7 @@ router.get('/accuracy', requireAuth, async (req, res) => {
     const accuracy = await getTopicsAccuracy(req.user!.uid);
     res.json(accuracy);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/topics/accuracy', err);
   }
 });
 
@@ -52,7 +53,7 @@ router.get('/:id', async (req, res) => {
     }
     res.json(topic);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/topics/:id', err);
   }
 });
 

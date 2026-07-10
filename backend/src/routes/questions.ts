@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { compileGraph } from '../services/graphService.js';
 import { getNextQuestion, getQuestionById, getQuestionsByTopicWithStatus, getQuestionWithSolution } from '../services/questionService.js';
 import type { SolutionGraphRender } from '../types/index.js';
+import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
@@ -15,7 +16,7 @@ router.get('/:topicId/questions', requireAuth, async (req, res) => {
     const questions = await getQuestionsByTopicWithStatus(req.params.topicId, req.user!.uid);
     res.json(questions);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/topics/:topicId/questions', err);
   }
 });
 
@@ -34,7 +35,7 @@ router.get('/:topicId/next', requireAuth, async (req, res) => {
       res.status(400).json({ error: 'Invalid query parameters', details: err.issues });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/topics/:topicId/next', err);
   }
 });
 
@@ -59,7 +60,7 @@ router.get('/:id/solution', async (req, res) => {
     }
     res.json({ solution_latex: question.solution_latex ?? null, graphs });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/questions/:id/solution', err);
   }
 });
 
@@ -73,7 +74,7 @@ router.get('/:id', async (req, res) => {
     }
     res.json(question);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/questions/:id', err);
   }
 });
 

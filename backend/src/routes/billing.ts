@@ -8,7 +8,9 @@ import {
   getBillingStatus,
   handleWebhookEvent,
   WebhookSignatureError,
+  CheckoutError,
 } from '../services/billingService.js';
+import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
@@ -52,9 +54,12 @@ router.post(
       );
       res.json(result);
     } catch (err) {
-      console.error('Checkout session error:', err);
-      const message = err instanceof Error ? err.message : 'Failed to create checkout session';
-      res.status(500).json({ error: message });
+      // The duplicate-subscription guard is the one error here written for the user; show it.
+      if (err instanceof CheckoutError) {
+        res.status(409).json({ error: err.message });
+        return;
+      }
+      sendServerError(res, 'POST /api/billing/checkout', err);
     }
   },
 );

@@ -17,6 +17,18 @@ export class WebhookSignatureError extends Error {
   }
 }
 
+/**
+ * A checkout precondition the user can act on (e.g. they already hold a card subscription). Its
+ * message is written for the user, so the route surfaces it verbatim; every other failure from
+ * `createCheckoutSession` is internal and must be genericised instead (issue #58).
+ */
+export class CheckoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CheckoutError';
+  }
+}
+
 async function findActiveSubscription(stripe: Stripe, customerId: string): Promise<Stripe.Subscription | null> {
   const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 10 });
   return subs.data.find((s) => s.status === 'active' || s.status === 'trialing') ?? null;
@@ -89,7 +101,7 @@ export async function createCheckoutSession(
   // Card subscription — block only a genuine duplicate (another card subscription already running).
   const activeCardSub = await findActiveSubscription(stripe, customerId);
   if (activeCardSub) {
-    throw new Error(
+    throw new CheckoutError(
       'You already have an active card subscription. Manage or cancel it from the billing portal before starting a new one.',
     );
   }

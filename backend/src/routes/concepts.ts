@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getConceptsByTopic } from '../services/conceptService.js';
+import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
@@ -9,7 +10,7 @@ router.get('/:topicId/concepts', async (req, res) => {
     const concepts = await getConceptsByTopic(req.params.topicId);
     res.json(concepts);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/topics/:topicId/concepts', err);
   }
 });
 
