@@ -67,7 +67,12 @@ export async function createCheckoutSession(
       metadata: { user_id: userId, firebase_uid: firebaseUid },
     });
     customerId = customer.id;
-    await updateUserOrThrow(userId, { stripe_customer_id: customerId, subscription_status: null });
+    // The old customer is gone, so any subscription recorded against it is gone with it.
+    await updateUserOrThrow(userId, {
+      stripe_customer_id: customerId,
+      subscription_status: null,
+      stripe_subscription_id: null,
+    });
   }
 
   if (method === 'paynow') {
@@ -125,28 +130,24 @@ export async function getBillingStatus(userId: string): Promise<BillingStatus> {
   const row = unwrap(
     await supabase
       .from('users')
-      .select('stripe_customer_id, subscription_status, access_expires_at')
+      .select('stripe_customer_id, stripe_subscription_id, subscription_status, access_expires_at')
       .eq('id', userId)
       .maybeSingle(),
     `Failed to load billing status for user ${userId}`,
   ) as {
     stripe_customer_id: string | null;
+    stripe_subscription_id: string | null;
     subscription_status: string | null;
     access_expires_at: string | null;
   } | null;
 
   if (!row) return { subscriptionStatus: null, accessExpiresAt: null, renewsAt: null };
 
-  // PayNow access has a stored expiry and never auto-renews — no need to hit Stripe. A lapsed
-  // expiry is retained on the row (see requireAuth), so only report it while it's still running,
-  // otherwise /profile would show an ended plan as current with a negative days-left.
-  if (row.access_expires_at && new Date(row.access_expires_at) > new Date()) {
-    return { subscriptionStatus: row.subscription_status, accessExpiresAt: row.access_expires_at, renewsAt: null };
-  }
-
-  // Card subscriptions auto-renew and their period end isn't persisted anywhere —
-  // fetch it live from Stripe so "days left" stays accurate without a webhook/column to keep in sync.
-  if (row.subscription_status === 'active' && row.stripe_customer_id) {
+  // A live card subscription decides the date, and it is checked first: a subscription bought on
+  // top of PayNow trials until that PayNow expiry, so both facts are true at once and only the
+  // subscription auto-renews. Its period end isn't persisted, so fetch it live from Stripe —
+  // during the trial that comes back as `trial_end`, i.e. the PayNow expiry, which is correct.
+  if (row.subscription_status === 'active' && row.stripe_subscription_id && row.stripe_customer_id) {
     const stripe = getStripe();
     const activeSub = await findActiveSubscription(stripe, row.stripe_customer_id);
     const currentPeriodEnd = activeSub?.items.data[0]?.current_period_end;
@@ -157,6 +158,13 @@ export async function getBillingStatus(userId: string): Promise<BillingStatus> {
         renewsAt: new Date(currentPeriodEnd * 1000).toISOString(),
       };
     }
+  }
+
+  // PayNow access has a stored expiry and never auto-renews — no need to hit Stripe. A lapsed
+  // expiry is retained on the row (see requireAuth), so only report it while it's still running,
+  // otherwise /profile would show an ended plan as current with a negative days-left.
+  if (row.access_expires_at && new Date(row.access_expires_at) > new Date()) {
+    return { subscriptionStatus: row.subscription_status, accessExpiresAt: row.access_expires_at, renewsAt: null };
   }
 
   return { subscriptionStatus: row.subscription_status, accessExpiresAt: null, renewsAt: null };
@@ -178,7 +186,11 @@ export async function createPortalSession(userId: string): Promise<{ url: string
     const existing = await stripe.customers.retrieve(customerId);
     if ((existing as { deleted?: boolean }).deleted) throw new Error('deleted');
   } catch {
-    await updateUserOrThrow(userId, { stripe_customer_id: null, subscription_status: null });
+    await updateUserOrThrow(userId, {
+      stripe_customer_id: null,
+      subscription_status: null,
+      stripe_subscription_id: null,
+    });
     throw new Error('Stripe customer no longer exists. Please subscribe again.');
   }
 
@@ -204,8 +216,17 @@ async function updateUserOrThrow(userId: string, patch: Record<string, string | 
 // `GET /api/me` answers. Writing the row first means a Firebase outage can delay the UI but
 // can never leave a cancelled user with paid access, nor a paying user without it.
 
-async function grantPaidTier(firebaseUid: string, userId: string): Promise<void> {
-  await updateUserOrThrow(userId, { subscription_status: 'active', access_expires_at: null });
+/**
+ * A card subscription is live. `access_expires_at` is deliberately left alone: it records PayNow
+ * time the user already paid for, which this subscription's `trial_end` is deferring to. Nulling
+ * it — as this did — erased the only evidence of that time, so cancelling the subscription before
+ * the trial ended dropped them straight to free, past `revokePaidTier`'s guard. See issue #57.
+ */
+async function grantPaidTier(firebaseUid: string, userId: string, subscriptionId: string): Promise<void> {
+  await updateUserOrThrow(userId, {
+    subscription_status: 'active',
+    stripe_subscription_id: subscriptionId,
+  });
   await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'paid' });
 }
 
@@ -220,22 +241,35 @@ async function grantPayNowTier(firebaseUid: string, userId: string, expiresAt: D
   });
 }
 
+/**
+ * The card subscription has ended (cancelled, or dunning gave up). Drop it from the row either
+ * way, so `deriveTier` stops counting it — then downgrade only if no PayNow time is left.
+ *
+ * A subscription can end while PayNow time is still running for two reasons: the user rolled over
+ * to PayNow and it was scheduled to cancel at period end (see `checkout.session.completed`), or
+ * they layered a card subscription on top of PayNow and cancelled it during the trial (issue #57).
+ * In both cases they keep the access they paid for; the row's `access_expires_at` expires it on
+ * its own. An unchecked read here would report a database error as "no expiry" and revoke a user
+ * who has paid time remaining.
+ */
 async function revokePaidTier(firebaseUid: string, userId: string, status: string): Promise<void> {
-  // A card subscription can end because it was scheduled to cancel at period end after the
-  // user rolled over to PayNow (see checkout.session.completed above) — if PayNow access is
-  // still running, leave the tier alone instead of clobbering it. An unchecked read here would
-  // report a database error as "no expiry" and revoke a user who has paid time remaining.
   const data = unwrap(
     await supabase.from('users').select('access_expires_at').eq('id', userId).maybeSingle(),
     `Failed to read access expiry for user ${userId}`,
   ) as { access_expires_at: string | null } | null;
   const accessExpiresAt = data?.access_expires_at;
-  if (accessExpiresAt && new Date(accessExpiresAt) > new Date()) return;
+
+  if (accessExpiresAt && new Date(accessExpiresAt) > new Date()) {
+    // Still paid, via PayNow. Leave `subscription_status: 'active'` and the claim alone — only the
+    // card subscription went away. Clearing its id is what stops `deriveTier` reading it as live.
+    await updateUserOrThrow(userId, { stripe_subscription_id: null });
+    return;
+  }
 
   // `access_expires_at` is left as-is: it is either already null (card subscription) or already
-  // in the past (the guard above returned otherwise), so clearing it would only destroy the
+  // in the past (the branch above returned otherwise), so clearing it would only destroy the
   // state requireAuth uses to keep deriving `free`.
-  await updateUserOrThrow(userId, { subscription_status: status });
+  await updateUserOrThrow(userId, { subscription_status: status, stripe_subscription_id: null });
   await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'free' });
 }
 
@@ -382,24 +416,34 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       const email = session.customer_details?.email ?? row?.email ?? null;
 
       if (session.mode === 'subscription') {
-        await grantPaidTier(firebaseUid, userId);
+        const subscriptionId =
+          typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
+        if (!subscriptionId) throw new Error(`Subscription checkout ${session.id} carried no subscription`);
+        await grantPaidTier(firebaseUid, userId, subscriptionId);
       } else if (session.mode === 'payment') {
         const paynowPlan = session.metadata?.paynow_plan as 'monthly' | 'semesterly' | undefined;
         const msToAdd = paynowPlan === 'semesterly'
           ? 180 * 24 * 60 * 60 * 1000
           : 30 * 24 * 60 * 60 * 1000;
 
-        // Stack onto remaining PayNow access; otherwise roll over from an active card
-        // subscription (canceling it at period end) so there's no gap or overlap.
+        // Stack onto whichever runs longer: remaining PayNow access, or an active card
+        // subscription's current period. Both can be true at once — a card subscription layered
+        // on top of PayNow trials until the PayNow expiry (issue #57) — so the rollover below is
+        // NOT an `else`: skipping it there would leave the card to start charging at trial_end,
+        // on top of the PayNow period just bought.
         let baselineMs = Date.now();
         const existingExpiryMs = row?.access_expires_at ? new Date(row.access_expires_at).getTime() : null;
         if (existingExpiryMs !== null && existingExpiryMs > baselineMs) {
           baselineMs = existingExpiryMs;
-        } else if (row?.stripe_customer_id) {
+        }
+
+        // Roll over any live card subscription: cancel it at period end so there's neither a
+        // coverage gap nor a double charge.
+        if (row?.stripe_customer_id) {
           const activeSub = await findActiveSubscription(stripe, row.stripe_customer_id);
           const currentPeriodEnd = activeSub?.items.data[0]?.current_period_end;
           if (activeSub && currentPeriodEnd) {
-            baselineMs = currentPeriodEnd * 1000;
+            baselineMs = Math.max(baselineMs, currentPeriodEnd * 1000);
             await stripe.subscriptions.update(activeSub.id, { cancel_at_period_end: true });
           }
         }
@@ -452,11 +496,26 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription;
       const { status } = sub;
-      if (status !== 'canceled' && status !== 'past_due' && status !== 'unpaid') break;
       const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
+
+      if (status === 'canceled' || status === 'past_due' || status === 'unpaid') {
+        const user = await lookupUserByCustomer(customerId);
+        if (!user) break;
+        await revokePaidTier(user.firebase_uid, user.id, status);
+        break;
+      }
+
+      // A live subscription (incl. `trialing`, and the trial→active conversion). Re-asserting the
+      // id is what lets `deriveTier` keep a card subscriber paid once the PayNow expiry their trial
+      // deferred to has passed. It also backfills subscribers who predate migration 031 — every
+      // live subscription emits this at least once a billing cycle — replacing its sentinel id.
+      if (status !== 'active' && status !== 'trialing') break;
       const user = await lookupUserByCustomer(customerId);
       if (!user) break;
-      await revokePaidTier(user.firebase_uid, user.id, status);
+      await updateUserOrThrow(user.id, {
+        subscription_status: 'active',
+        stripe_subscription_id: sub.id,
+      });
       break;
     }
 

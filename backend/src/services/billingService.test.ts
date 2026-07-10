@@ -9,6 +9,7 @@ interface UserRow {
   email: string | null;
   access_expires_at: string | null;
   stripe_customer_id: string | null;
+  stripe_subscription_id?: string | null;
   subscription_status?: string | null;
   firebase_uid?: string;
 }
@@ -104,12 +105,32 @@ vi.mock('./emailService.js', () => ({
 }));
 
 let nextEvent: Record<string, unknown>;
+
+// Hoisted so tests can seed an active subscription and assert the card→PayNow rollover cancels it.
+const { subscriptionsList, subscriptionsUpdate } = vi.hoisted(() => ({
+  subscriptionsList: vi.fn(async () => ({ data: [] as unknown[] })),
+  subscriptionsUpdate: vi.fn(async () => {}),
+}));
+
 vi.mock('../db/stripe.js', () => ({
   getStripe: () => ({
     webhooks: { constructEvent: () => nextEvent },
-    subscriptions: { list: async () => ({ data: [] }), update: vi.fn(async () => {}) },
+    subscriptions: { list: subscriptionsList, update: subscriptionsUpdate },
   }),
 }));
+
+/** Make `findActiveSubscription` return a live subscription whose period ends in `days`. */
+function seedActiveStripeSub(days: number, id = 'sub_1'): void {
+  subscriptionsList.mockResolvedValue({
+    data: [
+      {
+        id,
+        status: 'active',
+        items: { data: [{ current_period_end: Math.floor((Date.now() + days * DAY_MS) / 1000) }] },
+      },
+    ],
+  });
+}
 
 process.env['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
 const { handleWebhookEvent } = await import('./billingService.js');
@@ -144,6 +165,32 @@ function subscriptionDeletedEvent(id: string) {
     type: 'customer.subscription.deleted',
     created: Math.floor(Date.now() / 1000),
     data: { object: { id: 'sub_1', customer: 'cus_1' } },
+  };
+}
+
+function cardCheckoutEvent(id: string, subscriptionId = 'sub_1') {
+  return {
+    id,
+    type: 'checkout.session.completed',
+    created: Math.floor(Date.now() / 1000),
+    data: {
+      object: {
+        id: `cs_${id}`,
+        mode: 'subscription',
+        subscription: subscriptionId,
+        amount_total: null,
+        metadata: { user_id: 'u1', firebase_uid: 'fb1' },
+      },
+    },
+  };
+}
+
+function subscriptionUpdatedEvent(id: string, status: string, subscriptionId = 'sub_1') {
+  return {
+    id,
+    type: 'customer.subscription.updated',
+    created: Math.floor(Date.now() / 1000),
+    data: { object: { id: subscriptionId, status, customer: 'cus_1' } },
   };
 }
 
@@ -330,5 +377,161 @@ describe('revokePaidTier — retains a lapsed expiry', () => {
 
     expect(users.get('u1')?.subscription_status).toBe('canceled');
     expect(events.get('evt_1')?.status).toBe('processing'); // Stripe retries the claim write
+  });
+});
+
+// Issue #57. `grantPaidTier` used to write `access_expires_at: null`, erasing PayNow time the user
+// had already paid for the moment they layered a card subscription on top of it. Cancelling that
+// subscription then walked straight past `revokePaidTier`'s "still has PayNow time?" guard, because
+// the guard reads the very column the grant had destroyed.
+describe('a card subscription bought on top of PayNow', () => {
+  const remaining = () => new Date(Date.now() + 20 * DAY_MS).toISOString();
+
+  function seedPayNowUser(expiry: string | null, subscriptionId: string | null = null): void {
+    users.set('u1', {
+      id: 'u1',
+      email: 'a@b.co',
+      access_expires_at: expiry,
+      stripe_customer_id: 'cus_1',
+      stripe_subscription_id: subscriptionId,
+      subscription_status: 'active',
+      firebase_uid: 'fb1',
+    });
+  }
+
+  beforeEach(() => {
+    events.clear();
+    users.clear();
+    failUserUpdate = false;
+    failUserSelectCols = null;
+    setCustomUserClaims.mockClear();
+    subscriptionsUpdate.mockClear();
+    subscriptionsList.mockResolvedValue({ data: [] });
+  });
+
+  it('does not destroy the remaining PayNow expiry', async () => {
+    const expiry = remaining();
+    seedPayNowUser(expiry);
+    nextEvent = cardCheckoutEvent('evt_1');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(users.get('u1')?.access_expires_at).toBe(expiry);
+    expect(users.get('u1')?.stripe_subscription_id).toBe('sub_1');
+  });
+
+  // The headline bug. Stripe's `trial_end` already defers the first charge to `expiry`, so the
+  // 20 days are paid for; cancelling immediately must not take them back.
+  it('keeps PayNow access when the subscription is cancelled during its trial', async () => {
+    const expiry = remaining();
+    seedPayNowUser(expiry, 'sub_1');
+    nextEvent = subscriptionDeletedEvent('evt_1');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(setCustomUserClaims).not.toHaveBeenCalled(); // still paid — no downgrade
+    expect(users.get('u1')?.subscription_status).toBe('active');
+    expect(users.get('u1')?.access_expires_at).toBe(expiry);
+    // The subscription is gone even though the tier survives, or deriveTier would read it as live.
+    expect(users.get('u1')?.stripe_subscription_id).toBeNull();
+  });
+
+  it('downgrades and clears the subscription when no PayNow time is left', async () => {
+    seedPayNowUser(new Date(Date.now() - DAY_MS).toISOString(), 'sub_1');
+    nextEvent = subscriptionDeletedEvent('evt_1');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(setCustomUserClaims).toHaveBeenCalledWith('fb1', { tier: 'free' });
+    expect(users.get('u1')?.subscription_status).toBe('canceled');
+    expect(users.get('u1')?.stripe_subscription_id).toBeNull();
+  });
+
+  it('records the subscription id so a lapsed PayNow expiry stops mattering', async () => {
+    seedPayNowUser(null);
+    nextEvent = cardCheckoutEvent('evt_1', 'sub_xyz');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(users.get('u1')?.stripe_subscription_id).toBe('sub_xyz');
+  });
+
+  it('refuses a subscription checkout that carries no subscription', async () => {
+    seedPayNowUser(null);
+    nextEvent = cardCheckoutEvent('evt_1', '');
+
+    await expect(handleWebhookEvent(Buffer.from(''), 'sig')).rejects.toThrow(/carried no subscription/);
+    expect(events.get('evt_1')?.status).toBe('processing'); // Stripe retries
+  });
+
+  // Preserving the expiry means the PayNow branch can now see BOTH a live expiry and a live
+  // subscription. Rolling the card over is no longer an `else` — skipping it would leave the card
+  // to start charging at trial_end, on top of the PayNow period just bought.
+  it('still cancels the card subscription when PayNow is bought during its trial', async () => {
+    seedPayNowUser(remaining(), 'sub_1');
+    seedActiveStripeSub(20);
+    nextEvent = payNowEvent('evt_1');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(subscriptionsUpdate).toHaveBeenCalledWith('sub_1', { cancel_at_period_end: true });
+    expect(daysGranted()).toBe(50); // 20 remaining + 30 new
+  });
+
+  it('stacks from whichever of the two runs longer', async () => {
+    seedPayNowUser(new Date(Date.now() + 5 * DAY_MS).toISOString(), 'sub_1');
+    seedActiveStripeSub(20); // the card period outlives the PayNow expiry
+    nextEvent = payNowEvent('evt_1');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(daysGranted()).toBe(50);
+  });
+});
+
+// Migration 031 backfills pre-existing subscribers with a sentinel id; every live subscription
+// emits `customer.subscription.updated` at least once a billing cycle, replacing it with the real one.
+describe('customer.subscription.updated — recording a live subscription', () => {
+  beforeEach(() => {
+    events.clear();
+    users.clear();
+    failUserUpdate = false;
+    failUserSelectCols = null;
+    setCustomUserClaims.mockClear();
+    users.set('u1', {
+      id: 'u1',
+      email: 'a@b.co',
+      access_expires_at: null,
+      stripe_customer_id: 'cus_1',
+      stripe_subscription_id: 'legacy_unbackfilled',
+      subscription_status: 'active',
+      firebase_uid: 'fb1',
+    });
+  });
+
+  it.each(['active', 'trialing'])('records the real subscription id on a %s update', async (status) => {
+    nextEvent = subscriptionUpdatedEvent('evt_1', status, 'sub_real');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(users.get('u1')?.stripe_subscription_id).toBe('sub_real');
+    expect(users.get('u1')?.subscription_status).toBe('active');
+  });
+
+  it.each(['past_due', 'unpaid', 'canceled'])('revokes on a %s update', async (status) => {
+    nextEvent = subscriptionUpdatedEvent('evt_1', status);
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(users.get('u1')?.subscription_status).toBe(status);
+    expect(users.get('u1')?.stripe_subscription_id).toBeNull();
+  });
+
+  it('ignores a status it has no opinion about', async () => {
+    nextEvent = subscriptionUpdatedEvent('evt_1', 'incomplete');
+
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+
+    expect(users.get('u1')?.stripe_subscription_id).toBe('legacy_unbackfilled');
   });
 });

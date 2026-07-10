@@ -17,6 +17,7 @@ interface UserRow {
   email: string | null;
   subscription_status: string | null;
   access_expires_at: string | null;
+  stripe_subscription_id: string | null;
   welcome_email_sent_at: string | null;
 }
 
@@ -85,6 +86,7 @@ function seedLapsedPaidUser(): string {
     email: 'a@b.co',
     subscription_status: 'active',
     access_expires_at: lapsed,
+    stripe_subscription_id: null,
     welcome_email_sent_at: new Date().toISOString(),
   });
   return lapsed;
@@ -155,6 +157,7 @@ describe('requireAuth — PayNow expiry downgrade', () => {
       email: 'a@b.co',
       subscription_status: 'active',
       access_expires_at: future,
+      stripe_subscription_id: null,
       welcome_email_sent_at: new Date().toISOString(),
     });
 
@@ -172,6 +175,7 @@ describe('requireAuth — PayNow expiry downgrade', () => {
       email: 'a@b.co',
       subscription_status: 'active',
       access_expires_at: null,
+      stripe_subscription_id: 'sub_1',
       welcome_email_sent_at: new Date().toISOString(),
     });
 
@@ -179,13 +183,18 @@ describe('requireAuth — PayNow expiry downgrade', () => {
   });
 });
 
-function seedUser(subscription_status: string | null, access_expires_at: string | null): void {
+function seedUser(
+  subscription_status: string | null,
+  access_expires_at: string | null,
+  stripe_subscription_id: string | null = null,
+): void {
   users.set('u1', {
     id: 'u1',
     firebase_uid: 'fb1',
     email: 'a@b.co',
     subscription_status,
     access_expires_at,
+    stripe_subscription_id,
     welcome_email_sent_at: new Date().toISOString(),
   });
 }
@@ -227,7 +236,7 @@ describe('requireAuth — the users row decides the tier, not the token claim', 
   // token to pick the new claim up.
   it('resolves paid for an active row even when the token claim still says free', async () => {
     verifyIdToken.mockResolvedValue({ uid: 'fb1', email: 'a@b.co', tier: 'free' });
-    seedUser('active', null);
+    seedUser('active', null, 'sub_1');
 
     expect((await callRequireAuth()).user?.tier).toBe('paid');
   });
@@ -256,5 +265,67 @@ describe('requireAuth — the users row decides the tier, not the token claim', 
 
     expect((await callRequireAuth()).user?.tier).toBe('free');
     expect(setCustomUserClaims).not.toHaveBeenCalled();
+  });
+});
+
+// Issue #57. PayNow time and a card subscription are independent facts on the row, and either one
+// alone buys paid access. Before migration 031 nothing could say "a card subscription is live", so
+// `grantPaidTier` disambiguated by nulling `access_expires_at` — destroying time the user had paid
+// for the moment they layered a subscription on top of it.
+describe('requireAuth — PayNow and a card subscription coexist', () => {
+  const past = () => new Date(Date.now() - DAY_MS).toISOString();
+  const future = () => new Date(Date.now() + 20 * DAY_MS).toISOString();
+
+  beforeEach(() => {
+    users.clear();
+    setCustomUserClaims.mockClear();
+    setCustomUserClaims.mockImplementation(async () => {});
+    verifyIdToken.mockResolvedValue({ uid: 'fb1', email: 'a@b.co', tier: 'paid' });
+  });
+
+  it('keeps a subscriber paid once the PayNow expiry their trial deferred to has passed', async () => {
+    // The card is charging now. The stale expiry stays on the row forever and must not downgrade.
+    seedUser('active', past(), 'sub_1');
+
+    expect((await callRequireAuth()).user?.tier).toBe('paid');
+  });
+
+  // The reconcile would mark this row 'expired' and revoke a subscription the user pays for.
+  it('does not reconcile a subscriber whose old PayNow expiry has lapsed', async () => {
+    seedUser('active', past(), 'sub_1');
+
+    await callRequireAuth();
+
+    expect(setCustomUserClaims).not.toHaveBeenCalled();
+    expect(users.get('u1')?.subscription_status).toBe('active');
+  });
+
+  // The headline bug: cancel the card during the trial, keep the PayNow days already bought.
+  it.each(['canceled', 'past_due', 'unpaid'])(
+    'keeps remaining PayNow time when the card subscription ends as %s',
+    async (status) => {
+      seedUser(status, future(), null);
+
+      expect((await callRequireAuth()).user?.tier).toBe('paid');
+    },
+  );
+
+  it('downgrades once that remaining PayNow time finally runs out', async () => {
+    seedUser('canceled', past(), null);
+
+    expect((await callRequireAuth()).user?.tier).toBe('free');
+  });
+
+  it('still pays a subscriber who never bought PayNow', async () => {
+    seedUser('active', null, 'sub_1');
+
+    expect((await callRequireAuth()).user?.tier).toBe('paid');
+  });
+
+  // Migration 031 backfills these with a sentinel id, so they must not lose access on deploy.
+  it('treats the migration 031 sentinel as a live subscription', async () => {
+    seedUser('active', null, 'legacy_unbackfilled');
+
+    expect((await callRequireAuth()).user?.tier).toBe('paid');
   });
 });

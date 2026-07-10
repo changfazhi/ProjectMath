@@ -23,7 +23,13 @@ interface UserRow {
   id: string;
   subscription_status: string | null;
   access_expires_at: string | null;
+  stripe_subscription_id: string | null;
   welcome_email_sent_at: string | null;
+}
+
+/** PayNow time the user has already paid for and not yet used up. */
+function payNowRemains(row: Pick<UserRow, 'access_expires_at'>): boolean {
+  return !!row.access_expires_at && new Date(row.access_expires_at) > new Date();
 }
 
 /**
@@ -36,16 +42,26 @@ interface UserRow {
  * every grant and every revocation take effect on the user's very next request. It costs nothing:
  * `requireAuth` already fetches this row to resolve the internal user id.
  *
+ * The two products are independent facts on the row, and either one alone buys paid access:
+ *
+ *  - `access_expires_at` — PayNow paid until. Survives a card subscription being layered on top,
+ *    so cancelling that subscription can't take back time the user already bought (issue #57).
+ *    Never cleared once lapsed: a past timestamp is self-describing, so a failed claim write can't
+ *    strand the user on `paid` forever (issue #53).
+ *  - `stripe_subscription_id` — a live card subscription (`subscription_status = 'active'`). Paid
+ *    regardless of a lapsed `access_expires_at` left behind by an earlier PayNow purchase, which
+ *    is exactly the case the subscription's `trial_end` was deferring to.
+ *
  * `subscription_status` is exhaustive: 'active' from both grants, 'canceled'/'past_due'/'unpaid'
  * from `revokePaidTier`, 'expired' from `reconcileExpiredUser`, and null on a fresh row or after
  * `createPortalSession` clears a dead Stripe customer.
  */
 function deriveTier(row: UserRow): 'free' | 'paid' {
+  // Checked before `subscription_status`: a cancelled card subscription leaves the status at
+  // 'canceled' while PayNow time bought before it is still running.
+  if (payNowRemains(row)) return 'paid';
   if (row.subscription_status !== 'active') return 'free';
-  // A lapsed PayNow row can still say 'active' when the reconcile below kept failing to run —
-  // the stored expiry is self-describing, so it stays authoritative on its own. See issue #53.
-  if (row.access_expires_at && new Date(row.access_expires_at) <= new Date()) return 'free';
-  return 'paid';
+  return row.stripe_subscription_id ? 'paid' : 'free';
 }
 
 /**
@@ -119,7 +135,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         { firebase_uid: decoded.uid, email: decoded.email ?? null },
         { onConflict: 'firebase_uid' },
       )
-      .select('id, subscription_status, access_expires_at, welcome_email_sent_at')
+      .select('id, subscription_status, access_expires_at, stripe_subscription_id, welcome_email_sent_at')
       .single();
 
     if (error || !data) {
@@ -141,7 +157,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     // here — as this code used to — erased the one piece of state saying a downgrade was owed,
     // so a claim write that failed (silently, since supabase-js resolves rather than rejects)
     // left the user holding `tier: 'paid'` forever. See issue #53.
-    const lapsed = row.access_expires_at && new Date(row.access_expires_at) <= new Date();
+    //
+    // The reconcile is gated on the *derived* tier, not merely on the expiry having lapsed. A card
+    // subscriber who bought PayNow first keeps that lapsed expiry on their row forever (issue #57);
+    // marking them 'expired' here would revoke a subscription they are still paying for.
+    const lapsed = tier === 'free' && row.access_expires_at !== null;
     const claimsPaid = decoded['tier'] === 'paid';
     if (claimsPaid && lapsed && row.subscription_status !== 'expired') {
       void reconcileExpiredUser(decoded.uid, row.id);
