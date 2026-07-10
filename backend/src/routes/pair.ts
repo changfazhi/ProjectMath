@@ -9,6 +9,7 @@ import { assertScanQuota, QuotaExceededError, sendQuotaError } from '../services
 import { AiUnavailableError } from '../services/aiErrors.js';
 import { getQuestionById } from '../services/questionService.js';
 import { emitToPair } from '../realtime.js';
+import { sendServerError } from '../lib/httpErrors.js';
 import type { CreatePairResponse, PairContext } from '../types/index.js';
 
 const router = Router();
@@ -59,7 +60,7 @@ router.post('/', ...gate('pairUpload'), pairLimiter, async (req, res) => {
       sendQuotaError(res, err, req.user!.tier);
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'POST /api/pair', err);
   }
 });
 
@@ -80,7 +81,7 @@ router.get('/:token', pairLimiter, async (req, res) => {
     emitToPair(pair.token, 'pair:phone-connected');
     res.json(body);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/pair/:token', err);
   }
 });
 
@@ -107,7 +108,7 @@ router.post('/:token/photo', pairLimiter, upload.single('image'), async (req, re
       res.status(400).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'POST /api/pair/:token/photo', err);
   }
 });
 

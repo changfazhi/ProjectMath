@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
 import { submitAttempt, getAttemptsBySession } from '../services/attemptService.js';
+import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
@@ -24,11 +25,13 @@ router.post('/', ...gate('practice'), async (req, res) => {
       res.status(400).json({ error: 'Invalid request body', details: err.issues });
       return;
     }
+    // The service throws "Question <uuid> not found" / "Part ... not found" — genericise so the
+    // raw record id never reaches the client, but keep the 404 so the UI can react to it.
     if ((err as Error).message.includes('not found')) {
-      res.status(404).json({ error: (err as Error).message });
+      res.status(404).json({ error: 'That question could not be found.' });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'POST /api/attempts', err);
   }
 });
 
@@ -45,7 +48,7 @@ router.get('/', ...gate('practice'), async (req, res) => {
       res.status(400).json({ error: 'question_id must be a valid UUID' });
       return;
     }
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/attempts', err);
   }
 });
 

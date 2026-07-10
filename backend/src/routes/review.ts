@@ -14,6 +14,7 @@ import {
 } from '../services/diagnosticService.js';
 import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
 import { AiUnavailableError, sendAiError } from '../services/aiErrors.js';
+import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.get('/corrections', ...gate('review'), async (req, res) => {
     const items = await getCorrectionsItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/review/corrections', err);
   }
 });
 
@@ -31,7 +32,7 @@ router.get('/weak-topics', ...gate('review'), async (req, res) => {
     const items = await getWeakTopicsItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/review/weak-topics', err);
   }
 });
 
@@ -40,7 +41,7 @@ router.get('/speed-drills', ...gate('review'), async (req, res) => {
     const items = await getSpeedDrillItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/review/speed-drills', err);
   }
 });
 
@@ -49,7 +50,7 @@ router.get('/spaced', ...gate('review'), async (req, res) => {
     const items = await getSpacedItems(req.user!.uid);
     res.json({ items });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/review/spaced', err);
   }
 });
 
@@ -58,7 +59,7 @@ router.get('/random', async (_req, res) => {
     const items = await getRandomItems();
     res.json({ items });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/review/random', err);
   }
 });
 
@@ -68,7 +69,7 @@ router.get('/diagnosis', ...gate('review'), async (req, res) => {
     const status = await getDiagnosisStatus(req.user!.uid, req.user!.tier);
     res.json(status);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendServerError(res, 'GET /api/review/diagnosis', err);
   }
 });
 
