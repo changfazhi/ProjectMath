@@ -1,6 +1,7 @@
 import type Stripe from 'stripe';
 import { getStripe } from '../db/stripe.js';
 import { supabase } from '../db/supabase.js';
+import { unwrap } from '../db/unwrap.js';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirebaseAdmin } from '../db/firebase.js';
 import { sendFirstPurchaseEmail, sendReceiptEmail } from './emailService.js';
@@ -31,13 +32,14 @@ export async function createCheckoutSession(
 ): Promise<{ url: string }> {
   const stripe = getStripe();
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('stripe_customer_id, subscription_status, access_expires_at')
-    .eq('id', userId)
-    .single();
-
-  const row = userData as {
+  const row = unwrap(
+    await supabase
+      .from('users')
+      .select('stripe_customer_id, subscription_status, access_expires_at')
+      .eq('id', userId)
+      .maybeSingle(),
+    `Failed to load user ${userId}`,
+  ) as {
     stripe_customer_id: string | null;
     subscription_status: string | null;
     access_expires_at: string | null;
@@ -51,7 +53,8 @@ export async function createCheckoutSession(
       metadata: { user_id: userId, firebase_uid: firebaseUid },
     });
     customerId = customer.id;
-    await supabase.from('users').update({ stripe_customer_id: customerId }).eq('id', userId);
+    // A dropped write here would strand a paying customer: Stripe has the customer, we don't.
+    await updateUserOrThrow(userId, { stripe_customer_id: customerId });
   }
 
   // Verify the stored customer still exists in Stripe (guards against manual Dashboard deletions).
@@ -64,10 +67,7 @@ export async function createCheckoutSession(
       metadata: { user_id: userId, firebase_uid: firebaseUid },
     });
     customerId = customer.id;
-    await supabase
-      .from('users')
-      .update({ stripe_customer_id: customerId, subscription_status: null })
-      .eq('id', userId);
+    await updateUserOrThrow(userId, { stripe_customer_id: customerId, subscription_status: null });
   }
 
   if (method === 'paynow') {
@@ -122,13 +122,14 @@ export interface BillingStatus {
 }
 
 export async function getBillingStatus(userId: string): Promise<BillingStatus> {
-  const { data: userData } = await supabase
-    .from('users')
-    .select('stripe_customer_id, subscription_status, access_expires_at')
-    .eq('id', userId)
-    .single();
-
-  const row = userData as {
+  const row = unwrap(
+    await supabase
+      .from('users')
+      .select('stripe_customer_id, subscription_status, access_expires_at')
+      .eq('id', userId)
+      .maybeSingle(),
+    `Failed to load billing status for user ${userId}`,
+  ) as {
     stripe_customer_id: string | null;
     subscription_status: string | null;
     access_expires_at: string | null;
@@ -136,8 +137,10 @@ export async function getBillingStatus(userId: string): Promise<BillingStatus> {
 
   if (!row) return { subscriptionStatus: null, accessExpiresAt: null, renewsAt: null };
 
-  // PayNow access has a stored expiry and never auto-renews — no need to hit Stripe.
-  if (row.access_expires_at) {
+  // PayNow access has a stored expiry and never auto-renews — no need to hit Stripe. A lapsed
+  // expiry is retained on the row (see requireAuth), so only report it while it's still running,
+  // otherwise /profile would show an ended plan as current with a negative days-left.
+  if (row.access_expires_at && new Date(row.access_expires_at) > new Date()) {
     return { subscriptionStatus: row.subscription_status, accessExpiresAt: row.access_expires_at, renewsAt: null };
   }
 
@@ -162,13 +165,12 @@ export async function getBillingStatus(userId: string): Promise<BillingStatus> {
 export async function createPortalSession(userId: string): Promise<{ url: string }> {
   const stripe = getStripe();
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('stripe_customer_id')
-    .eq('id', userId)
-    .single();
+  const userData = unwrap(
+    await supabase.from('users').select('stripe_customer_id').eq('id', userId).maybeSingle(),
+    `Failed to load user ${userId}`,
+  ) as { stripe_customer_id: string | null } | null;
 
-  const customerId = (userData as { stripe_customer_id: string | null } | null)?.stripe_customer_id;
+  const customerId = userData?.stripe_customer_id;
   if (!customerId) throw new Error('No Stripe customer found for this user');
 
   // Guard against stale customer IDs (e.g. manually deleted from Stripe Dashboard).
@@ -176,10 +178,7 @@ export async function createPortalSession(userId: string): Promise<{ url: string
     const existing = await stripe.customers.retrieve(customerId);
     if ((existing as { deleted?: boolean }).deleted) throw new Error('deleted');
   } catch {
-    await supabase
-      .from('users')
-      .update({ stripe_customer_id: null, subscription_status: null })
-      .eq('id', userId);
+    await updateUserOrThrow(userId, { stripe_customer_id: null, subscription_status: null });
     throw new Error('Stripe customer no longer exists. Please subscribe again.');
   }
 
@@ -218,24 +217,33 @@ async function grantPayNowTier(firebaseUid: string, userId: string, expiresAt: D
 async function revokePaidTier(firebaseUid: string, userId: string, status: string): Promise<void> {
   // A card subscription can end because it was scheduled to cancel at period end after the
   // user rolled over to PayNow (see checkout.session.completed above) — if PayNow access is
-  // still running, leave the tier alone instead of clobbering it.
-  const { data } = await supabase.from('users').select('access_expires_at').eq('id', userId).single();
-  const accessExpiresAt = (data as { access_expires_at: string | null } | null)?.access_expires_at;
+  // still running, leave the tier alone instead of clobbering it. An unchecked read here would
+  // report a database error as "no expiry" and revoke a user who has paid time remaining.
+  const data = unwrap(
+    await supabase.from('users').select('access_expires_at').eq('id', userId).maybeSingle(),
+    `Failed to read access expiry for user ${userId}`,
+  ) as { access_expires_at: string | null } | null;
+  const accessExpiresAt = data?.access_expires_at;
   if (accessExpiresAt && new Date(accessExpiresAt) > new Date()) return;
 
   await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'free' });
-  await updateUserOrThrow(userId, { subscription_status: status, access_expires_at: null });
+  // `access_expires_at` is left as-is: it is either already null (card subscription) or already
+  // in the past (the guard above returned otherwise), so clearing it would only destroy the
+  // state requireAuth uses to keep deriving `free`.
+  await updateUserOrThrow(userId, { subscription_status: status });
 }
 
 async function lookupUserByCustomer(
   customerId: string,
 ): Promise<{ id: string; firebase_uid: string; email: string | null } | null> {
-  const { data } = await supabase
-    .from('users')
-    .select('id, firebase_uid, email')
-    .eq('stripe_customer_id', customerId)
-    .single();
-  return data as { id: string; firebase_uid: string; email: string | null } | null;
+  return unwrap(
+    await supabase
+      .from('users')
+      .select('id, firebase_uid, email')
+      .eq('stripe_customer_id', customerId)
+      .maybeSingle(),
+    `Failed to look up user for customer ${customerId}`,
+  ) as { id: string; firebase_uid: string; email: string | null } | null;
 }
 
 // Marks the once-ever "first purchase" flag atomically (only the caller that flips it from
@@ -243,16 +251,22 @@ async function lookupUserByCustomer(
 // claim is rolled back so the next transaction retries instead of the account being
 // permanently marked "congratulated" with nothing ever delivered.
 async function sendFirstPurchaseEmailIfNeeded(userId: string, email: string): Promise<void> {
-  const { data: claimed } = await supabase
-    .from('users')
-    .update({ first_purchase_email_sent_at: new Date().toISOString() })
-    .eq('id', userId)
-    .is('first_purchase_email_sent_at', null)
-    .select('id');
+  // Checking `error` matters here: without it a database failure is indistinguishable from
+  // "0 rows claimed" — i.e. "already congratulated" — and the email is dropped for good.
+  const claimed = unwrap(
+    await supabase
+      .from('users')
+      .update({ first_purchase_email_sent_at: new Date().toISOString() })
+      .eq('id', userId)
+      .is('first_purchase_email_sent_at', null)
+      .select('id'),
+    `Failed to claim first-purchase email for user ${userId}`,
+  ) as Array<{ id: string }> | null;
+
   if (claimed && claimed.length > 0) {
     const sent = await sendFirstPurchaseEmail(email);
     if (!sent) {
-      await supabase.from('users').update({ first_purchase_email_sent_at: null }).eq('id', userId);
+      await updateUserOrThrow(userId, { first_purchase_email_sent_at: null });
     }
   }
 }
@@ -281,12 +295,10 @@ async function claimEvent(event: Stripe.Event): Promise<boolean> {
     throw new Error(`Failed to claim event ${event.id}: ${error.message}`);
   }
 
-  const { data } = await supabase
-    .from('stripe_events')
-    .select('status, claimed_at')
-    .eq('id', event.id)
-    .maybeSingle();
-  const row = data as { status: string; claimed_at: string } | null;
+  const row = unwrap(
+    await supabase.from('stripe_events').select('status, claimed_at').eq('id', event.id).maybeSingle(),
+    `Failed to read back event ${event.id}`,
+  ) as { status: string; claimed_at: string } | null;
 
   if (!row) throw new Error(`Event ${event.id} conflicted but could not be read back`);
   if (row.status === 'completed') return false;
@@ -298,13 +310,16 @@ async function claimEvent(event: Stripe.Event): Promise<boolean> {
     throw new Error(`Event ${event.id} is already being processed`);
   }
 
-  const { data: taken } = await supabase
-    .from('stripe_events')
-    .update({ claimed_at: new Date().toISOString() })
-    .eq('id', event.id)
-    .eq('status', 'processing')
-    .lt('claimed_at', staleBefore.toISOString())
-    .select('id');
+  const taken = unwrap(
+    await supabase
+      .from('stripe_events')
+      .update({ claimed_at: new Date().toISOString() })
+      .eq('id', event.id)
+      .eq('status', 'processing')
+      .lt('claimed_at', staleBefore.toISOString())
+      .select('id'),
+    `Failed to take over stale claim on event ${event.id}`,
+  ) as Array<{ id: string }> | null;
 
   if (!taken || taken.length === 0) throw new Error(`Event ${event.id} was claimed by another delivery`);
   return true;
@@ -342,12 +357,18 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       const firebaseUid = session.metadata?.firebase_uid;
       if (!userId || !firebaseUid) break;
 
-      const { data: userRow } = await supabase
-        .from('users')
-        .select('email, access_expires_at, stripe_customer_id')
-        .eq('id', userId)
-        .single();
-      const row = userRow as {
+      // This read decides how much access to grant. An unchecked error would read as "no row":
+      // the PayNow baseline would silently reset to today (discarding time the user paid for)
+      // and the card→PayNow rollover would be skipped, double-billing them. Throw instead, so
+      // the route answers 500 and Stripe redelivers.
+      const row = unwrap(
+        await supabase
+          .from('users')
+          .select('email, access_expires_at, stripe_customer_id')
+          .eq('id', userId)
+          .maybeSingle(),
+        `Failed to load user ${userId} while granting access`,
+      ) as {
         email: string | null;
         access_expires_at: string | null;
         stripe_customer_id: string | null;
