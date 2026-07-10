@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
-import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
+import { accountRateLimit } from '../middleware/rateLimit.js';
 import { addImage, closePair, createPair, getValidPair, PairError } from '../services/pairService.js';
 import { gradeSolution, GradingError } from '../services/gradingService.js';
 import { assertScanQuota, QuotaExceededError, sendQuotaError } from '../services/usageService.js';
@@ -25,12 +25,12 @@ const upload = multer({
   },
 });
 
-const pairLimiter = rateLimit({
-  windowMs: 60_000,
+// Account-keyed. On POST /api/pair that's req.user; on the three token-authed phone routes the
+// token resolves to the account that created the pairing, so the phone counts against its owner
+// rather than against whatever cellular IP it happens to be on.
+const pairLimiter = accountRateLimit({
   limit: Number(process.env.PAIR_RATE_LIMIT_PER_MIN ?? 30),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests — slow down a moment.' },
+  message: 'Too many requests — slow down a moment.',
 });
 
 const createSchema = z.object({
