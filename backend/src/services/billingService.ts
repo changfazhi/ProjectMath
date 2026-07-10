@@ -191,26 +191,32 @@ export async function createPortalSession(userId: string): Promise<{ url: string
 }
 
 // supabase-js reports failures on the result object rather than throwing. An unchecked
-// write here would leave the user holding a `tier: 'paid'` claim with no matching row state
-// — and, because the webhook would still return 2xx, no retry would ever correct it.
+// write here would leave the user's tier state unchanged — and, because the webhook would
+// still return 2xx, no retry would ever correct it.
 async function updateUserOrThrow(userId: string, patch: Record<string, string | null>): Promise<void> {
   const { error } = await supabase.from('users').update(patch).eq('id', userId);
   if (error) throw new Error(`Failed to update user ${userId}: ${error.message}`);
 }
 
+// The row is written before the Firebase claim in all three functions below. `requireAuth`
+// derives the request's tier from the row (see `deriveTier`), so the row landing is what
+// actually unlocks or locks Premium; the claim is a hint the frontend paints from before
+// `GET /api/me` answers. Writing the row first means a Firebase outage can delay the UI but
+// can never leave a cancelled user with paid access, nor a paying user without it.
+
 async function grantPaidTier(firebaseUid: string, userId: string): Promise<void> {
-  await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'paid' });
   await updateUserOrThrow(userId, { subscription_status: 'active', access_expires_at: null });
+  await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'paid' });
 }
 
 async function grantPayNowTier(firebaseUid: string, userId: string, expiresAt: Date): Promise<void> {
-  await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, {
-    tier: 'paid',
-    expires_at: expiresAt.toISOString(),
-  });
   await updateUserOrThrow(userId, {
     subscription_status: 'active',
     access_expires_at: expiresAt.toISOString(),
+  });
+  await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, {
+    tier: 'paid',
+    expires_at: expiresAt.toISOString(),
   });
 }
 
@@ -226,11 +232,11 @@ async function revokePaidTier(firebaseUid: string, userId: string, status: strin
   const accessExpiresAt = data?.access_expires_at;
   if (accessExpiresAt && new Date(accessExpiresAt) > new Date()) return;
 
-  await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'free' });
   // `access_expires_at` is left as-is: it is either already null (card subscription) or already
   // in the past (the guard above returned otherwise), so clearing it would only destroy the
   // state requireAuth uses to keep deriving `free`.
   await updateUserOrThrow(userId, { subscription_status: status });
+  await getAuth(getFirebaseAdmin()).setCustomUserClaims(firebaseUid, { tier: 'free' });
 }
 
 async function lookupUserByCustomer(

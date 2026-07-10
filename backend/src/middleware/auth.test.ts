@@ -5,6 +5,11 @@ import type { NextFunction, Request, Response } from 'express';
 // because a Firebase claim write failed. The old downgrade cleared `access_expires_at` — the one
 // piece of state saying a downgrade was owed — alongside a fire-and-forget claim write, so any
 // claim failure left `tier: 'paid'` with nothing left to trigger a correction.
+//
+// And for issue #54: tier must come from the `users` row, not the Firebase claim. The claim rides
+// in an ID token that lives up to an hour, so a card subscriber who cancels used to keep paid
+// quotas until the token happened to refresh. `verifyIdToken` is stubbed to return a stale
+// `tier: 'paid'` throughout — exactly that condition.
 
 interface UserRow {
   id: string;
@@ -171,5 +176,85 @@ describe('requireAuth — PayNow expiry downgrade', () => {
     });
 
     expect((await callRequireAuth()).user?.tier).toBe('paid');
+  });
+});
+
+function seedUser(subscription_status: string | null, access_expires_at: string | null): void {
+  users.set('u1', {
+    id: 'u1',
+    firebase_uid: 'fb1',
+    email: 'a@b.co',
+    subscription_status,
+    access_expires_at,
+    welcome_email_sent_at: new Date().toISOString(),
+  });
+}
+
+describe('requireAuth — the users row decides the tier, not the token claim', () => {
+  beforeEach(() => {
+    users.clear();
+    setCustomUserClaims.mockClear();
+    setCustomUserClaims.mockImplementation(async () => {});
+    // Every test here runs against a stale ID token that still says the user is paid.
+    verifyIdToken.mockResolvedValue({ uid: 'fb1', email: 'a@b.co', tier: 'paid' });
+  });
+
+  // Issue #54. A card subscriber has no `access_expires_at`, so before this fix nothing in
+  // requireAuth ever contradicted the token and they kept unlimited quotas for up to an hour.
+  it.each(['canceled', 'past_due', 'unpaid', 'expired'])(
+    'downgrades a card subscriber whose row says %s, despite the stale paid token',
+    async (status) => {
+      seedUser(status, null);
+
+      expect((await callRequireAuth()).user?.tier).toBe('free');
+    },
+  );
+
+  it('resolves free for a user who has never subscribed', async () => {
+    seedUser(null, null);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect((await callRequireAuth()).user?.tier).toBe('free');
+  });
+
+  it('keeps PayNow time that outlives a rolled-over card subscription', async () => {
+    seedUser('active', new Date(Date.now() + 20 * DAY_MS).toISOString());
+
+    expect((await callRequireAuth()).user?.tier).toBe('paid');
+  });
+
+  // The flip side of the bug: an upgrade binds on the next request too, without waiting for the
+  // token to pick the new claim up.
+  it('resolves paid for an active row even when the token claim still says free', async () => {
+    verifyIdToken.mockResolvedValue({ uid: 'fb1', email: 'a@b.co', tier: 'free' });
+    seedUser('active', null);
+
+    expect((await callRequireAuth()).user?.tier).toBe('paid');
+  });
+
+  it('exposes the stored expiry on req.user for GET /api/me', async () => {
+    const future = new Date(Date.now() + 20 * DAY_MS).toISOString();
+    seedUser('active', future);
+
+    expect((await callRequireAuth()).user?.accessExpiresAt).toBe(future);
+  });
+
+  it('does not reconcile a cancelled card subscriber — there is no expiry owed', async () => {
+    seedUser('canceled', null);
+
+    await callRequireAuth();
+
+    expect(setCustomUserClaims).not.toHaveBeenCalled();
+    expect(users.get('u1')?.subscription_status).toBe('canceled');
+  });
+
+  // The reconcile exists only to correct a claim that disagrees with the row. When the token
+  // already says free there is nothing to fix, so it must not write to Firebase on every request.
+  it('does not reconcile a lapsed row whose token claim already says free', async () => {
+    verifyIdToken.mockResolvedValue({ uid: 'fb1', email: 'a@b.co', tier: 'free' });
+    seedUser('active', new Date(Date.now() - DAY_MS).toISOString());
+
+    expect((await callRequireAuth()).user?.tier).toBe('free');
+    expect(setCustomUserClaims).not.toHaveBeenCalled();
   });
 });

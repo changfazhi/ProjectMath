@@ -14,6 +14,7 @@ import gradeRouter from './routes/grade.js';
 import pairRouter from './routes/pair.js';
 import reviewRouter from './routes/review.js';
 import usageRouter from './routes/usage.js';
+import meRouter from './routes/me.js';
 import billingRouter from './routes/billing.js';
 import feedbackRouter from './routes/feedback.js';
 import { initRealtime } from './realtime.js';
@@ -53,6 +54,7 @@ app.use('/api/grade', gradeRouter);
 app.use('/api/pair', pairRouter);
 app.use('/api/review', reviewRouter);
 app.use('/api/usage', usageRouter);
+app.use('/api/me', meRouter);
 app.use('/api/feedback', feedbackRouter);
 
 app.get('/health', (_req, res) => {

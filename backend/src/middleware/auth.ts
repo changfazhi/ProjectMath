@@ -8,7 +8,13 @@ import { sendWelcomeEmail } from '../services/emailService.js';
 declare global {
   namespace Express {
     interface Request {
-      user?: { uid: string; firebaseUid: string; email: string | null; tier: 'free' | 'paid' };
+      user?: {
+        uid: string;
+        firebaseUid: string;
+        email: string | null;
+        tier: 'free' | 'paid';
+        accessExpiresAt: string | null;
+      };
     }
   }
 }
@@ -21,12 +27,35 @@ interface UserRow {
 }
 
 /**
+ * The `users` row — never the Firebase claim — decides a request's tier.
+ *
+ * A claim rides inside an ID token that lives up to an hour, and `setCustomUserClaims` cannot
+ * invalidate the tokens already issued. A cancellation written to Firebase alone therefore would
+ * not bind until the token happened to refresh, handing the user another hour of paid quotas
+ * (issue #54). The row is written synchronously by the Stripe webhook, so reading it here makes
+ * every grant and every revocation take effect on the user's very next request. It costs nothing:
+ * `requireAuth` already fetches this row to resolve the internal user id.
+ *
+ * `subscription_status` is exhaustive: 'active' from both grants, 'canceled'/'past_due'/'unpaid'
+ * from `revokePaidTier`, 'expired' from `reconcileExpiredUser`, and null on a fresh row or after
+ * `createPortalSession` clears a dead Stripe customer.
+ */
+function deriveTier(row: UserRow): 'free' | 'paid' {
+  if (row.subscription_status !== 'active') return 'free';
+  // A lapsed PayNow row can still say 'active' when the reconcile below kept failing to run —
+  // the stored expiry is self-describing, so it stays authoritative on its own. See issue #53.
+  if (row.access_expires_at && new Date(row.access_expires_at) <= new Date()) return 'free';
+  return 'paid';
+}
+
+/**
  * Flip a lapsed user's Firebase claim to free and mark the row expired.
  *
- * Pure cleanup — never enforcement. `requireAuth` derives `free` from the stored expiry on
- * every request, so a failure here costs nothing: the row keeps its past `access_expires_at`
- * and its non-'expired' status, and the next request tries again. The claim is written first
- * so the row is only marked done once the claim it describes actually landed.
+ * Pure cleanup — never enforcement. `deriveTier` resolves `free` from the stored expiry on every
+ * request, so a failure here costs nothing: the row keeps its past `access_expires_at` and its
+ * non-'expired' status, and the next request tries again. The claim is written first so the row
+ * is only marked done once the claim it describes actually landed — until then `deriveTier` is
+ * still deriving `free` from the expiry, so nothing is riding on the ordering either way.
  */
 async function reconcileExpiredUser(firebaseUid: string, userId: string): Promise<void> {
   try {
@@ -82,7 +111,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const token = header.slice(7);
   try {
     const decoded = await getAuth(getFirebaseAdmin()).verifyIdToken(token);
-    let tier: 'free' | 'paid' = decoded['tier'] === 'paid' ? 'paid' : 'free';
 
     // Atomic upsert — safe under concurrent first-logins.
     const { data, error } = await supabase
@@ -106,18 +134,33 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       void sendWelcomeEmailIfNeeded(row.id, decoded.email);
     }
 
-    // Enforce PayNow expiry server-side. `access_expires_at` is deliberately *not* cleared
-    // when it lapses: a past timestamp is self-describing, so this check re-derives `free`
-    // on every request and the Firebase claim is only ever an optimisation. Clearing it here
-    // — as this code used to — erased the one piece of state saying a downgrade was owed, so
-    // a claim write that failed (silently, since supabase-js resolves rather than rejects)
+    const tier = deriveTier(row);
+
+    // `access_expires_at` is deliberately *not* cleared when it lapses: a past timestamp is
+    // self-describing, so `deriveTier` re-derives `free` from it on every request. Clearing it
+    // here — as this code used to — erased the one piece of state saying a downgrade was owed,
+    // so a claim write that failed (silently, since supabase-js resolves rather than rejects)
     // left the user holding `tier: 'paid'` forever. See issue #53.
-    if (tier === 'paid' && row.access_expires_at && new Date(row.access_expires_at) <= new Date()) {
-      tier = 'free';
-      if (row.subscription_status !== 'expired') void reconcileExpiredUser(decoded.uid, row.id);
+    const lapsed = row.access_expires_at && new Date(row.access_expires_at) <= new Date();
+    const claimsPaid = decoded['tier'] === 'paid';
+    if (claimsPaid && lapsed && row.subscription_status !== 'expired') {
+      void reconcileExpiredUser(decoded.uid, row.id);
     }
 
-    req.user = { uid: row.id, firebaseUid: decoded.uid, email: decoded.email ?? null, tier };
+    // A paid claim over a row that has never been billed can only come from a hand-edited claim
+    // (the Stripe webhook always writes the row). Surface it: this is the one shape where making
+    // the row authoritative silently takes access away from someone who had it.
+    if (claimsPaid && tier === 'free' && row.subscription_status === null) {
+      console.warn(`User ${row.id} holds a paid Firebase claim with no subscription row — resolving free.`);
+    }
+
+    req.user = {
+      uid: row.id,
+      firebaseUid: decoded.uid,
+      email: decoded.email ?? null,
+      tier,
+      accessExpiresAt: row.access_expires_at,
+    };
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });

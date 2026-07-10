@@ -310,4 +310,25 @@ describe('revokePaidTier — retains a lapsed expiry', () => {
     expect(setCustomUserClaims).not.toHaveBeenCalled();
     expect(users.get('u1')?.subscription_status).toBe('active');
   });
+
+  // Issue #54: the row is what requireAuth reads, so it must land even if Firebase is down.
+  // Written claim-first, this cancellation would have been a no-op and the user would have kept
+  // paid access indefinitely — every retry failing at the same claim write, before the row.
+  it('revokes on the row even when the Firebase claim write fails', async () => {
+    users.set('u1', {
+      id: 'u1',
+      email: 'a@b.co',
+      access_expires_at: null,
+      stripe_customer_id: 'cus_1',
+      subscription_status: 'active',
+      firebase_uid: 'fb1',
+    });
+    setCustomUserClaims.mockRejectedValueOnce(new Error('firebase unavailable'));
+    nextEvent = subscriptionDeletedEvent('evt_1');
+
+    await expect(handleWebhookEvent(Buffer.from(''), 'sig')).rejects.toThrow(/firebase unavailable/);
+
+    expect(users.get('u1')?.subscription_status).toBe('canceled');
+    expect(events.get('evt_1')?.status).toBe('processing'); // Stripe retries the claim write
+  });
 });
