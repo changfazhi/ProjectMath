@@ -5,7 +5,7 @@ import { GEMINI_MODEL } from '../db/gemini.js';
 import { getQuestionWithSolution } from './questionService.js';
 import { assertScanQuota } from './usageService.js';
 import { aiGenerate } from './geminiGateway.js';
-import { acquireGradeSlot, refundGradeSlot } from './cooldownService.js';
+import { acquireGradeSlot, refundGradeSlot, stampGradeSlot } from './cooldownService.js';
 import type { Tier } from '../config/featureTiers.js';
 import type {
   GradeResponse,
@@ -19,6 +19,9 @@ import type {
 } from '../types/index.js';
 
 const BUCKET = 'solution-uploads';
+
+// How long after a photo scan a typed correction still counts as fixing that scan.
+const REGRADE_GRACE_MS = Number(process.env.REGRADE_GRACE_MIN ?? 10) * 60_000;
 
 // Thrown for user-facing problems (no images, model returned nothing) → HTTP 400 in the route.
 export class GradingError extends Error {
@@ -290,6 +293,35 @@ async function recordAttempts(
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
+/**
+ * Is this typed submission correcting a photo scan the user just made?
+ *
+ * Only such a correction earns the cooldown exemption — the student is fixing characters *Gemini*
+ * mis-read, so making them wait 60s would charge them for the model's mistake. Everything else is
+ * a fresh AI call and must be paced like one. The exemption used to apply to every typed grade,
+ * which made `POST /api/grade/text` a standalone, uncooled grader: it accepts arbitrary LaTeX and
+ * has never been tied to a prior grading. Free users were capped at 3/day by the scan quota, but a
+ * paid user (unlimited quota) could run Gemini as fast as the rate limiter allowed. See issue #56.
+ *
+ * A typed grading is identifiable by having no images, so "the last grading here was a photo" also
+ * means "this is the first correction of it" — the second consecutive re-grade gets cooled.
+ */
+async function isCorrectionOfRecentScan(userId: string, questionId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('gradings')
+    .select('image_paths, created_at')
+    .eq('session_id', userId)
+    .eq('question_id', questionId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+
+  const latest = (data as Array<{ image_paths: string[] | null; created_at: string }> | null)?.[0];
+  if (!latest) return false;
+  if (!latest.image_paths?.length) return false;
+  return Date.now() - new Date(latest.created_at).getTime() <= REGRADE_GRACE_MS;
+}
+
 // Shared grading core for both entry points (photo upload and typed-text re-grade). Calls Gemini,
 // rejects irrelevant submissions BEFORE any write, then persists the grading row + attempts.
 async function runGrading(opts: Parameters<typeof runGradingCore>[0]): Promise<GradeResponse> {
@@ -300,19 +332,26 @@ async function runGrading(opts: Parameters<typeof runGradingCore>[0]): Promise<G
   // for all three entry points (photo, typed re-grade, phone pair flow).
   await assertScanQuota(params.userId, params.tier);
 
-  // Per-user pacing. A photo grade inside the cooldown window is HELD here until its
-  // slot frees (one waiter per user — a further submission gets AI_COOLDOWN), then
-  // proceeds normally. Typed re-grades are exempt: correcting a mis-scanned transcription
-  // is a continuation of the same submission, not a new solve. Refunded on any failure
-  // (upstream outage, junk-photo rejection) so an error doesn't also cost the cooldown —
-  // the per-IP rate limiter still caps hammering.
-  const cooled = mode === 'photo';
-  if (cooled) await acquireGradeSlot(params.userId);
+  // Per-user pacing. A grade inside the cooldown window is HELD here until its slot frees (one
+  // waiter per user — a further submission gets AI_COOLDOWN), then proceeds normally.
+  //
+  // The single exemption is a typed correction of a photo scan the user just made (see above): it
+  // skips the wait, but still stamps a fresh window behind it, so the exemption is spent by the
+  // attempt rather than by a successful grade. Otherwise a *rejected* correction — which writes no
+  // `gradings` row, and so costs no quota — would leave neither cooldown nor quota behind, and junk
+  // LaTeX could be resubmitted at the rate limiter's pace for the whole grace window.
+  const exempt = mode === 'text' && (await isCorrectionOfRecentScan(params.userId, params.question_id));
+  if (exempt) stampGradeSlot(params.userId);
+  else await acquireGradeSlot(params.userId);
 
   try {
     return await runGradingCore(opts);
   } catch (err) {
-    if (cooled) refundGradeSlot(params.userId);
+    // A GradingError means the model looked at the submission and rejected it (junk photo, no
+    // working). That Gemini call really happened and really cost us, so it keeps its cooldown —
+    // refunding it let a user run an unmetered vision call every few seconds by submitting junk.
+    // Upstream failures (gateway outage, DB error) are ours rather than the student's: refund those.
+    if (!(err instanceof GradingError)) refundGradeSlot(params.userId);
     throw err;
   }
 }

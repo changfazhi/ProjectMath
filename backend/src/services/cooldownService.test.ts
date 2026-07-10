@@ -7,6 +7,7 @@ import {
   refundGradeSlot,
   reserveGradeSlot,
   resetAllCooldowns,
+  stampGradeSlot,
 } from './cooldownService.js';
 
 // Defaults: chat 5s, grade 60s (AI_LIMITS).
@@ -93,6 +94,32 @@ describe('cooldownService', () => {
     it('users are independent', () => {
       reserveGradeSlot('u1', T0);
       expect(reserveGradeSlot('u2', T0 + 1)).toEqual({ waitMs: 0 });
+    });
+
+    describe('stampGradeSlot (the typed-correction exemption)', () => {
+      it('restarts the window from now, so the next grade waits a full 60s', () => {
+        reserveGradeSlot('u1', T0); // photo scan: window runs to T0+60s
+        stampGradeSlot('u1', T0 + 10_000); // exempt correction runs now, re-stamps to T0+70s
+
+        expect(reserveGradeSlot('u1', T0 + 10_001)).toEqual({ waitMs: 59_999 });
+      });
+
+      // Without this the exemption would be free every time it was rejected: a junk correction
+      // costs no quota (no `gradings` row) and would leave no cooldown either. See issue #56.
+      it('leaves a window behind even when nothing was running', () => {
+        stampGradeSlot('u1', T0);
+
+        expect(reserveGradeSlot('u1', T0 + 1)).toEqual({ waitMs: 59_999 });
+      });
+
+      it('does not displace a request already waiting behind the window', () => {
+        reserveGradeSlot('u1', T0);
+        reserveGradeSlot('u1', T0 + 10_000); // becomes the waiter
+        stampGradeSlot('u1', T0 + 20_000);
+
+        // The waiter keeps its position, so a third request is still rejected rather than queued.
+        expectCooldown(() => reserveGradeSlot('u1', T0 + 20_001));
+      });
     });
 
     it('refund with no waiter lets the user retry immediately (failed grading)', () => {
