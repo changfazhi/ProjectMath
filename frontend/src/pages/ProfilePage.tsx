@@ -109,7 +109,7 @@ function formatDaysCount(n: number): string {
 // ── Account & plan section ──────────────────────────────────────────────────────
 
 function AccountSection() {
-  const { user, tier, accessExpiresAt, openUpgradeModal } = useAuth()
+  const { user, tier, openUpgradeModal } = useAuth()
   const [billing, setBilling] = useState<BillingStatus | null>(null)
   const [loadingPortal, setLoadingPortal] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
@@ -134,10 +134,17 @@ function AccountSection() {
 
   const memberSince = user?.metadata.creationTime ? formatDate(new Date(user.metadata.creationTime)) : null
 
+  // Both dates come from /api/billing/status, not from /api/me's `accessExpiresAt`: since issue #57
+  // a lapsed PayNow expiry is deliberately retained on the row (a card subscription can be live on
+  // top of it), so the raw value is often a past date. getBillingStatus resolves the two facts —
+  // it reports a card subscription's live renewal date, and only reports `accessExpiresAt` while
+  // it is genuinely still running — so trusting it keeps a converted-trial subscriber from seeing
+  // "Access expires in -1 days" while they are being charged.
   let planDetail: string | null = null
   if (tier === 'paid') {
-    if (accessExpiresAt) {
-      planDetail = `Access expires in ${formatDaysCount(daysLeft(accessExpiresAt))} (${formatDate(accessExpiresAt)})`
+    if (billing?.accessExpiresAt) {
+      const expiresAt = new Date(billing.accessExpiresAt)
+      planDetail = `Access expires in ${formatDaysCount(daysLeft(expiresAt))} (${formatDate(expiresAt)})`
     } else if (billing?.renewsAt) {
       const renewsAt = new Date(billing.renewsAt)
       planDetail = `Renews in ${formatDaysCount(daysLeft(renewsAt))} (${formatDate(renewsAt)})`

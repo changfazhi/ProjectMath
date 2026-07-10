@@ -13,9 +13,13 @@ export function daysUntil(accessExpiresAt: string, from: Date): number {
   return Math.max(1, Math.ceil(diffMs / MS_PER_DAY));
 }
 
-// Fires once/day for each PayNow account inside the reminder window (default: last 3 days
-// before access_expires_at). Card subscriptions are excluded — access_expires_at is only
-// ever set on the PayNow (one-time payment) path, see billingService.ts.
+// Fires once/day for each PayNow account inside the reminder window (default: last 3 days before
+// access_expires_at).
+//
+// Card subscribers are excluded by `stripe_subscription_id IS NULL`, not by the absence of an
+// expiry: a subscription bought on top of PayNow keeps that expiry on the row (issue #57) and
+// trials until it, so their access does not lapse — the card takes over. Filtering on the expiry
+// alone would email them "your access ends in 3 days" on the eve of their first charge.
 export async function runPayNowExpiryReminders(): Promise<void> {
   const reminderDays = Number(process.env.PAYNOW_REMINDER_DAYS ?? 3);
   const now = new Date();
@@ -27,6 +31,7 @@ export async function runPayNowExpiryReminders(): Promise<void> {
     .from('users')
     .select('id, email, access_expires_at')
     .eq('subscription_status', 'active')
+    .is('stripe_subscription_id', null)
     .not('access_expires_at', 'is', null)
     .gt('access_expires_at', now.toISOString())
     .lte('access_expires_at', windowEnd.toISOString())
