@@ -41,10 +41,10 @@ export function HomePage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Once user is available and we have a pending success, poll the Firebase
-  // token claims until the webhook-granted upgrade lands. Stripe delivers the
+  // server until the webhook-granted upgrade lands. Stripe delivers the
   // checkout.session.completed webhook asynchronously, so the redirect often
-  // arrives before the tier claim is set — a single refresh would read stale
-  // claims and leave the user looking free until the next natural token refresh.
+  // arrives before the user row is updated — a single refresh would read the
+  // pre-payment tier and leave the user looking free.
   useEffect(() => {
     if (!pendingSuccess || !user) return
     setPendingSuccess(false)

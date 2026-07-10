@@ -10,6 +10,7 @@ import type {
   Grading,
   GradeResponse,
   MathLevel,
+  Me,
   PairContext,
   QuestionPublic,
   SolutionGraphRender,
@@ -273,6 +274,10 @@ export const api = {
     generateDiagnosis: () =>
       request<DiagnosisStatus>('/api/review/diagnosis', { method: 'POST' }),
     studyPlan: () => request<StudyPlanResponse>('/api/review/study-plan'),
+  },
+
+  me: {
+    get: () => request<Me>('/api/me'),
   },
 
   usage: {

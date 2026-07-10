@@ -317,6 +317,13 @@ export interface UsageSummary {
   chat: UsageBucket
 }
 
+// ── Signed-in user (GET /api/me) ──────────────────────────────────────────────
+
+export interface Me {
+  tier: 'free' | 'paid'
+  accessExpiresAt: string | null // PayNow: stored expiry; null for card subscriptions
+}
+
 // ── Billing status (GET /api/billing/status) ──────────────────────────────────
 
 export interface BillingStatus {
