@@ -10,7 +10,7 @@ import {
   signOut as firebaseSignOut,
 } from 'firebase/auth'
 import { auth } from '../lib/firebase'
-import { setApiCallbacks } from '../lib/api'
+import { api, setApiCallbacks } from '../lib/api'
 import { LoginModal, type AuthMode } from '../components/LoginModal'
 import { UpgradeModal } from '../components/UpgradeModal'
 import { FeedbackModal } from '../components/FeedbackModal'
@@ -31,8 +31,8 @@ interface AuthContextValue {
   openLoginModal: (options?: { mode?: AuthMode; message?: string }) => void
   openUpgradeModal: () => void
   openFeedbackModal: () => void
-  // Force-refreshes the Firebase token and returns the fresh tier, so callers
-  // can poll until a webhook-granted upgrade lands.
+  // Re-reads the server's tier and returns it, so callers can poll until a
+  // webhook-granted upgrade lands.
   refreshTier: () => Promise<Tier | null>
 }
 
@@ -55,18 +55,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
 
-  function applyTokenResult(result: { claims: Record<string, unknown> }) {
+  // First paint only. The Firebase claim is baked into an ID token that lives up to an hour, so
+  // it can be an hour out of date — a just-cancelled user's token still says `paid`. It's read
+  // here purely so the header doesn't flash "Free" while /api/me is in flight; the server's
+  // answer overwrites it moments later and is the only value anything may act on. See issue #54.
+  function applyStaleClaims(result: { claims: Record<string, unknown> }) {
     setTier(result.claims['tier'] === 'paid' ? 'paid' : 'free')
     const expiresAtRaw = result.claims['expires_at']
     setAccessExpiresAt(typeof expiresAtRaw === 'string' ? new Date(expiresAtRaw) : null)
+  }
+
+  // The server derives tier from the `users` row, so this reflects a cancellation or an upgrade
+  // immediately rather than whenever the ID token next refreshes.
+  const fetchTier = async (): Promise<Tier | null> => {
+    const me = await api.me.get()
+    setTier(me.tier)
+    setAccessExpiresAt(me.accessExpiresAt ? new Date(me.accessExpiresAt) : null)
+    return me.tier
   }
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u)
       if (u) {
-        const result = await u.getIdTokenResult()
-        applyTokenResult(result)
+        applyStaleClaims(await u.getIdTokenResult())
+        // A failed fetch leaves the optimistic claim in place. The server still enforces the real
+        // tier on every request, so the worst case is Premium chrome over a 402/429.
+        await fetchTier().catch(() => {})
       } else {
         setTier(null)
         setAccessExpiresAt(null)
@@ -86,9 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshTier = async (): Promise<Tier | null> => {
     if (!auth.currentUser) return null
-    const result = await auth.currentUser.getIdTokenResult(true)
-    applyTokenResult(result)
-    return result.claims['tier'] === 'paid' ? 'paid' : 'free'
+    return fetchTier()
   }
 
   useEffect(() => {

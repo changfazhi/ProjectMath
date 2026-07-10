@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
-import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
+import { accountRateLimit } from '../middleware/rateLimit.js';
 import {
   gradeSolution,
   gradeTranscription,
@@ -28,13 +28,11 @@ const upload = multer({
   },
 });
 
-// IP-keyed limiter — primary defence against runaway Gemini vision bills (grading is costly).
-const gradeLimiter = rateLimit({
-  windowMs: 60_000,
+// Account-keyed burst guard — runs after gate() so req.user is populated. The real pacing on
+// costly vision calls is the 60s per-user grade cooldown, which is stricter than this.
+const gradeLimiter = accountRateLimit({
   limit: Number(process.env.GRADE_RATE_LIMIT_PER_MIN ?? 5),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many grading requests — give it a moment before submitting again.' },
+  message: 'Too many grading requests — give it a moment before submitting again.',
 });
 
 const bodySchema = z.object({

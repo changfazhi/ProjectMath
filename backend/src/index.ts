@@ -14,6 +14,7 @@ import gradeRouter from './routes/grade.js';
 import pairRouter from './routes/pair.js';
 import reviewRouter from './routes/review.js';
 import usageRouter from './routes/usage.js';
+import meRouter from './routes/me.js';
 import billingRouter from './routes/billing.js';
 import feedbackRouter from './routes/feedback.js';
 import { initRealtime } from './realtime.js';
@@ -21,6 +22,13 @@ import { startPayNowExpiryReminderCron } from './jobs/payNowExpiryReminder.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
+
+// Cloud Run always fronts the container, so `req.ip` is the front end's address unless we say how
+// many proxy hops to unwind. Google appends the real client IP to any inbound X-Forwarded-For, so
+// trusting exactly one hop is both correct and unspoofable. Bump to 2 if an external HTTPS load
+// balancer is ever put in front. Harmless locally: with no X-Forwarded-For, `req.ip` is the socket
+// address either way. Only the IP-keyed feedback limiter depends on this — the rest key by account.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
@@ -53,6 +61,7 @@ app.use('/api/grade', gradeRouter);
 app.use('/api/pair', pairRouter);
 app.use('/api/review', reviewRouter);
 app.use('/api/usage', usageRouter);
+app.use('/api/me', meRouter);
 app.use('/api/feedback', feedbackRouter);
 
 app.get('/health', (_req, res) => {

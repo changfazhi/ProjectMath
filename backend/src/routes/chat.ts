@@ -1,20 +1,17 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { gate } from '../middleware/auth.js';
+import { accountRateLimit } from '../middleware/rateLimit.js';
 import { ChatLimitError, newChatThread, sendHintMessage } from '../services/chatService.js';
 import { QuotaExceededError, sendQuotaError } from '../services/usageService.js';
 import { AiUnavailableError, sendAiError } from '../services/aiErrors.js';
 
 const router = Router();
 
-// IP-keyed limiter — primary defence against runaway Gemini bills.
-const chatLimiter = rateLimit({
-  windowMs: 60_000,
+// Account-keyed burst guard — runs after gate() so req.user is populated.
+const chatLimiter = accountRateLimit({
   limit: Number(process.env.CHAT_RATE_LIMIT_PER_MIN ?? 15),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, slow down and give the hints a moment.' },
+  message: 'Too many requests, slow down and give the hints a moment.',
 });
 
 const sendSchema = z.object({

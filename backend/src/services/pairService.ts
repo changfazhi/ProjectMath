@@ -51,6 +51,18 @@ export function getValidPair(token: string): PairSession | null {
   return p;
 }
 
+/**
+ * The account a pairing belongs to, for rate-limit bucketing on the token-authed phone routes.
+ *
+ * Unlike `getValidPair` this never evicts: it runs inside a rate limiter's key generator, on
+ * requests that may be rejected before any handler sees them. The periodic sweep reclaims
+ * expired entries anyway.
+ */
+export function peekPairOwner(token: string): string | null {
+  const p = pairs.get(token);
+  return !p || isExpired(p) ? null : p.userId;
+}
+
 export function addImage(token: string, image: GradeImage): number {
   const p = getValidPair(token);
   if (!p) throw new PairError('This phone link has expired. Please scan a fresh QR code.', 404);
