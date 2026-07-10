@@ -125,8 +125,27 @@ export async function acquireGradeSlot(uid: string, now = Date.now()): Promise<v
 }
 
 /**
- * Refund after a failed grading so an error (upstream outage, junk-photo rejection, …)
- * doesn't also cost the user their cooldown. If another request is already waiting
+ * Start the cooldown window now, skipping any wait a running window would impose.
+ *
+ * For the one call allowed to jump the queue: a typed correction of a photo scan the user just
+ * made, where the student is fixing characters Gemini mis-read. It runs immediately but must still
+ * leave a window behind it — a rejected correction writes no `gradings` row, so it costs no quota,
+ * and with no cooldown either it could be resubmitted at the rate limiter's pace for the whole
+ * grace period. Stamping here consumes the exemption on *attempt* rather than on success (#56).
+ *
+ * An existing waiter keeps its position: it has already scheduled its wake-up against the old
+ * window, and clearing the flag would let a second request take the waiter slot behind it.
+ */
+export function stampGradeSlot(uid: string, now = Date.now()): void {
+  const slot = gradeSlots.get(uid);
+  gradeSlots.set(uid, { nextFreeAt: now + cooldownMs('grade'), waiting: slot?.waiting ?? false });
+}
+
+/**
+ * Refund after a grading failed for a reason that is *our* fault (upstream outage, DB error), so
+ * the user doesn't lose their cooldown to it. Callers must NOT refund a `GradingError` — the model
+ * rejecting a junk photo still burned a real Gemini call, and refunding it made junk submissions
+ * an unmetered vision call every few seconds (issue #56). If another request is already waiting
  * behind the failed one, its reservation stands and nothing is refunded.
  */
 export function refundGradeSlot(uid: string): void {
