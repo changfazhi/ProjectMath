@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // A minimal in-memory stand-in for the two tables the webhook touches, so the real
 // handleWebhookEvent runs unmodified against it. Only the query shapes billingService
 // actually uses are implemented; anything else throws rather than silently passing.
-interface EventRow { id: string; type: string; status: string; claimed_at: string; completed_at?: string }
+interface EventRow { id: string; type: string; status: string; claimed_at: string; completed_at?: string; computed_expires_at?: string }
 interface UserRow {
   id: string;
   email: string | null;
@@ -16,6 +16,9 @@ interface UserRow {
 const events = new Map<string, EventRow>();
 const users = new Map<string, UserRow>();
 let failUserUpdate = false;
+// Fails the completeEvent write specifically, to exercise "grant succeeded, ledger failed to
+// record it" — the replay window issue #61 closes.
+let failEventComplete = false;
 // Fails only the `users` select whose column list matches, so a test can break one specific
 // read (e.g. revokePaidTier's expiry check) without breaking every other read in the handler.
 let failUserSelectCols: string | null = null;
@@ -72,6 +75,9 @@ class Query {
 
     if (this.op === 'update') {
       if (this.table === 'users' && failUserUpdate) {
+        return { data: null, error: { message: 'connection reset' } };
+      }
+      if (this.table === 'stripe_events' && failEventComplete && this.payload['status'] === 'completed') {
         return { data: null, error: { message: 'connection reset' } };
       }
       for (const row of hits) Object.assign(row, this.payload);
@@ -152,6 +158,7 @@ describe('handleWebhookEvent — PayNow idempotency', () => {
     events.clear();
     users.clear();
     failUserUpdate = false;
+    failEventComplete = false;
     failUserSelectCols = null;
     setCustomUserClaims.mockClear();
     users.set('u1', { id: 'u1', email: null, access_expires_at: null, stripe_customer_id: null });
@@ -171,6 +178,21 @@ describe('handleWebhookEvent — PayNow idempotency', () => {
     await handleWebhookEvent(Buffer.from(''), 'sig'); // lost 2xx → Stripe retries
 
     expect(daysGranted()).toBe(30);
+  });
+
+  it('does not stack a second period when the grant succeeded but completeEvent failed', async () => {
+    failEventComplete = true;
+    nextEvent = payNowEvent('evt_1');
+    await expect(handleWebhookEvent(Buffer.from(''), 'sig')).rejects.toThrow(/Failed to complete event/);
+    expect(daysGranted()).toBe(30);
+    expect(events.get('evt_1')?.status).toBe('processing');
+
+    // Stripe redelivers once the lease goes stale; the stored expiry makes the grant converge.
+    failEventComplete = false;
+    events.get('evt_1')!.claimed_at = new Date(Date.now() - 10 * 60_000).toISOString();
+    await handleWebhookEvent(Buffer.from(''), 'sig');
+    expect(daysGranted()).toBe(30); // NOT 60 — the whole point
+    expect(events.get('evt_1')?.status).toBe('completed');
   });
 
   it('still stacks a genuine second purchase (distinct event id)', async () => {
@@ -226,6 +248,7 @@ describe('handleWebhookEvent — a failed read must never be mistaken for an emp
     events.clear();
     users.clear();
     failUserUpdate = false;
+    failEventComplete = false;
     failUserSelectCols = null;
     setCustomUserClaims.mockClear();
   });
@@ -268,6 +291,7 @@ describe('revokePaidTier — retains a lapsed expiry', () => {
     events.clear();
     users.clear();
     failUserUpdate = false;
+    failEventComplete = false;
     failUserSelectCols = null;
     setCustomUserClaims.mockClear();
   });
