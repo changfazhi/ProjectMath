@@ -353,6 +353,27 @@ async function completeEvent(eventId: string): Promise<void> {
   if (error) throw new Error(`Failed to complete event ${eventId}: ${error.message}`);
 }
 
+// The absolute PayNow expiry computed on the first delivery is stashed on the event row so a
+// replay writes the same value rather than re-adding a period onto the already-extended
+// access_expires_at (issue #61). `getStoredExpiry` returns it when present; `setStoredExpiry`
+// persists it *before* the grant, and throws on a failed write so a dropped persist stops short
+// of granting rather than proceeding to compute a fresh (compounding) expiry on the next retry.
+async function getStoredExpiry(eventId: string): Promise<Date | null> {
+  const row = unwrap(
+    await supabase.from('stripe_events').select('computed_expires_at').eq('id', eventId).maybeSingle(),
+    `Failed to read stored expiry for event ${eventId}`,
+  ) as { computed_expires_at: string | null } | null;
+  return row?.computed_expires_at ? new Date(row.computed_expires_at) : null;
+}
+
+async function setStoredExpiry(eventId: string, expiresAt: Date): Promise<void> {
+  const { error } = await supabase
+    .from('stripe_events')
+    .update({ computed_expires_at: expiresAt.toISOString() })
+    .eq('id', eventId);
+  if (error) throw new Error(`Failed to store expiry for event ${eventId}: ${error.message}`);
+}
+
 export async function handleWebhookEvent(rawBody: Buffer, signature: string): Promise<void> {
   const stripe = getStripe();
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -396,27 +417,36 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       if (session.mode === 'subscription') {
         await grantPaidTier(firebaseUid, userId);
       } else if (session.mode === 'payment') {
-        const paynowPlan = session.metadata?.paynow_plan as 'monthly' | 'semesterly' | undefined;
-        const msToAdd = paynowPlan === 'semesterly'
-          ? 180 * 24 * 60 * 60 * 1000
-          : 30 * 24 * 60 * 60 * 1000;
+        // On a replay of a delivery that granted but failed to mark itself completed, reuse the
+        // absolute expiry we computed the first time so the grant converges to the same value
+        // instead of stacking a second period onto the already-extended baseline (issue #61).
+        let expiresAt = await getStoredExpiry(event.id);
+        if (!expiresAt) {
+          const paynowPlan = session.metadata?.paynow_plan as 'monthly' | 'semesterly' | undefined;
+          const msToAdd = paynowPlan === 'semesterly'
+            ? 180 * 24 * 60 * 60 * 1000
+            : 30 * 24 * 60 * 60 * 1000;
 
-        // Stack onto remaining PayNow access; otherwise roll over from an active card
-        // subscription (canceling it at period end) so there's no gap or overlap.
-        let baselineMs = Date.now();
-        const existingExpiryMs = row?.access_expires_at ? new Date(row.access_expires_at).getTime() : null;
-        if (existingExpiryMs !== null && existingExpiryMs > baselineMs) {
-          baselineMs = existingExpiryMs;
-        } else if (row?.stripe_customer_id) {
-          const activeSub = await findActiveSubscription(stripe, row.stripe_customer_id);
-          const currentPeriodEnd = activeSub?.items.data[0]?.current_period_end;
-          if (activeSub && currentPeriodEnd) {
-            baselineMs = currentPeriodEnd * 1000;
-            await stripe.subscriptions.update(activeSub.id, { cancel_at_period_end: true });
+          // Stack onto remaining PayNow access; otherwise roll over from an active card
+          // subscription (canceling it at period end) so there's no gap or overlap.
+          let baselineMs = Date.now();
+          const existingExpiryMs = row?.access_expires_at ? new Date(row.access_expires_at).getTime() : null;
+          if (existingExpiryMs !== null && existingExpiryMs > baselineMs) {
+            baselineMs = existingExpiryMs;
+          } else if (row?.stripe_customer_id) {
+            const activeSub = await findActiveSubscription(stripe, row.stripe_customer_id);
+            const currentPeriodEnd = activeSub?.items.data[0]?.current_period_end;
+            if (activeSub && currentPeriodEnd) {
+              baselineMs = currentPeriodEnd * 1000;
+              await stripe.subscriptions.update(activeSub.id, { cancel_at_period_end: true });
+            }
           }
-        }
 
-        const expiresAt = new Date(baselineMs + msToAdd);
+          expiresAt = new Date(baselineMs + msToAdd);
+          // Persist BEFORE granting: every crash window before this point is also before the
+          // grant, where access_expires_at is untouched and a recompute is still correct.
+          await setStoredExpiry(event.id, expiresAt);
+        }
         await grantPayNowTier(firebaseUid, userId, expiresAt);
       }
 
