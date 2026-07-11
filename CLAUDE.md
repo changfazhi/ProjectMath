@@ -15,32 +15,11 @@ For the **"upload via phone"** QR flow, open the desktop app via the machine's *
 
 ## Database Setup
 
-Run in order in the Supabase SQL Editor:
+Run every file in `backend/supabase/migrations/` in numeric order in the Supabase SQL Editor. Grouped summary:
 
-1. `001_initial_schema.sql` — core tables + indexes
-2. `002_question_names.sql` — adds `name` column
-3. `003_topic_concepts.sql` — `topic_concepts` table
-4. `004_starred_questions.sql` — `starred_questions` table
-5. `005_new_topics.sql` — 24 topics, 120 concepts, grants
-6. `006_binomial_normal_topics.sql` — adds Binomial Distribution (bbbb0007) & Normal Distribution (bbbb0008) topics
-7. `007_asrjc_prelim_2025.sql` — 21 ASRJC 2025 questions
-8. `008_multi_part_schema.sql` — adds `parts JSONB` to questions, `part_label TEXT` to attempts
-9. `009_asrjc_parts_data.sql` — per-part data for all ASRJC multi-part questions
-10. `010_dhs_prelim_2025.sql` — 22 DHS H2 Math Prelim 2025 questions (Papers 1 & 2)
-11. `011_chat_messages.sql` — `chat_messages` table (AI hint chatbot history)
-12. `012_fix_dhs_preamble.sql` — DHS preamble fix
-13. `013_solution_gradings.sql` — `gradings` table + `solution-uploads` Storage bucket (photo AI grading)
-14. `014_hci_prelim_2025.sql` — 23 HCI H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–13, Paper 2 Q1–10)
-15. `015_acjc_prelim_2025.sql` — 24 ACJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–12, Paper 2 Q1–12)
-16. `016_cjc_prelim_2025.sql` — 22 CJC H2 Math (9758) Prelim 2025 questions (Paper 1 Q1–11, Paper 2 Q1–11)
-17. `017_grading_transcription.sql` — adds `transcription_latex TEXT` to `gradings` (editable AI transcription of handwriting)
-18. `021_enable_typed_submissions.sql` — re-classifies mis-flagged `null` parts (find/state/determine → typed box) and adds multi-box `answers[]` data across **all 6 papers** (ASRJC, DHS, HCI, ACJC, CJC, RI). 81 `UPDATE`s on `questions.parts`, no DDL. `-- FLAG:` comments mark brittle/exact-match-risky answers and parts left null for review.
-19. `024_sketch_graph_solutions.sql` — adds `solution_graph` JSONB specs to 4 sketch parts (DHS d0251001/d0251005, CJC b0250005, HCI c0251003) so the Solution tab renders a model graph. `jsonb_set` per part, label-guarded, no DDL. `-- FLAG:` lists sketch parts still without specs (Argand/scatter/normal-curve/unknown-f). Spec format: `x_range`/`y_range`/`curves[{expr (mathjs, var x), domain, label (LaTeX)}]`/`asymptotes`/`points` — compiled server-side by `graphService.compileGraph()` into polylines; `solution_graph` is stripped from public payloads (`stripSolution`) and served only via `GET /api/questions/:id/solution` as `graphs[]`, rendered by `SolutionGraph.tsx` (hand-rolled SVG + KaTeX labels, no chart deps). `compileGraph()` injects each labelled point's x into the sample grid and snaps authored point y-values onto the curve (within 5% of y-range) so dots sit exactly on the polyline — labels keep the human-readable rounded coords.
-20. `026_fix_dhs_p2q1_turning_points.sql` — fixes DHS P2 Q1 (d0251001) turning points wrongly authored in 010/024 as (2, 8)/(−4, −10); official values are (2, 5)/(−4, −7). Updates the part (b) `solution_graph` points and the `solution_latex` text.
-21. `027_sketch_graph_solutions_full.sql` — adds `solution_graph` specs to **all 40 remaining sketch/draw parts** across the 6 papers (verified against the official solution PDFs in `2025/<school>/`), leaving only the Venn diagram (b0251006 a) and Riemann-rectangles sketch (c0250004 a) without graphs. Extends the spec format (see below) and fixes four data errors found against the official solutions: d0250005 (|f| description + max (−2,−2)), cafe1004 (ellipse `√k`, not `k`/`k²`), cafe1005 (missing `√` in the (a)(i) integrand + draft text in solution), cafe1006 (p = √2+√2i rhombus, not 2+2i). Header carries the errata for 024's mislabelled FLAG ids. Abstract-f sketches use **stand-in curves** (concrete functions passing exactly through every officially-labelled feature; construction noted per UPDATE).
-22. `028_chat_thread_id.sql` — adds `thread_id UUID NOT NULL DEFAULT uuid_generate_v4()` to `chat_messages` + an index on `(session_id, question_id, thread_id, created_at)`, so the AI hint chat can be scoped to a "conversation opened right now" thread without deleting the rows the daily quota / per-question cap count against (see AI Hint Chatbot below).
-23. `029_email_tracking.sql` — adds `welcome_email_sent_at`, `first_purchase_email_sent_at` (once-ever flags, TIMESTAMPTZ) and `last_expiry_reminder_sent_on` (DATE, once-per-day dedupe) to `users` for the transactional email system (see [Transactional Emails](#transactional-emails)).
-24. `030_stripe_events.sql` — `stripe_events` table (`id` = Stripe `event.id` PK, `status` `'processing'|'completed'`, `claimed_at`, `completed_at`) + a `(status, claimed_at)` index. Makes webhook handling idempotent — see [Authentication & Tiers](#authentication--tiers).
+- **Schema/core:** `001` core tables+indexes · `002` `name` col · `003` `topic_concepts` · `004` `starred_questions` · `005` 24 topics+120 concepts · `006` Binomial/Normal topics · `008` `parts JSONB`+`part_label` · `011` `chat_messages` · `013` `gradings`+`solution-uploads` bucket · `017_grading_transcription` adds `transcription_latex` · `018` spaced-repetition · `019` firebase_auth · `020` study_plans · `022`/`023` Stripe billing cols · `025` usage limits · `028` chat `thread_id` · `029` email-tracking flags · `030` `stripe_events` (webhook idempotency).
+- **Question data (per school, Papers 1 & 2):** `007`+`009` ASRJC (21) · `010`+`012` DHS (22) · `014` HCI (23) · `015` ACJC (24) · `016` CJC (22) · `017_ri_prelim_2025` RI (21) · `031` YIJC (24). ID prefixes: ASRJC `cafe`, DHS `d025`, HCI `c025`, ACJC `a025`, CJC `b025`, RI `e025`, YIJC `f025` (Paper 1 `…00NN`, Paper 2 `…10NN`).
+- **Typed submissions & graphs:** `021` re-classifies mis-flagged `null` parts + adds multi-box `answers[]` across all 6 papers (`-- FLAG:` marks brittle answers). `024`+`027` add `solution_graph` specs to 44 sketch parts (verified vs official PDFs; `026` fixes DHS P2Q1 turning points; abstract-f sketches use stand-in curves). `032` adds `solution_graph` to the 7 YIJC sketch parts (Q6 a/b/c transforms via a stand-in base f, Q7a modulus, P2 Q2c Argand, Q3c cost curve, Q8a scatter).
 
 **`solution_graph` spec fields** (beyond migration 024's `curves[{expr, domain, label}]`/`asymptotes`/`points`): parametric curves `{x_expr, y_expr, domain}` (t-interval; ellipses/loci/inverse reflections — f⁻¹ is plotted as `x_expr: f(t), y_expr: t`); `points[].open` (hollow dot for excluded endpoints); `segments[{from, to, style: 'dashed'?, arrow?, label}]` (straight lines — Argand/vector diagrams, mean lines, y=x); `shade[{expr, domain, label}]` (region filled to the x-axis); `x_label`/`y_label` (KaTeX axis labels); `curves` may be empty/absent (points-only scatter diagrams). `compileGraph()` snaps labelled points onto y=f(x) curves analytically and onto parametric polylines by nearest vertex, and injects point x-values into the sample grid so extrema dots sit exactly on the polyline.
 
@@ -62,7 +41,7 @@ Run in order in the Supabase SQL Editor:
 | aaaa0008 | Vector (Basic) | | aaaa0017 | Parametric Equations |
 | aaaa0009 | Vector (Lines) | | aaaa0018 | Differential Equations |
 
-Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). ASRJC questions: `cafe00NN-...` (Paper 1), `cafe10NN-...` (Paper 2). DHS questions: `d025000N-...` (Paper 1), `d025100N-...` (Paper 2). HCI questions: `c025000N-...` (Paper 1), `c025100N-...` (Paper 2). ACJC questions: `a025000N-...` (Paper 1), `a025100N-...` (Paper 2). CJC questions: `b025000N-...` (Paper 1), `b025100N-...` (Paper 2).
+Stats: bbbb0001–bbbb0008 (Permutation & Combination → Normal Distribution). ASRJC questions: `cafe00NN-...` (Paper 1), `cafe10NN-...` (Paper 2). DHS questions: `d025000N-...` (Paper 1), `d025100N-...` (Paper 2). HCI questions: `c025000N-...` (Paper 1), `c025100N-...` (Paper 2). ACJC questions: `a025000N-...` (Paper 1), `a025100N-...` (Paper 2). CJC questions: `b025000N-...` (Paper 1), `b025100N-...` (Paper 2). RI questions: `e025000N-...` (Paper 1), `e025100N-...` (Paper 2). YIJC questions: `f025000N-...` (Paper 1), `f025100N-...` (Paper 2).
 
 ## Authentication & Tiers
 
@@ -88,35 +67,20 @@ All endpoints below require `Authorization: Bearer <firebase-id-token>` **except
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/topics?level=H2` | *(public)* List topics |
-| GET | `/api/topics/:id` | *(public)* Single topic |
-| GET | `/api/topics/progress` | Per-topic completion stats |
-| GET | `/api/topics/accuracy` | Per-topic accuracy stats |
-| GET | `/api/topics/:id/questions` | Questions with attempt status |
-| GET | `/api/topics/:id/next?difficulty=N` | Next unanswered question |
-| GET | `/api/topics/:id/concepts` | *(public)* Prerequisite concepts |
-| GET | `/api/questions/:id` | *(public)* Single question (no answer/solution) |
-| GET | `/api/questions/:id/solution` | *(public)* Solution + compiled `graphs[]` (served only after the client already has an attempt result) |
-| POST | `/api/attempts` | Submit answer → `{ is_correct, correct_answer, solution_latex }` |
-| GET | `/api/attempts?question_id=UUID` | User's attempt history (optionally filtered by `question_id`) |
-| POST | `/api/stars` | Toggle star |
-| GET | `/api/stars?topic_id=UUID` | Starred questions for a topic |
-| GET | `/api/stars/all` | All starred questions with latest attempt |
-| GET | `/api/streaks` | Streak stats + daily activity heatmap data |
-| GET | `/api/chat?question_id=UUID` | Start a fresh AI-hint conversation → `{ thread_id }` (never returns past messages — see AI Hint Chatbot below) |
-| POST | `/api/chat` | `{ question_id, thread_id, message }` → Socratic hint `{ reply, history }` (Gemini proxy; tier quota + per-user cooldown + IP rate limit) |
-| GET | `/api/grade?question_id=UUID` | Past photo gradings for a question |
-| POST | `/api/grade` | **multipart/form-data** (`images[]`, `question_id`, `time_taken_s?`) → AI grade of handwritten solution (Gemini vision; tier quota + cooldown + IP rate limit). Response includes `transcription_latex` (what the AI read) |
-| POST | `/api/grade/text` | JSON `{ question_id, transcription_latex, time_taken_s? }` → re-grade the student's corrected LaTeX transcription (no photos, same limits as `/api/grade`; the 60s cooldown is waived only for the first correction of a recent photo scan — see [Photo-Based AI Grading](#photo-based-ai-grading)) |
-| POST | `/api/pair` | Create a phone-upload pairing → `{ token, mobile_path, expires_at }` (userId + tier captured server-side for the later grading call) |
-| GET | `/api/pair/:token` | *(public — token is the auth)* Mobile page context; fires `pair:phone-connected` |
-| POST | `/api/pair/:token/photo` | *(public — token is the auth)* **multipart** single `image` → streams to desktop via `pair:image` |
-| POST | `/api/pair/:token/done` | *(public — token is the auth)* Grade collected photos → `pair:grading`/`pair:graded`/`pair:error` |
-| GET | `/api/me` | The signed-in user's server-resolved `{ tier, accessExpiresAt }`. The frontend's only trustworthy source of tier — the Firebase claim can be up to an hour stale (see [Authentication & Tiers](#authentication--tiers)). Deliberately not folded into `/api/billing/status`, which hits Stripe live |
-| GET | `/api/usage` | Today's scan/chat quota usage + reset time for the signed-in user |
-| GET/POST | `/api/review/*` | Corrections, weak-topics, speed-drills, spaced-repetition, AI diagnosis, study plan (see [Authentication & Tiers](#authentication--tiers)) |
-| POST | `/api/billing/checkout` \| `/portal` \| `/webhook` | Stripe Checkout/Portal session creation + webhook (see [Authentication & Tiers](#authentication--tiers)) |
-| GET | `/api/billing/status` | Subscription status + renewal info for the signed-in user: PayNow's stored `access_expires_at`, or a live-fetched Stripe `current_period_end` (`renewsAt`) for card subscriptions (no expiry is persisted for those). Powers the days-left display on `/profile` |
+| GET | `/api/topics` `/:id` `/:id/concepts` | *(public)* list / single / prerequisite concepts |
+| GET | `/api/topics/progress` `/accuracy` | Per-topic completion & accuracy stats |
+| GET | `/api/topics/:id/questions` `/:id/next?difficulty=N` | Questions w/ attempt status; next unanswered |
+| GET | `/api/questions/:id` `/:id/solution` | *(public)* question (no answer); solution + compiled `graphs[]` (served post-attempt) |
+| POST/GET | `/api/attempts` | Submit answer → `{ is_correct, correct_answer, solution_latex }`; GET history (`?question_id`) |
+| POST/GET | `/api/stars` `/stars/all` | Toggle star; per-topic (`?topic_id`) or all-with-latest-attempt |
+| GET | `/api/streaks` | Streak stats + daily heatmap |
+| GET/POST | `/api/chat` | GET mints a fresh `{ thread_id }` (no past messages); POST `{ question_id, thread_id, message }` → Socratic hint |
+| GET/POST | `/api/grade` | GET past gradings; POST multipart `images[]` → AI grade (+`transcription_latex`) |
+| POST | `/api/grade/text` | Re-grade corrected `transcription_latex` (no photos; 60s cooldown waived only for 1st correction of a recent scan) |
+| POST/GET | `/api/pair` `/:token` `/:token/photo` `/:token/done` | Phone-upload pairing; the `:token` routes are *(public — token is the auth)* and drive Socket.IO `pair:*` events |
+| GET | `/api/me` `/api/usage` | Server-resolved `{ tier, accessExpiresAt }` (only trustworthy tier source); today's quota usage + reset |
+| GET/POST | `/api/review/*` | Corrections, weak-topics, speed-drills, spaced-repetition, AI diagnosis, study plan |
+| POST/GET | `/api/billing/*` | `checkout` \| `portal` \| `webhook` (raw body); `status` → PayNow `access_expires_at` or live Stripe `renewsAt` for `/profile` |
 
 `POST /api/attempts` body: `{ question_id, answer_given, part_label?, field_answers?, time_taken_s? }`. Include `part_label` for multi-part questions; include `field_answers: [{ key, value }]` for multi-box parts. `solution_latex` in the response is `null` until all graded parts of the question are submitted.
 
@@ -128,11 +92,7 @@ Questions can have a `parts JSONB` column — an array of per-part objects:
 { "label": "a", "prompt_latex": "...", "correct_answer": "\\frac{x}{5}", "answer_type": "exact", "tolerance": null }
 ```
 
-- `answer_type: null` → "show that" part — no answer box rendered, no submission
-- `answer_type: "exact"` or `"range"` → graded; submit with `part_label`
-- `question.prompt_latex` = shared preamble only; `parts[i].prompt_latex` = per-part sub-question
-- `correct_answer` is stripped from parts before sending to the client (same as question-level)
-- Topic status: multi-part questions show ✓ only when **all** graded parts have a correct attempt
+- `answer_type: null` = "show that" (no box, no submission); `"exact"`/`"range"` = graded (submit with `part_label`). `question.prompt_latex` = shared preamble, `parts[i].prompt_latex` = per-part sub-question. `correct_answer` stripped before client. Topic ✓ only when **all** graded parts have a correct attempt.
 
 **Multi-box parts (several values in one sub-question, e.g. "find a, b and c"):** add an `answers[]` array to the part — `[{ "key": "a", "label": "a", "correct_answer": "\\frac{2}{3}", "answer_type": "exact", "tolerance": null }, ...]`. The frontend renders one labelled box per field; the part is correct only when **every** field matches. Keep the part-level `answer_type`/`correct_answer` as **non-null sentinels** (e.g. `"exact"` + a human-readable joined string) so the existing "graded part" / "reveal when all done" logic still counts it. The part-level and per-field `correct_answer`s are all stripped before the client (`stripSolution` in `questionService.ts`). Submit via `POST /api/attempts` with `field_answers: [{ key, value }]` (grading in `attemptService.ts`); `answer_given` carries a combined display string. Frontend: `MultiFieldInput` in `MultiPartQuestion.tsx`.
 
@@ -142,8 +102,7 @@ Questions can have a `parts JSONB` column — an array of per-part objects:
 
 A Socratic tutor that gives progressive hints (never the final answer) for the question being attempted. **The Gemini API key lives only on the backend** — the browser talks to `/api/chat`, never to Google.
 
-- **Proxy:** `routes/chat.ts` → `services/chatService.ts` → Gemini via `db/gemini.ts` (`@google/genai`, `gemini-2.5-flash`). Same layered pattern as the rest of the backend.
-- **Guardrails:** `buildSystemInstruction()` in `chatService.ts` injects the question + `parts` + reference `solution_latex` (server-side only, marked confidential) and instructs the model to give one small hint at a time, never the answer, and refuse off-topic/jailbreak attempts. Tune the prompt there.
+- **Proxy + guardrails:** `routes/chat.ts` → `services/chatService.ts` → Gemini (`db/gemini.ts`, `@google/genai`, `gemini-2.5-flash`). `buildSystemInstruction()` injects question + `parts` + confidential `solution_latex` (server-side only) and instructs one small hint at a time, never the answer, refusing off-topic/jailbreak. Tune the prompt there.
 - **Rate limiting (layered):** `express-rate-limit` (account-keyed via `middleware/rateLimit.ts`, `CHAT_RATE_LIMIT_PER_MIN`, default 15/min) → daily tier quota (`assertChatQuota`, free = 3 messages/day SGT, paid = unlimited) → per-user cooldown (`AI_CHAT_COOLDOWN_S`, default 5s) → shared Gemini gateway pacer (`config/aiLimits.ts`). `CHAT_MAX_MESSAGES_PER_QUESTION` (default 40) is a separate per-question cap → `ChatLimitError` → HTTP 429. See [Authentication & Tiers](#authentication--tiers).
 - **History resets every open, by design:** the conversation is scoped to a `thread_id` (migration `028_chat_thread_id.sql`) that `GET /api/chat` re-mints every time the client opens the chat for a question — mount, page refresh, new tab, or a different device all start a visually empty conversation, and Gemini only sees the current thread as context (`getThreadHistory()` in `chatService.ts`). Rows are **never deleted**: `chat_messages` (keyed by the internal `users.id` + `question_id` + `thread_id`) keeps every message ever sent, so the daily quota and the 40-message-per-question cap (both counted across all threads via `countMessagesForQuestion()`) can't be reset by reopening the chat. `correct_answer`/`solution_latex` are **never** returned to the client.
 - **Frontend:** `useChatSession` hook (optimistic send, rolls back on error) + `ChatPanel.tsx`. On `PracticePage` one shared chat instance renders as a sticky right rail on `lg` screens and inside the existing **Hints tab** on mobile (`hidden lg:flex` / `lg:hidden`). Model replies render through `renderLatex()`.
@@ -155,10 +114,8 @@ Students photograph **handwritten** working; Gemini grades it against the stored
 - **Pipeline:** `routes/grade.ts` → `services/gradingService.ts` → Gemini (`db/gemini.ts`). Images arrive as `multipart/form-data` (`multer`), sent to Gemini as base64 `inlineData`, and uploaded to the private `solution-uploads` bucket **only after** grading succeeds.
 - **Structured output** (`responseSchema`, deterministic): `{ gradable, rejection_reason, ignored_images[{index,reason}], parts[{label, verdict, marks_awarded, marks_total, errors[{step,description}], hints[], summary}], overall_feedback, transcription_latex }`.
 - **Editable transcription + re-grade:** Gemini also transcribes the handwriting verbatim into `transcription_latex`. The frontend `TranscriptionEditor` shows it as editable LaTeX (textarea + live `renderLatex()` preview) next to the feedback; if the scan was wrong the student edits it and re-grades via `POST /api/grade/text` → `gradeTranscription()` (text-only, no photos, `image_paths: []`). Both entry points share `runGrading()` in `gradingService.ts`; `buildGradingInstruction(question, mode)` swaps photo/text framing. **A typed re-grade is exempt from the 60s grade cooldown only when it is genuinely correcting a recent scan** — `isCorrectionOfRecentScan()` requires the user's newest `gradings` row for that question to be a *photo* grading (non-empty `image_paths`) less than `REGRADE_GRACE_MIN` (10) minutes old. So fixing characters Gemini mis-read is instant, but a second consecutive re-grade, a stale one, or a cold call to `/api/grade/text` is a fresh AI call and gets cooled. The exempt call still `stampGradeSlot()`s a fresh window behind itself, so the exemption is spent by the **attempt**, not by a successful grade: a *rejected* correction writes no `gradings` row (no quota) and would otherwise leave no cooldown either, letting junk LaTeX be resubmitted at the rate limiter's pace for the whole grace window. A re-grade always costs a scan against the daily quota, since it writes a `gradings` row. Exempting *every* typed grade — as this once did — made the route a standalone uncooled grader: it takes arbitrary LaTeX and is never tied to a prior grading (issue #56). The phone-upload flow grades on the phone but the editor/re-grade happens on the desktop (the desktop receives the full `GradeResponse` with `transcription_latex` over Socket.IO).
-- **Grading rules** (`buildGradingInstruction()`): credit valid alternative methods; sketches need labelled intercepts + asymptote equations + stationary points + correct shape; "hence" parts must use earlier results; auto-detect which part each photo covers; pin every error to the step. Confidential `solution_latex` injected for reference only.
-- **Junk filtering (STEP 0):** photos are numbered (`Photo N:`); blanks/objects/unrelated photos go in `ignored_images`. If nothing relevant remains → `gradable=false` → `GradingError` (HTTP 400 / `pair:error`) with no stored image, `gradings` row, or attempt. Frontend shows a soft `GRADE_REJECTED` (stay on the question to retake), not the global error screen.
-- **Persistence:** one `gradings` row per submission (images + feedback; future "mistake log" via `WHERE is_correct=false`) + one `attempts` row per graded part (correct = full marks) so streaks/progress/roadmap ✓ keep working.
-- **Limits/UI:** account-keyed `GRADE_RATE_LIMIT_PER_MIN` (5) + daily tier quota (`assertScanQuota`, free = 3 scans/day SGT) + per-user cooldown (`AI_GRADE_COOLDOWN_S`, 60s) + `GRADE_MAX_IMAGES` (5) + `GRADE_MAX_IMAGE_MB` (8). `PhotoAnswer.tsx` → `session.submitPhotos()` → `GradingResult.tsx`; `api.grade.*` uses `requestFormData`. Per-part `marks` is an optional `parts` JSONB field (AI infers when absent).
+- **Grading rules + junk filter:** `buildGradingInstruction()` — credit valid alternatives; sketches need labelled intercepts + asymptote equations + stationary points + shape; "hence" parts must use earlier results; auto-detect each photo's part; pin every error to the step; confidential `solution_latex` for reference only. STEP 0 numbers photos, routes blanks/objects/unrelated to `ignored_images`; nothing relevant → `gradable=false` → `GradingError` (HTTP 400 / `pair:error`) with no stored image/row/attempt, shown as a soft `GRADE_REJECTED` (retake, not the global error screen).
+- **Persistence + limits:** one `gradings` row per submission (future "mistake log" via `WHERE is_correct=false`) + one `attempts` row per graded part (streaks/progress/✓ keep working). Account-keyed `GRADE_RATE_LIMIT_PER_MIN` (5) + `assertScanQuota` (free 3/day SGT) + `AI_GRADE_COOLDOWN_S` (60s) + `GRADE_MAX_IMAGES` (5) + `GRADE_MAX_IMAGE_MB` (8). `PhotoAnswer.tsx` → `session.submitPhotos()` → `GradingResult.tsx`; per-part `marks` optional (AI infers when absent).
 
 ## Upload via Phone (QR pairing + Socket.IO)
 
@@ -179,31 +136,24 @@ Four classes of account/billing emails, sent via **Resend** (`db/resend.ts`, laz
 | 3 | PayNow expiry reminder | `jobs/payNowExpiryReminder.ts`, daily cron | Once/day for the last `PAYNOW_REMINDER_DAYS` (default 3) days before `access_expires_at` |
 | 4 | Transaction receipt | `services/billingService.ts` — `checkout.session.completed` (first PayNow/subscription payment) **and** `invoice.payment_succeeded` with `billing_reason === 'subscription_cycle'` (renewals) | Every successful charge |
 
-- **Once-ever / once-per-day flags live on `users`** (migration `029_email_tracking.sql`): `welcome_email_sent_at`, `first_purchase_email_sent_at` (TIMESTAMPTZ, null until sent), `last_expiry_reminder_sent_on` (DATE). Each send site uses a **conditional update as an atomic claim** — `UPDATE ... WHERE id = ? AND <flag> IS NULL` (or `< today` for the daily one) `.select('id')` — and only sends if the update actually matched a row. This is what prevents double-sends under concurrent requests (several API calls firing on first login) or Stripe's at-least-once webhook redelivery, without needing a lock.
-- **Receipt dedup on renewals:** Stripe fires `invoice.payment_succeeded` for a subscription's first invoice too (`billing_reason: 'subscription_create'`), which would double up with the `checkout.session.completed` receipt — the webhook handler only sends from that event when `billing_reason === 'subscription_cycle'` (a true renewal).
-- **PayNow vs card subscription:** the reminder job only ever queries `access_expires_at IS NOT NULL` — that column is exclusively set on the PayNow (one-time payment) path and is `null` for card subscriptions (see [Authentication & Tiers](#authentication--tiers)), so card subscribers never get this email.
-- **Failure handling:** `emailService.ts` catches and logs every send internally, returning `boolean` rather than throwing — a Resend outage must never break login, checkout, or the webhook response. Callers only persist the "sent" flag when the send actually succeeded, so a transient failure gets retried on the next opportunity instead of being silently marked done.
-- **Cron:** `node-cron`, registered in `index.ts` via `startPayNowExpiryReminderCron()`, runs daily at 09:00 `Asia/Singapore`. In-process (the backend is one long-running `http.Server`), not a separate worker.
-- **Setup:** requires `RESEND_API_KEY` + a Resend-verified sending domain for `EMAIL_FROM` — see `.planning/codebase/RUNBOOKS.md` for the walkthrough. `BUSINESS_NAME`/`BUSINESS_UEN`/`SUPPORT_EMAIL` are placeholders in `.env.example` — fill in real values before going live. The receipt is a best-effort simple receipt (reference, date, description, amount) and does **not** implement GST/IRAS tax-invoice formatting.
+- **Dedup flags on `users`** (migration `029`): `welcome_email_sent_at`, `first_purchase_email_sent_at` (TIMESTAMPTZ), `last_expiry_reminder_sent_on` (DATE). Each send site uses a **conditional update as an atomic claim** (`UPDATE … WHERE id=? AND <flag> IS NULL` / `< today`, `.select('id')`) and only sends if a row matched — prevents double-sends under concurrent first-login requests or Stripe's at-least-once redelivery, no lock needed. Renewal receipts only fire on `invoice.payment_succeeded` with `billing_reason === 'subscription_cycle'` (not the first `subscription_create` invoice, which the checkout receipt already covers).
+- **Failure handling:** `emailService.ts` catches/logs and returns `boolean` (never throws) — a Resend outage must never break login/checkout/webhook; the "sent" flag is persisted only on success, so transient failures retry next opportunity.
+- **Cron/setup:** `node-cron` in `index.ts` (`startPayNowExpiryReminderCron()`), daily 09:00 `Asia/Singapore`, in-process. Needs `RESEND_API_KEY` + a verified `EMAIL_FROM` domain (see RUNBOOKS); `BUSINESS_NAME`/`BUSINESS_UEN`/`SUPPORT_EMAIL` are `.env.example` placeholders. Receipt is best-effort (reference/date/description/amount), **not** GST/IRAS tax-invoice formatting.
 
 ## Frontend Architecture
 
 - **Routes:** `/` (roadmap + TopicDrawer), `/practice/:topicId`, `/history`, `/starred` (bookmarked questions), `/profile` (account, plan/billing, usage, streak heatmap + analytics; `/stats` redirects here)
 - **Session:** Firebase Authentication (`lib/firebase.ts`) — the signed-in user's ID token is attached to every API call (`lib/api.ts`). See [Authentication & Tiers](#authentication--tiers).
-- **Roadmap:** Pan/zoom tree layout. Node click → `TopicDrawer` (right panel, concepts + question list). Row click → `/practice/:topicId?question_id=<uuid>`.
-- **PracticePage:** `?question_id=` → `loadSpecific(id)`; otherwise `loadNext()`. Both idempotent — safe under StrictMode double-invoke. Never use a `firstLoad` ref. Has difficulty filter (Any/Easy/Medium/Hard), 3-tab layout (Question | Attempts | Hints), and a `StatsBar` showing session correct/total and streak count.
-- **Practice state machine:** `loading → answering → submitted → revealed → complete | error`
-- **Multi-part flow:** `question.parts != null` → `<MultiPartQuestion>` renders per-part boxes with inline ✓/✗; on all graded parts done → phase transitions to `revealed` and `<SolutionReveal>` appears.
-- **Stars:** Optimistic UI — flip locally, sync to server, revert on failure. `/starred` page lists all starred questions with latest attempt via `GET /api/stars/all`.
-- **Streaks:** `StreakNotification` modal fires once per day on first correct answer. `/profile` page shows current/best streak cards and a GitHub-style weekly heatmap (daily activity from `GET /api/streaks`).
-- **Account menu:** Header's "Your Account" dropdown (`AccountMenu.tsx`) replaces the old flat Sign-out button — **Profile** (→ `/profile`) and **Sign out**. `/profile` also surfaces email, member-since date, plan (Free/Premium) with days-left-to-renewal (`GET /api/billing/status`), a "Manage subscription" Stripe portal link, and today's AI usage (`useUsage()`).
+- **Roadmap:** Pan/zoom tree. Node click → `TopicDrawer` (concepts + question list); row click → `/practice/:topicId?question_id=<uuid>`.
+- **PracticePage:** `?question_id=` → `loadSpecific(id)`, else `loadNext()`. Both idempotent (safe under StrictMode double-invoke — never a `firstLoad` ref). Difficulty filter, 3-tab layout (Question/Attempts/Hints), `StatsBar`. State machine: `loading → answering → submitted → revealed → complete | error`.
+- **Multi-part flow:** `question.parts != null` → `<MultiPartQuestion>` per-part boxes with inline ✓/✗; all graded parts done → `revealed` + `<SolutionReveal>`.
+- **Stars:** optimistic (flip locally, revert on failure); `/starred` lists all via `GET /api/stars/all`. **Streaks:** `StreakNotification` fires once/day on first correct; `/profile` shows streak cards + GitHub-style heatmap (`GET /api/streaks`).
+- **Account menu:** `AccountMenu.tsx` "Your Account" dropdown → Profile / Sign out. `/profile` surfaces email, member-since, plan (Free/Premium) + days-left-to-renewal (`GET /api/billing/status`), Stripe portal link, and today's AI usage (`useUsage()`).
 
 ## Math Input (MathLive)
 
-- **`MathField.tsx`** — wraps `<math-field>`. Exposes `insert(latex)`, `getValue()`, `focus()`. Suppresses built-in keyboard and hamburger menu.
-- **`MathKeyboard.tsx`** — 10-group symbol panel. Use `onMouseDown` (not `onClick`) to avoid stealing focus. Template strings use `#?` placeholders; pass `selectionMode: 'placeholder'` to `mf.insert()`.
-- **Correct answer display:** raw LaTeX → `<Latex>` directly, not `renderLatex()`.
-- **MathLive compact notation:** `\frac34` (not `\frac{3}{4}`) for single-char numerator/denominator. `normalizeLaTeX()` in `answerChecker.ts` expands this automatically (unit-tested in `answerChecker.test.ts`; `npm test` in `backend/` runs vitest).
+- **`MathField.tsx`** wraps `<math-field>` (`insert(latex)`/`getValue()`/`focus()`, built-in keyboard+menu suppressed); **`MathKeyboard.tsx`** = 10-group panel — use `onMouseDown` (not `onClick`) to keep focus, `#?` placeholders + `selectionMode: 'placeholder'` on `mf.insert()`.
+- Correct answers render raw LaTeX via `<Latex>` (not `renderLatex()`). MathLive compact notation (`\frac34`) is expanded by `normalizeLaTeX()` in `answerChecker.ts` (unit-tested; `npm test` in `backend/` runs vitest).
 
 ## Key Conventions
 
@@ -217,15 +167,11 @@ Four classes of account/billing emails, sent via **Resend** (`db/resend.ts`, laz
 
 See **`skills.md`** for the full step-by-step workflow: reading PDFs from Google Drive, classifying parts, writing INSERT/UPDATE migrations, JSON escaping rules, and validating before running in Supabase.
 
-Quick reference for `answer_type`:
-- Text answer / proof / sketch → `null`
-- Algebraic / LaTeX → `"exact"`
-- Numerical with tolerance → `"range"`
-- Indefinite integrals → always `null` (too many equivalent forms)
+`answer_type` quick ref: text/proof/sketch & indefinite integrals → `null`; algebraic/LaTeX → `"exact"`; numerical-with-tolerance → `"range"`.
 
 ## Status
 
-**Built:** Full backend + frontend, Firebase Authentication with free/paid tiers, Stripe/PayNow subscription billing, per-tier usage quotas + per-user cooldowns + a shared Gemini gateway pacer for all AI calls, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC + 22 DHS + 23 HCI + 24 ACJC + 22 CJC Prelim 2025 questions (Papers 1 & 2 each), streak system with daily heatmap, profile page (/profile — account, plan/billing incl. days-left-to-renewal, usage, streak heatmap, per-topic accuracy; /stats redirects here) with a "Your Account" header dropdown (Profile/Sign out), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question, history persists per signed-in account), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow, ignores irrelevant/blank photos), "upload via phone" QR pairing with live Socket.IO photo transfer, model solution graphs for every sketch question (44 parts incl. scatter/Argand/normal/parametric; migrations 024+027), review system (corrections/weak-topics/speed-drills/spaced-repetition + AI weakness diagnosis + AI study plan), transactional emails via Resend (welcome/induction, first-purchase congrats, PayNow expiry reminder cron, transaction receipts incl. renewals).
+**Built:** Full backend + frontend, Firebase Authentication with free/paid tiers, Stripe/PayNow subscription billing, per-tier usage quotas + per-user cooldowns + a shared Gemini gateway pacer for all AI calls, roadmap with pan/zoom, practice session with multi-part support, MathLive keyboard, star system, history, 24-topic syllabus, 21 ASRJC + 22 DHS + 23 HCI + 24 ACJC + 22 CJC + 21 RI + 24 YIJC Prelim 2025 questions (Papers 1 & 2 each), streak system with daily heatmap, profile page (/profile — account, plan/billing incl. days-left-to-renewal, usage, streak heatmap, per-topic accuracy; /stats redirects here) with a "Your Account" header dropdown (Profile/Sign out), starred questions page (/starred), AI hint chatbot (Gemini proxy, Socratic hints beside the question, history persists per signed-in account), photo-based AI grading of handwritten solutions (Gemini vision, primary answer flow, ignores irrelevant/blank photos), "upload via phone" QR pairing with live Socket.IO photo transfer, model solution graphs for every sketch question (44 parts incl. scatter/Argand/normal/parametric; migrations 024+027), review system (corrections/weak-topics/speed-drills/spaced-repetition + AI weakness diagnosis + AI study plan), transactional emails via Resend (welcome/induction, first-purchase congrats, PayNow expiry reminder cron, transaction receipts incl. renewals).
 
 **Not built:** Timed mock mode, admin question editor, "mistake log" page (data already captured in `gradings`).
 
@@ -235,32 +181,18 @@ Quick reference for `answer_type`:
 |---|---|
 | `permission denied for table X` | Run `GRANT ALL` after `CREATE TABLE` |
 | Drawer click loads wrong question | Use `loadSpecific()` not `loadNext()` — StrictMode fires effects twice |
-| Backend crashes on start | `.env` missing — copy `.env.example` |
-| `tsx`/`vite: command not found` | `npm run setup` from project root |
-| Math keyboard steals focus | `onMouseDown` + `e.preventDefault()` on keyboard buttons |
-| Cursor after fraction, not inside | Pass `selectionMode: 'placeholder'` to `mf.insert()` and use `#?` |
+| Backend crashes on start (missing env) | Copy `.env.example`. Named errors: `Missing GEMINI_API_KEY`; `Missing Firebase Admin env vars` (`FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` — `\n` in the private key stays literal, `db/firebase.ts` unescapes). `tsx`/`vite: command not found` → `npm run setup` |
+| Math keyboard steals focus / cursor lands after fraction | `onMouseDown` + `e.preventDefault()` on keys; pass `selectionMode: 'placeholder'` to `mf.insert()` and use `#?` |
 | `syntax error at or near "\"` in Supabase | Unescaped `'` in SQL — use `$$...$$` dollar-quoting instead |
-| Part answer not grading | `answer_type` must be non-null and `correct_answer` non-null on the part |
-| Solution not revealing after last part | Run migration 008 — `part_label` column missing from attempts |
-| `null value in column "answer_type" violates not-null constraint` | The **question-level** `answer_type` column is `NOT NULL`. For an ungraded single-task question, do **not** insert it as a no-parts row with `answer_type = null`. Instead wrap it as a multi-part question with **one `null` part** (the ask) and give the question row a non-null fallback `'exact', ''` (parts override it). Only the per-part `answer_type` may be `null`. |
-| Backend crashes: `Missing GEMINI_API_KEY` | Add `GEMINI_API_KEY` to `backend/.env` (see `.env.example`) |
-| Backend crashes: `Missing Firebase Admin env vars` | Add `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` to `backend/.env` (service account JSON — `\n` in the private key must stay literal, `db/firebase.ts` unescapes it) |
+| Part answer not grading / solution not revealing after last part | Part needs non-null `answer_type` + `correct_answer`; run migration 008 if `part_label` missing from attempts |
+| `null value in column "answer_type" violates not-null constraint` | The **question-level** `answer_type` column is `NOT NULL`. For an ungraded single-task question, wrap it as a multi-part question with **one `null` part** (the ask) and give the question row a non-null fallback `'exact', ''` (parts override it). Only the per-part `answer_type` may be `null`. |
 | `401 Authentication required` / `Invalid or expired token` | No `Authorization: Bearer` header, or an expired Firebase ID token — check the frontend is signed in and `lib/api.ts` is attaching `auth.currentUser.getIdToken()` |
 | `402 Subscription required` | Route is gated `paid`-only in `config/featureTiers.ts` for a free-tier user — check `FEATURE_TIERS`/`req.user.tier` |
 | One user's requests rate-limit everybody else | `req.ip` is the proxy's address — `app.set('trust proxy', …)` is missing or too low, so every caller shares one bucket. Tell-tale: `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` in the logs (express-rate-limit logs its validations rather than throwing). Note the AI routes are account-keyed and immune; only `routes/feedback.ts` still depends on `req.ip` (issue #55) |
 | A custom `keyGenerator` throws `ERR_ERL_KEY_GEN_IPV6` | express-rate-limit greps the key generator's **source text** for `req.ip` without `ipKeyGenerator`. Call `ipKeyGenerator()` inline in that same function — putting it in a helper the generator calls will not satisfy the check |
-| Chat returns `permission denied for table chat_messages` | Run migration 011 incl. its `GRANT ALL` |
-| Grading returns `permission denied for table gradings` | Run migration 013 incl. its `GRANT ALL` |
+| Chat/grading/stripe `permission denied for table …` | Run that table's migration incl. its `GRANT ALL` (011 chat, 013 gradings+`solution-uploads` bucket, 030 stripe_events) |
 | "Re-grade waited 60s even though I only fixed a typo" | The exemption is one correction per photo scan: `isCorrectionOfRecentScan()` needs the newest `gradings` row for that question to be a photo grading under `REGRADE_GRACE_MIN` old. A second consecutive re-grade is a fresh AI call and gets cooled — by design (issue #56) |
-| Grading: `Bucket not found` / upload fails | Run migration 013 (creates the `solution-uploads` bucket) |
-| QR code opens but phone can't reach it | Open the desktop via the machine's LAN IP, not `localhost` (Vite `server.host: true`) |
-| Phone photos don't appear on desktop | `/socket.io` ws proxy missing from `vite.config.ts`, or backend not on `http.Server`+Socket.IO |
-| `<em>`/`<b>` text renders with a large, uneven gap on both sides | The tag is a **direct child of a `display:flex; gap:...` container** mixed inline with plain text (e.g. a checklist `<li>` with a checkmark `<span>` + raw text). Flexbox blockifies every in-flow child including inline ones, so the emphasis tag becomes its own flex item and the `gap` gets inserted around it. Fix: wrap the whole text run in one `<span>` so the tag nests inside normal inline flow instead of sitting as a flex sibling (see `LandingPage.tsx`'s checklist `<li>`s) |
-| Italic (`<em>`) text looks oddly cramped or spaced next to the following word | The Google Fonts `<link>` in `index.html` didn't request the `ital` axis for that family, so the browser fakes italics by skewing the upright glyphs (no real italic file loaded — check via `document.fonts`, look for a `style: 'italic'` entry). Fix: add `ital,wght@0,...;1,...` to that family's Google Fonts URL |
-| Transactional emails silently not sending (no crash) | Missing `RESEND_API_KEY`, or `EMAIL_FROM`'s domain isn't verified in the Resend dashboard yet — check backend logs for `Failed to send email "..."`, sending is intentionally best-effort and never throws (see [Transactional Emails](#transactional-emails)) |
-| PayNow expiry reminder never fires for a user | Only PayNow (one-time payment) users get it — `access_expires_at` is `null` for card subscriptions by design; also check `users.subscription_status = 'active'` and that the backend process has been running long enough to hit the 09:00 `Asia/Singapore` cron tick |
-| Renewal charge has no receipt email | Live/CLI webhook endpoint isn't subscribed to `invoice.payment_succeeded` — add it (Dashboard → Developers → Webhooks, or it's included automatically under `stripe listen` with no `--events` filter) |
-| Webhook returns `permission denied for table stripe_events` | Run migration 030 incl. its `GRANT ALL` — every webhook 500s until then |
-| Cancelled/past-due user keeps Premium for up to an hour | A tier read from `decoded['tier']` instead of the `users` row. Firebase ID tokens cache the claim for ~1h and `setCustomUserClaims` can't invalidate the issued ones — always derive tier via `deriveTier(row)` in `middleware/auth.ts`, and never read `tier`/`expires_at` claims in the frontend for anything but first paint (issue #54) |
-| One PayNow payment granted two billing periods | A `checkout.session.completed` replay ran the additive grant twice. Should be impossible post-migration-030; check `stripe_events` for the event id and that `claimEvent()` still runs before every side effect |
-| Webhook stuck retrying, event row sits at `'processing'` | The handler threw after claiming. It's re-claimable after `CLAIM_LEASE_MS` (5 min) — read the backend log for the real error; the 500 body is deliberately generic |
+| QR opens but phone can't reach it / photos don't appear | Open the desktop via the LAN IP not `localhost` (Vite `server.host: true`); ensure the `/socket.io` ws proxy is in `vite.config.ts` and the backend runs on `http.Server`+Socket.IO |
+| Transactional email silently not sending; or reminder/receipt never fires | Missing `RESEND_API_KEY` or unverified `EMAIL_FROM` domain (sending is best-effort, never throws — check logs for `Failed to send email`). PayNow reminder is PayNow-only (`access_expires_at` null for card subs). Renewal receipt needs the webhook subscribed to `invoice.payment_succeeded` |
+| Cancelled/past-due user keeps Premium for up to an hour | A tier read from `decoded['tier']` instead of the `users` row — ID tokens cache the claim ~1h. Always derive tier via `deriveTier(row)`; never read `tier`/`expires_at` claims in the frontend beyond first paint (issue #54) |
+| One PayNow payment granted two billing periods | A `checkout.session.completed` replay ran the additive grant twice. Should be impossible post-030; check `stripe_events` and that `claimEvent()` runs before every side effect. Event stuck at `'processing'` = handler threw after claiming; re-claimable after `CLAIM_LEASE_MS` (5 min) |
