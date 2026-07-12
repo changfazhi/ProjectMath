@@ -1,6 +1,7 @@
 import type { QuestionPublic } from '../../types/api'
 import { Card } from '../ui/Card'
 import { QuestionHeader } from './QuestionHeader'
+import { SolutionGraph } from './SolutionGraph'
 import { renderLatex } from '../../lib/renderLatex'
 
 interface Props {
@@ -14,6 +15,11 @@ export function QuestionCard({ question }: Props) {
       {question.prompt_latex && (
         <div className="text-lg leading-relaxed text-slate-800 dark:text-slate-100 whitespace-pre-line">
           {renderLatex(question.prompt_latex)}
+        </div>
+      )}
+      {question.prompt_graph && (
+        <div className="mt-4">
+          <SolutionGraph graph={question.prompt_graph} />
         </div>
       )}
     </Card>

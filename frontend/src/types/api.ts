@@ -80,6 +80,9 @@ export interface QuestionPublic {
   marks: number
   source: string | null
   created_at: string
+  // Given diagram shown in the prompt (compiled server-side) — present only on
+  // questions that reference a diagram; renders via <SolutionGraph>.
+  prompt_graph?: SolutionGraphRender | null
 }
 
 export interface QuestionWithStatus extends QuestionPublic {
