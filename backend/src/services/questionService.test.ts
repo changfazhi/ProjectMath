@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { stripSolution } from './questionService.js';
 import type { Question } from '../types/index.js';
+
+// questionService.ts imports db/supabase.ts, which throws at import time when
+// SUPABASE_URL/SERVICE_ROLE_KEY are absent (as in CI). stripSolution never uses
+// the client, so an empty stub is enough to let the module load. Matches the
+// vi.mock('../db/supabase.js') pattern used by the other service tests.
+vi.mock('../db/supabase.js', () => ({ supabase: {} }));
 
 // A minimal question carrying a prompt_graph (given diagram) — mirrors the EJC
 // Q4 shape: a question-level spec that must be compiled and served publicly.
