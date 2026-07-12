@@ -141,11 +141,16 @@ export interface Question {
   marks: number;
   source: string | null;
   created_at: string;
+  // Given diagram rendered in the PROMPT (before any attempt) — not secret,
+  // unlike parts[].solution_graph. Compiled to a render before reaching the client.
+  prompt_graph?: SolutionGraphSpec | null;
 }
 
-// Question shape returned to client — solution and answers omitted until after attempt
-export type QuestionPublic = Omit<Question, 'correct_answer' | 'solution_latex' | 'parts'> & {
+// Question shape returned to client — solution and answers omitted until after attempt.
+// The raw prompt_graph spec is replaced by its compiled, expression-free render.
+export type QuestionPublic = Omit<Question, 'correct_answer' | 'solution_latex' | 'parts' | 'prompt_graph'> & {
   parts: QuestionPartPublic[] | null;
+  prompt_graph?: SolutionGraphRender | null;
 };
 
 // Question with per-session attempt status, returned from the topic question list endpoint

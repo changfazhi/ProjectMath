@@ -323,6 +323,8 @@ GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
 
 Pipeline recap: the spec lives at `parts[i].solution_graph` (JSONB), is compiled server-side by `graphService.compileGraph()` into expression-free polylines, stripped from public payloads, and served only via `GET /api/questions/:id/solution` as `graphs[]`, rendered by `SolutionGraph.tsx`. Reference migrations: **024** (basic curves) and **027** (every feature below, 40 worked examples with notes).
 
+**GIVEN diagrams (prompt-side) — `prompt_graph`.** When a prompt says "the diagram shows …" but ships no image, the question is impossible to attempt. Add a **question-level** `prompt_graph` (same spec format; column added in migration `061`) — it is compiled by the same `compileGraph()` but attached to the **public** payload (in `stripSolution`) and rendered **in the prompt before any attempt**, since it is given information, not a hidden answer. Reference migrations: **062** (exam papers) and **063** (CJC tutorials). Rules: (a) if the question also has a *solution* sketch built on a stand-in `f`, the given diagram **must reuse that exact stand-in** so the shown curve matches the model answer; (b) geometry/3D figures (squares, circular-track schematics, inscribed Riemann discs) are drawn with `segments[]` + parametric `curves`; (c) validate every spec through `compileGraph()` before shipping, exactly as for `solution_graph`.
+
 ### Spec format
 
 ```json

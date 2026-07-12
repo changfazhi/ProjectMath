@@ -295,6 +295,11 @@ export function PracticePage() {
                     {renderLatex(q.prompt_latex)}
                   </div>
                 )}
+                {q.prompt_graph && (
+                  <div className="mt-4">
+                    <SolutionGraph graph={q.prompt_graph} />
+                  </div>
+                )}
                 {/* Photo mode: list the parts read-only so the student knows what to attempt */}
                 {inputMode === 'photo' && q.parts && (
                   <div className="mt-4 flex flex-col gap-3">

@@ -1,10 +1,22 @@
 import { supabase } from '../db/supabase.js';
+import { compileGraph } from './graphService.js';
 import type { AttemptStatus, Difficulty, Question, QuestionPublic, QuestionWithStatus } from '../types/index.js';
 
-function stripSolution(q: Question): QuestionPublic {
-  const { correct_answer: _ca, solution_latex: _sl, parts, ...pub } = q;
+export function stripSolution(q: Question): QuestionPublic {
+  const { correct_answer: _ca, solution_latex: _sl, parts, prompt_graph, ...pub } = q;
+  // The given diagram is compiled to an expression-free render for the client;
+  // a malformed spec is dropped (null) rather than failing the whole question.
+  let promptGraph: QuestionPublic['prompt_graph'] = null;
+  if (prompt_graph) {
+    try {
+      promptGraph = compileGraph('', prompt_graph);
+    } catch {
+      promptGraph = null;
+    }
+  }
   return {
     ...pub,
+    prompt_graph: promptGraph,
     parts:
       parts?.map(({ correct_answer: _pca, answers, solution_graph: _sg, ...rest }) => ({
         ...rest,
