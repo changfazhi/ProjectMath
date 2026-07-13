@@ -67,6 +67,7 @@ gcloud run deploy math-trainer \
   --max-instances=1 \
   --min-instances=1 \
   --session-affinity \
+  --no-cpu-throttling \
   --timeout=3600 \
   --concurrency=250 \
   --memory=512Mi \
@@ -87,8 +88,17 @@ gcloud run services update math-trainer --region asia-southeast1 \
 > ⚠️ **Never raise `--max-instances` above 1.** Phone-upload pairing and rate limiting keep
 > state in memory; a second instance breaks them silently. See `.planning/DEPLOYMENT.md`.
 
-> 💰 `--min-instances=1` keeps one instance always warm (~US$10–15/mo, avoids cold starts).
-> While you're just testing, you can use `--min-instances=0` and accept a few seconds' cold start.
+> ⚠️ **`--no-cpu-throttling` is load-bearing, not an optimization.** By default Cloud Run
+> allocates CPU only while a request is in flight — between requests the instance is frozen,
+> so the in-process `node-cron` job (the 09:00 SGT PayNow expiry-reminder email) would simply
+> never fire on an idle instance, and the pairing-expiry timers would drift. This flag keeps
+> CPU allocated for the instance's whole lifetime.
+
+> 💰 `--min-instances=1` keeps one instance always warm and avoids cold starts. Combined with
+> `--no-cpu-throttling` this bills the instance continuously (roughly US$15–25/mo for this size)
+> rather than per-request. While you're just testing, you can use `--min-instances=0` and accept
+> a few seconds' cold start — but know that at zero instances the daily reminder cron only runs
+> if traffic happens to keep an instance alive at 09:00 SGT.
 
 ---
 
