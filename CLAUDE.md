@@ -87,7 +87,7 @@ All endpoints below require `Authorization: Bearer <firebase-id-token>` **except
 | GET | `/api/topics` `/:id` `/:id/concepts` | *(public)* list / single / prerequisite concepts |
 | GET | `/api/topics/progress` `/accuracy` | Per-topic completion & accuracy stats |
 | GET | `/api/topics/:id/questions` `/:id/next?difficulty=N` | Questions w/ attempt status; next unanswered |
-| GET | `/api/questions/:id` `/:id/solution` | *(public)* question (no answer); solution + compiled `graphs[]` (served post-attempt) |
+| GET | `/api/questions/:id` `/:id/solution` | Question (no answer); solution + compiled `graphs[]` (Solution tab, on demand). Auth required since the pre-deploy hardening — unauthenticated, the predictable id patterns made the whole bank scrapable |
 | POST/GET | `/api/attempts` | Submit answer → `{ is_correct, correct_answer, solution_latex }`; GET history (`?question_id`) |
 | POST/GET | `/api/stars` `/stars/all` | Toggle star; per-topic (`?topic_id`) or all-with-latest-attempt |
 | GET | `/api/streaks` | Streak stats + daily heatmap |

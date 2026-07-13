@@ -39,8 +39,9 @@ router.get('/:topicId/next', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/questions/:id/solution
-router.get('/:id/solution', async (req, res) => {
+// GET /api/questions/:id/solution — requires auth: solutions are the product; without this,
+// anyone could scrape the whole bank's model answers by iterating the predictable id patterns.
+router.get('/:id/solution', requireAuth, async (req, res) => {
   try {
     const question = await getQuestionWithSolution(req.params.id);
     if (!question) {
@@ -64,8 +65,9 @@ router.get('/:id/solution', async (req, res) => {
   }
 });
 
-// GET /api/questions/:id
-router.get('/:id', async (req, res) => {
+// GET /api/questions/:id — requires auth (same scraping surface as /solution; the answer is
+// stripped by stripSolution but prompts/parts are still the question bank).
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const question = await getQuestionById(req.params.id);
     if (!question) {
