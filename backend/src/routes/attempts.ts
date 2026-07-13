@@ -6,11 +6,18 @@ import { sendServerError } from '../lib/httpErrors.js';
 
 const router = Router();
 
+// The length caps are a DoS guard, not a UX judgement: answers flow into mathjs `evaluate()`
+// (answerChecker.ts), and without a cap a signed-in user could post ~100KB expressions (the
+// express.json body limit) per request for cheap CPU burn. Real answers are tens of characters;
+// the caps are ~10x any legitimate submission.
 const submitSchema = z.object({
   question_id: z.string().uuid(),
-  part_label: z.string().min(1).optional(),
-  answer_given: z.string().min(1),
-  field_answers: z.array(z.object({ key: z.string(), value: z.string() })).optional(),
+  part_label: z.string().min(1).max(20).optional(),
+  answer_given: z.string().min(1).max(2000),
+  field_answers: z
+    .array(z.object({ key: z.string().max(50), value: z.string().max(1000) }))
+    .max(20)
+    .optional(),
   time_taken_s: z.number().int().positive().optional(),
 });
 

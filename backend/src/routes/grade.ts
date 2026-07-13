@@ -42,7 +42,9 @@ const bodySchema = z.object({
 
 const textBodySchema = z.object({
   question_id: z.string().uuid(),
-  transcription_latex: z.string().min(1),
+  // Capped because this is user-editable text sent verbatim to Gemini (token cost) and stored.
+  // A full multi-page transcription runs a few thousand characters; 20k is ~10x headroom.
+  transcription_latex: z.string().min(1).max(20_000),
   time_taken_s: z.coerce.number().int().positive().optional(),
 });
 
