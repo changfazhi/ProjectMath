@@ -45,3 +45,27 @@ export function accountRateLimit(opts: { limit: number; message: string }): Requ
     keyGenerator: accountKey,
   });
 }
+
+/**
+ * Backstop limiter for the whole /api surface, mounted before any route in index.ts.
+ *
+ * It runs before auth, so `accountKey` resolves to the client IP on almost every request — that
+ * is the point: it caps what any single machine can do to routes that have no limiter of their
+ * own (topics, questions, attempts, stars, …), which otherwise allow unbounded scraping and DB
+ * hammering. The default is deliberately generous (a whole classroom behind one school NAT must
+ * never feel it); the per-route account-keyed limiters remain the tight guard on the AI routes.
+ *
+ * The Stripe webhook is exempt: its caller is Stripe, not a user, it authenticates by signature,
+ * and a 429 would count as a failed delivery and trigger pointless retries.
+ */
+export function globalRateLimit(): RequestHandler {
+  return rateLimit({
+    windowMs: 60_000,
+    limit: Number(process.env.GLOBAL_RATE_LIMIT_PER_MIN ?? 600),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests — please slow down a moment.' },
+    keyGenerator: accountKey,
+    skip: (req) => req.originalUrl.split('?')[0] === '/api/billing/webhook',
+  });
+}

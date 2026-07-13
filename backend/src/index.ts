@@ -17,6 +17,7 @@ import usageRouter from './routes/usage.js';
 import meRouter from './routes/me.js';
 import billingRouter from './routes/billing.js';
 import feedbackRouter from './routes/feedback.js';
+import { globalRateLimit } from './middleware/rateLimit.js';
 import { initRealtime } from './realtime.js';
 import { startPayNowExpiryReminderCron } from './jobs/payNowExpiryReminder.js';
 
@@ -35,6 +36,10 @@ app.use(cors({
     ? (process.env.CORS_ORIGIN ?? 'https://yourproductiondomain.com')
     : 'http://localhost:5173',
 }));
+
+// Backstop limiter over the whole API (IP-keyed — it runs before auth). Generous by design;
+// the tight, account-keyed limits stay on the AI routes. Skips the Stripe webhook internally.
+app.use('/api', globalRateLimit());
 
 // Billing router mounts BEFORE express.json() so the webhook route can receive raw body
 // for Stripe signature verification. Non-webhook billing routes apply express.json() themselves.
