@@ -22,7 +22,9 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$(a) \(\dfrac{1+z}{1-z}=\dfrac{1+\frac{2+i}{3-i}}{1-\frac{2+i}{3-i}}=\dfrac{(3-i)+(2+i)}{(3-i)-(2+i)}=\dfrac{5}{1-2i}\cdot\dfrac{1+2i}{1+2i}=\dfrac{5(1+2i)}{5}=1+2i\). So \(\operatorname{Re}=1\) and \(\operatorname{Im}=2\). \\ (b) \(z+\dfrac{1}{z}=\dfrac{2+i}{3-i}+\dfrac{3-i}{2+i}=\dfrac{(2+i)^2+(3-i)^2}{(3-i)(2+i)}=\dfrac{(3+4i)+(8-6i)}{7+i}=\dfrac{11-2i}{7+i}\cdot\dfrac{7-i}{7-i}=\dfrac{75-25i}{50}=\dfrac{3}{2}-\dfrac{1}{2}i\). So \(\operatorname{Re}=\dfrac{3}{2}\) and \(\operatorname{Im}=-\dfrac{1}{2}\).$$,
+  $$(a) \(\dfrac{1+z}{1-z}=\dfrac{1+\frac{2+i}{3-i}}{1-\frac{2+i}{3-i}}=\dfrac{(3-i)+(2+i)}{(3-i)-(2+i)}=\dfrac{5}{1-2i}\cdot\dfrac{1+2i}{1+2i}=\dfrac{5(1+2i)}{5}=1+2i\). So \(\operatorname{Re}=1\) and \(\operatorname{Im}=2\).
+
+(b) \(z+\dfrac{1}{z}=\dfrac{2+i}{3-i}+\dfrac{3-i}{2+i}=\dfrac{(2+i)^2+(3-i)^2}{(3-i)(2+i)}=\dfrac{(3+4i)+(8-6i)}{7+i}=\dfrac{11-2i}{7+i}\cdot\dfrac{7-i}{7-i}=\dfrac{75-25i}{50}=\dfrac{3}{2}-\dfrac{1}{2}i\). So \(\operatorname{Re}=\dfrac{3}{2}\) and \(\operatorname{Im}=-\dfrac{1}{2}\).$$,
   6,
   'H2 Math Tutorial (Complex Numbers (Cartesian Form))',
   $$[
@@ -112,7 +114,9 @@ VALUES (
   'exact',
   $$$$,
   NULL,
-  $$(a) From \(iz+2w=1\): \(z=\dfrac{1-2w}{i}=-i+2iw\). Substituting into \(4z+(3-i)w^{*}=-6\) and writing \(w=a+bi\) gives \((3a-9b)+(7a-3b)i=-6+4i\), so \(3a-9b=-6\) and \(7a-3b=4\Rightarrow a=1,\ b=1\). Hence \(w=1+i\) and \(z=-i+2i(1+i)=-2+i\). \\ (b) From \(z=w+2i-1\), \(w=z-2i+1\); substituting into \(z^{2}-iw+\tfrac{5}{2}=0\) gives \(z^{2}-iz-i+\tfrac12=0\), so \(z=\dfrac{i\pm(1+2i)}{2}\). Hence \(z=\dfrac{1}{2}+\dfrac{3}{2}i,\ w=\dfrac{3}{2}-\dfrac{1}{2}i\), or \(z=-\dfrac{1}{2}-\dfrac{1}{2}i,\ w=\dfrac{1}{2}-\dfrac{5}{2}i\).$$,
+  $$(a) From \(iz+2w=1\): \(z=\dfrac{1-2w}{i}=-i+2iw\). Substituting into \(4z+(3-i)w^{*}=-6\) and writing \(w=a+bi\) gives \((3a-9b)+(7a-3b)i=-6+4i\), so \(3a-9b=-6\) and \(7a-3b=4\Rightarrow a=1,\ b=1\). Hence \(w=1+i\) and \(z=-i+2i(1+i)=-2+i\).
+
+(b) From \(z=w+2i-1\), \(w=z-2i+1\); substituting into \(z^{2}-iw+\tfrac{5}{2}=0\) gives \(z^{2}-iz-i+\tfrac12=0\), so \(z=\dfrac{i\pm(1+2i)}{2}\). Hence \(z=\dfrac{1}{2}+\dfrac{3}{2}i,\ w=\dfrac{3}{2}-\dfrac{1}{2}i\), or \(z=-\dfrac{1}{2}-\dfrac{1}{2}i,\ w=\dfrac{1}{2}-\dfrac{5}{2}i\).$$,
   6,
   'H2 Math Tutorial (Complex Numbers (Cartesian Form))',
   $$[
@@ -145,7 +149,9 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$\((1-4i)^{2}=1-8i+16i^{2}=-15-8i\). \\ Then \(\left(\dfrac{z}{2}+3\right)^{2}=15+8i=-(1-4i)^{2}=\big(i(1-4i)\big)^{2}=(4+i)^{2}\), so \(\dfrac{z}{2}+3=\pm(4+i)\Rightarrow\dfrac{z}{2}=1+i\) or \(-7-i\Rightarrow z=2+2i\) or \(z=-14-2i\).$$,
+  $$\((1-4i)^{2}=1-8i+16i^{2}=-15-8i\).
+
+Then \(\left(\dfrac{z}{2}+3\right)^{2}=15+8i=-(1-4i)^{2}=\big(i(1-4i)\big)^{2}=(4+i)^{2}\), so \(\dfrac{z}{2}+3=\pm(4+i)\Rightarrow\dfrac{z}{2}=1+i\) or \(-7-i\Rightarrow z=2+2i\) or \(z=-14-2i\).$$,
   5,
   'H2 Math Tutorial (Complex Numbers (Cartesian Form))',
   $$[
@@ -202,7 +208,13 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$(i) The conjugate-root theorem applies only when the coefficients are real. Here \(p\) is only stated to be a constant, so it need not be real; the statement is only correct if \(p\) is real. \\ (ii) Substituting \(z=1-2i\) into the equation and simplifying gives \(-5+p=0\), so \(p=5\). \\ (iii) With \(p=5\) the coefficients are real, so \(1+2i\) is also a root. Factorising, \(z^{4}-z^{3}+4z^{2}+3z+5=(z^{2}-2z+5)(z^{2}+z+1)\); solving \(z^{2}+z+1=0\) gives \(z=\dfrac{-1\pm\sqrt{3}\,i}{2}\). The other roots are \(1+2i,\ \dfrac{-1+\sqrt{3}\,i}{2},\ \dfrac{-1-\sqrt{3}\,i}{2}\). \\ (iv) Let \(z=iw\); then the equation becomes \(z^{4}-z^{3}+4z^{2}+3z+5=0\) with roots \(z=1\pm2i,\ \dfrac{-1\pm\sqrt{3}\,i}{2}\). Since \(w=\dfrac{z}{i}=-iz\), the roots of \(w\) are \(-i+2,\ -i-2,\ \dfrac{i+\sqrt{3}}{2},\ \dfrac{i-\sqrt{3}}{2}\).$$,
+  $$(i) The conjugate-root theorem applies only when the coefficients are real. Here \(p\) is only stated to be a constant, so it need not be real; the statement is only correct if \(p\) is real.
+
+(ii) Substituting \(z=1-2i\) into the equation and simplifying gives \(-5+p=0\), so \(p=5\).
+
+(iii) With \(p=5\) the coefficients are real, so \(1+2i\) is also a root. Factorising, \(z^{4}-z^{3}+4z^{2}+3z+5=(z^{2}-2z+5)(z^{2}+z+1)\); solving \(z^{2}+z+1=0\) gives \(z=\dfrac{-1\pm\sqrt{3}\,i}{2}\). The other roots are \(1+2i,\ \dfrac{-1+\sqrt{3}\,i}{2},\ \dfrac{-1-\sqrt{3}\,i}{2}\).
+
+(iv) Let \(z=iw\); then the equation becomes \(z^{4}-z^{3}+4z^{2}+3z+5=0\) with roots \(z=1\pm2i,\ \dfrac{-1\pm\sqrt{3}\,i}{2}\). Since \(w=\dfrac{z}{i}=-iz\), the roots of \(w\) are \(-i+2,\ -i-2,\ \dfrac{i+\sqrt{3}}{2},\ \dfrac{i-\sqrt{3}}{2}\).$$,
   8,
   'H2 Math Tutorial (Complex Numbers (Cartesian Form))',
   $$[
@@ -248,7 +260,9 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$(i) Writing \(w=a+bi\): \(kw(w+w^{*})+i(w-w^{*})-1=0\Rightarrow k(a+bi)(2a)+i(2bi)-1=0\Rightarrow(2ka^{2}-2b-1)+2kab\,i=0\). Comparing parts: \(2kab=0\), and since \(k\neq0\) this gives \(ab=0\), so \(a=0\) or \(b=0\); hence \(w\) is purely imaginary or purely real. The real part gives \(2ka^{2}-2b-1=0\Rightarrow b=\dfrac{2ka^{2}-1}{2}\). \\ (ii) Here \(k=2\). A real root has \(b=0\), so \(\dfrac{2(2)a^{2}-1}{2}=0\Rightarrow4a^{2}=1\Rightarrow a=\pm\dfrac{1}{2}\). Hence \(w=-\dfrac{1}{2}\) or \(w=\dfrac{1}{2}\).$$,
+  $$(i) Writing \(w=a+bi\): \(kw(w+w^{*})+i(w-w^{*})-1=0\Rightarrow k(a+bi)(2a)+i(2bi)-1=0\Rightarrow(2ka^{2}-2b-1)+2kab\,i=0\). Comparing parts: \(2kab=0\), and since \(k\neq0\) this gives \(ab=0\), so \(a=0\) or \(b=0\); hence \(w\) is purely imaginary or purely real. The real part gives \(2ka^{2}-2b-1=0\Rightarrow b=\dfrac{2ka^{2}-1}{2}\).
+
+(ii) Here \(k=2\). A real root has \(b=0\), so \(\dfrac{2(2)a^{2}-1}{2}=0\Rightarrow4a^{2}=1\Rightarrow a=\pm\dfrac{1}{2}\). Hence \(w=-\dfrac{1}{2}\) or \(w=\dfrac{1}{2}\).$$,
   7,
   'H2 Math Tutorial (Complex Numbers (Cartesian Form))',
   $$[
