@@ -112,7 +112,9 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$(a) The AP has \(a=1000\), \(d=-1.4\). For \(u_n<0\): \(1000+(n-1)(-1.4)<0\Rightarrow n>715.28\ldots\), so the first negative term is \(u_{716}=1000+715(-1.4)=-1\). The sum of the first \(20\) negative terms \(=\dfrac{20}{2}\big[2(-1)+19(-1.4)\big]=-286\). \\ (b) The GP has \(a=2\), \(r=\tfrac14\): \(S_n=\dfrac{2\left(1-(1/4)^n\right)}{1-\tfrac14}=\dfrac{8}{3}\left(1-\left(\tfrac14\right)^n\right)\). The sum of the next \(n\) terms is \(S_{2n}-S_n=\dfrac{8}{3}\left[\left(\tfrac14\right)^n-\left(\tfrac14\right)^{2n}\right]\). From GC, \(n=4\to0.0104>0.008\), \(n=5\to0.0026<0.008\); least \(n=5\).$$,
+  $$(a) The AP has \(a=1000\), \(d=-1.4\). For \(u_n<0\): \(1000+(n-1)(-1.4)<0\Rightarrow n>715.28\ldots\), so the first negative term is \(u_{716}=1000+715(-1.4)=-1\). The sum of the first \(20\) negative terms \(=\dfrac{20}{2}\big[2(-1)+19(-1.4)\big]=-286\).
+
+(b) The GP has \(a=2\), \(r=\tfrac14\): \(S_n=\dfrac{2\left(1-(1/4)^n\right)}{1-\tfrac14}=\dfrac{8}{3}\left(1-\left(\tfrac14\right)^n\right)\). The sum of the next \(n\) terms is \(S_{2n}-S_n=\dfrac{8}{3}\left[\left(\tfrac14\right)^n-\left(\tfrac14\right)^{2n}\right]\). From GC, \(n=4\to0.0104>0.008\), \(n=5\to0.0026<0.008\); least \(n=5\).$$,
   6,
   'H2 Math Tutorial (Arithmetic & Geometric Progressions)',
   $$[
@@ -145,7 +147,11 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$The series is geometric with \(a=1\) and \(r=e^{-x}\). A sum to infinity exists iff \(|e^{-x}|<1\Leftrightarrow e^{-x}<1\Leftrightarrow -x<0\Leftrightarrow x>0\) (shown). \\ When \(x=10\): \(S_n=\dfrac{1-e^{-10n}}{1-e^{-10}}\) and \(S=\dfrac{1}{1-e^{-10}}\). \\ Then \(S-S_n=\dfrac{e^{-10n}}{1-e^{-10}}<\dfrac{S}{10^{100}}=\dfrac{1}{10^{100}\left(1-e^{-10}\right)}\Rightarrow e^{-10n}<10^{-100}\Rightarrow 10n>100\ln 10\Rightarrow n>10\ln 10\) (shown).$$,
+  $$The series is geometric with \(a=1\) and \(r=e^{-x}\). A sum to infinity exists iff \(|e^{-x}|<1\Leftrightarrow e^{-x}<1\Leftrightarrow -x<0\Leftrightarrow x>0\) (shown).
+
+When \(x=10\): \(S_n=\dfrac{1-e^{-10n}}{1-e^{-10}}\) and \(S=\dfrac{1}{1-e^{-10}}\).
+
+Then \(S-S_n=\dfrac{e^{-10n}}{1-e^{-10}}<\dfrac{S}{10^{100}}=\dfrac{1}{10^{100}\left(1-e^{-10}\right)}\Rightarrow e^{-10n}<10^{-100}\Rightarrow 10n>100\ln 10\Rightarrow n>10\ln 10\) (shown).$$,
   7,
   'H2 Math Tutorial (Arithmetic & Geometric Progressions)',
   $$[
@@ -221,7 +227,9 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$Let the AP have first term \(a\) and common difference \(d\). The GP's first three terms are \(a+6d,\ a+2d,\ a\), so \(\dfrac{a+2d}{a+6d}=\dfrac{a}{a+2d}\Rightarrow a(a+6d)=(a+2d)^2\Rightarrow 4d^2-2ad=0\Rightarrow a=2d\) (since \(d\neq 0\)). The GP common ratio is \(r=\dfrac{a}{a+2d}=\dfrac{2d}{4d}=\tfrac12\), so \(|r|=\tfrac12<1\) and the series converges (shown). \\ With \(U_7=a+6d=3\) and \(a=2d\): \(8d=3\Rightarrow d=\tfrac38,\ a=\tfrac34\). Require \(\dfrac{n}{2}\big[2a+(n-1)d\big]-\dfrac{a(1-r^n)}{1-r}\ge 100\), i.e. \(\dfrac{3n}{16}(3+n)-6\left[1-\left(\tfrac12\right)^n\right]\ge 100\). From GC: \(n=22\to 97.1\), \(n=23\to 106.1\); smallest \(n=23\).$$,
+  $$Let the AP have first term \(a\) and common difference \(d\). The GP's first three terms are \(a+6d,\ a+2d,\ a\), so \(\dfrac{a+2d}{a+6d}=\dfrac{a}{a+2d}\Rightarrow a(a+6d)=(a+2d)^2\Rightarrow 4d^2-2ad=0\Rightarrow a=2d\) (since \(d\neq 0\)). The GP common ratio is \(r=\dfrac{a}{a+2d}=\dfrac{2d}{4d}=\tfrac12\), so \(|r|=\tfrac12<1\) and the series converges (shown).
+
+With \(U_7=a+6d=3\) and \(a=2d\): \(8d=3\Rightarrow d=\tfrac38,\ a=\tfrac34\). Require \(\dfrac{n}{2}\big[2a+(n-1)d\big]-\dfrac{a(1-r^n)}{1-r}\ge 100\), i.e. \(\dfrac{3n}{16}(3+n)-6\left[1-\left(\tfrac12\right)^n\right]\ge 100\). From GC: \(n=22\to 97.1\), \(n=23\to 106.1\); smallest \(n=23\).$$,
   7,
   'H2 Math Tutorial (Arithmetic & Geometric Progressions)',
   $$[
@@ -253,7 +261,9 @@ VALUES (
   'range',
   $$Total \(\approx 20973.6\) m; first on the 37th day$$,
   NULL,
-  $$Jogging forms a GP with \(a=200\), \(r=1.2\): day 4 is \(200(1.2^3)=345.6\) m and day 5 would exceed \(400\) m, so jogging is capped at \(400\) m for days 5–20. Total jogging \(=\dfrac{200(1.2^4-1)}{1.2-1}+400(16)=7473.6\) m. Swimming forms an AP with \(a=200\), \(d=50\): total \(=\dfrac{20}{2}\big[2(200)+19(50)\big]=13500\) m. Total distance after \(20\) days \(=7473.6+13500=20973.6\) m. \\ For a one-day total of \(2400\) m (jogging is \(400\) m from day 5), need swimming \(\ge 2000\): \(200+(n-1)50\ge 2000\Rightarrow n\ge 37\); first on the \(37\)th day.$$,
+  $$Jogging forms a GP with \(a=200\), \(r=1.2\): day 4 is \(200(1.2^3)=345.6\) m and day 5 would exceed \(400\) m, so jogging is capped at \(400\) m for days 5–20. Total jogging \(=\dfrac{200(1.2^4-1)}{1.2-1}+400(16)=7473.6\) m. Swimming forms an AP with \(a=200\), \(d=50\): total \(=\dfrac{20}{2}\big[2(200)+19(50)\big]=13500\) m. Total distance after \(20\) days \(=7473.6+13500=20973.6\) m.
+
+For a one-day total of \(2400\) m (jogging is \(400\) m from day 5), need swimming \(\ge 2000\): \(200+(n-1)50\ge 2000\Rightarrow n\ge 37\); first on the \(37\)th day.$$,
   8,
   'H2 Math Tutorial (Arithmetic & Geometric Progressions)',
   $$[
@@ -282,7 +292,11 @@ VALUES (
   'exact',
   $$See parts$$,
   NULL,
-  $$(a) The original \(\$10\) grows for \(24\) months to \(10(1.02)^{24}\), so the interest earned \(=10(1.02)^{24}-10\approx\$6.08\). \\ (b) The \(24\) deposits accumulate to \(10(1.02)^{24}+10(1.02)^{23}+\cdots+10(1.02)=10\cdot\dfrac{1.02(1.02^{24}-1)}{1.02-1}\approx\$310.30\). \\ (c) After \(n\) months, total \(=10\cdot\dfrac{1.02(1.02^{n}-1)}{0.02}>2000\Rightarrow 1.02(1.02^{n}-1)>4\Rightarrow n>80.4\ldots\); the total first exceeds \(\$2000\) after \(81\) complete months.$$,
+  $$(a) The original \(\$10\) grows for \(24\) months to \(10(1.02)^{24}\), so the interest earned \(=10(1.02)^{24}-10\approx\$6.08\).
+
+(b) The \(24\) deposits accumulate to \(10(1.02)^{24}+10(1.02)^{23}+\cdots+10(1.02)=10\cdot\dfrac{1.02(1.02^{24}-1)}{1.02-1}\approx\$310.30\).
+
+(c) After \(n\) months, total \(=10\cdot\dfrac{1.02(1.02^{n}-1)}{0.02}>2000\Rightarrow 1.02(1.02^{n}-1)>4\Rightarrow n>80.4\ldots\); the total first exceeds \(\$2000\) after \(81\) complete months.$$,
   8,
   'H2 Math Tutorial (Arithmetic & Geometric Progressions)',
   $$[
