@@ -125,8 +125,8 @@ If `parts` or `part_label` columns don't yet exist, write `NNN_schema.sql` first
 ```sql
 ALTER TABLE questions ADD COLUMN IF NOT EXISTS parts JSONB;
 ALTER TABLE attempts  ADD COLUMN IF NOT EXISTS part_label TEXT;
-GRANT ALL ON TABLE public.questions TO anon, authenticated, service_role;
-GRANT ALL ON TABLE public.attempts  TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.questions TO service_role;
+GRANT ALL ON TABLE public.attempts  TO service_role;
 ```
 
 ---
@@ -297,10 +297,11 @@ Also check for unescaped single quotes if any string literals use single-quoting
 
 ## 10. Run in Supabase
 
-Open the **Supabase SQL Editor** and run each migration file in order. After each `CREATE TABLE`, grant permissions:
+Open the **Supabase SQL Editor** and run each migration file in order. After each `CREATE TABLE`, grant permissions **to the service role only** and lock the table down (the backend is the sole DB client; `anon`/`authenticated` must get nothing — see migration `073_enable_rls.sql`):
 
 ```sql
-GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.<table> TO service_role;
+ALTER TABLE public.<table> ENABLE ROW LEVEL SECURITY;
 ```
 
 ---

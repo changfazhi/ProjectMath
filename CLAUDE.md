@@ -30,7 +30,7 @@ Run every file in `backend/supabase/migrations/` in numeric order in the Supabas
 
 **`prompt_graph` — GIVEN diagrams shown in the question prompt** (migrations `061`–`063`): a **question-level** column (`061` `ALTER TABLE questions ADD COLUMN prompt_graph JSONB`) using the *same* spec format as `solution_graph`, but rendered **in the prompt before any attempt** (it is given information, not a hidden answer). It is compiled by the same `compileGraph()` and attached to the **public** question payload in `stripSolution()` (`questionService.ts`) — a malformed spec drops to `null` rather than crashing. Used for questions that said "the diagram shows …" but shipped no image. `062` = exam papers (EJC P1 Q4 `y=f(2x)` reusing 060's stand-in, EJC P1 Q5 `y=1/x` Riemann rectangles, RI `e0250005`/`e0250010`, YIJC `f0250006` reusing 032's stand-in/`f0250012` ellipse, DHS `d025000a` inscribed discs, HCI `c0250005` tram schematic). `063` = CJC tutorials (`cc213002` reusing 042, `cc218002` +matching `f'` solution_graph/`cc218005`/`cc218006`, `cc21b00a`/`cc21b00b`, `cc219006` square). Abstract-`f` given diagrams reuse the exact stand-in of that question's solution sketch so the shown curve matches the model answer. `064` corrects EJC Q4 to show **both** branches of the `x=0` asymptote (given diagram + parts (a)/(b) sketches) — the stand-in `f(u)=2*((u-4)/u)^2` is defined for all `u≠0`, and part (c) `y=-f(|x|)` is exactly the trick of mirroring only the `x≥0` branch. Frontend renders it via the existing `<SolutionGraph>` in `QuestionCard.tsx` (single-part) and the multi-part stem block of `PracticePage.tsx`.
 
-**After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO anon, authenticated, service_role;`
+**After any `CREATE TABLE`:** `GRANT ALL ON TABLE public.<table> TO service_role;` then `ALTER TABLE public.<table> ENABLE ROW LEVEL SECURITY;` — never grant to `anon`/`authenticated` (the backend is the only DB client, via the service-role key which bypasses RLS; migration `073` revoked those grants everywhere and enabled RLS).
 
 ## Topic UUIDs (all H2)
 
@@ -196,7 +196,7 @@ See **`skills.md`** for the full step-by-step workflow: reading PDFs from Google
 
 | Problem | Fix |
 |---|---|
-| `permission denied for table X` | Run `GRANT ALL` after `CREATE TABLE` |
+| `permission denied for table X` | Run `GRANT ALL ON TABLE public.X TO service_role;` after `CREATE TABLE` (never to `anon`/`authenticated` — revoked + RLS enabled in migration 073) |
 | Drawer click loads wrong question | Use `loadSpecific()` not `loadNext()` — StrictMode fires effects twice |
 | Backend crashes on start (missing env) | Copy `.env.example`. Named errors: `Missing GEMINI_API_KEY`; `Missing Firebase Admin env vars` (`FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` — `\n` in the private key stays literal, `db/firebase.ts` unescapes). `tsx`/`vite: command not found` → `npm run setup` |
 | Math keyboard steals focus / cursor lands after fraction | `onMouseDown` + `e.preventDefault()` on keys; pass `selectionMode: 'placeholder'` to `mf.insert()` and use `#?` |
