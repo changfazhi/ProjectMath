@@ -100,7 +100,7 @@ export function HomePage() {
           </Link>
         </h1>
         <p className="mt-3 text-[#aab0d6] max-w-2xl">
-          A clear path through the whole syllabus — follow the nodes, unlock topics as you go,
+          A clear path through the whole syllabus. Follow the nodes, unlock topics as you go,
           and watch the map fill in.
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2">

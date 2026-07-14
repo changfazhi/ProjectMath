@@ -66,17 +66,16 @@ const MARKUP = `
       <!-- left -->
       <div>
         <div style="display:inline-flex;align-items:center;gap:9px;padding:7px 14px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;box-shadow:0 4px 14px -8px rgba(17,20,43,.25);font-weight:600;font-size:13.5px;color:#46496b">
-          <span style="width:8px;height:8px;border-radius:50%;background:#10b981"></span>
           Built for the Singapore A-Level H2 Mathematics (9758)
         </div>
         <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:60px;line-height:1.04;letter-spacing:-.025em;margin:22px 0 0">Master H2 Math,<br>one node at a time.</h1>
-        <p style="font-size:19px;line-height:1.55;color:#52567a;max-width:520px;margin:22px 0 0">A guided roadmap that takes you from graphing technique to conics &mdash; with an AI tutor that nudges you to the next step and an AI scanner that marks your working <em>and</em> your presentation.</p>
+        <p style="font-size:19px;line-height:1.55;color:#52567a;max-width:520px;margin:22px 0 0">A guided roadmap that takes you from graphing technique to conics, with an AI tutor that nudges you to the next step and an AI scanner that marks your working <em>and</em> your presentation.</p>
         <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:32px">
           <a href="/roadmap" class="pm-hov-cta" style="display:inline-flex;align-items:center;gap:9px;padding:15px 28px;border-radius:13px;background:var(--accent);color:#fff;font-weight:700;font-size:17px;box-shadow:0 12px 26px -8px var(--accent);transition:transform .15s,box-shadow .15s">Explore the roadmap &rarr;</a>
           <a href="#features" class="pm-hov-ghost" style="display:inline-flex;align-items:center;gap:9px;padding:15px 26px;border-radius:13px;background:#fff;border:1px solid #e1e4f0;color:#1f2342;font-weight:700;font-size:17px;transition:transform .15s,border-color .15s">See the AI tools</a>
         </div>
         <div style="margin-top:34px">
-          <div style="font-size:13px;color:#8a90ab;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Sourced from real 2025 JC Prelim &amp; A-Level papers</div>
+          <div style="font-size:13px;color:#8a90ab;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Sourced from real JC Prelim &amp; A-Level papers</div>
         </div>
       </div>
       <!-- right visual -->
@@ -99,9 +98,8 @@ const MARKUP = `
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
             <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px">&#10022;</div>
             <span style="font-weight:700;font-size:13px">AI Tutor</span>
-            <span style="margin-left:auto;width:7px;height:7px;border-radius:50%;background:#10b981"></span>
           </div>
-          <p style="font-size:13.5px;line-height:1.5;color:#3d4264;margin:0">Try completing the square first &mdash; what do you get for <b>f(x)</b>?</p>
+          <p style="font-size:13.5px;line-height:1.5;color:#3d4264;margin:0">Try completing the square first, then tell me what you get for <b>f(x)</b>.</p>
         </div>
         <!-- scan badge -->
         <div style="position:absolute;top:0;right:0;display:inline-flex;align-items:center;gap:9px;background:#11142b;color:#fff;border-radius:14px;padding:11px 15px;box-shadow:0 18px 36px -14px rgba(17,20,43,.6);animation:pm-floaty 7s ease-in-out infinite">
@@ -115,7 +113,7 @@ const MARKUP = `
   <!-- STATS -->
   <section style="background:#fff;border-bottom:1px solid #eef0f7">
     <div style="max-width:1180px;margin:0 auto;padding:34px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center">
-      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">200+</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">rigorously filtered problems</div></div>
+      <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">500+</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">rigorously filtered problems</div></div>
       <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">24</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">H2 topics covered</div></div>
       <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">9758</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">A-Level H2 syllabus</div></div>
       <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">100%</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">exam-grade questions</div></div>
@@ -219,7 +217,7 @@ const MARKUP = `
       <div>
         <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Spaced repetition</div>
         <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Remember the gotchas,<br>not just the topic.</h2>
-        <p style="font-size:18px;line-height:1.6;color:#52567a;max-width:520px;margin:18px 0 0">Getting a question right once isn't the same as remembering it in November. ProjectMath runs a proven <b>SM-2</b> spaced-repetition schedule: every question you slip on comes back at <b>expanding intervals</b> &mdash; just before you'd forget it &mdash; until the trick and the concept behind it are locked in.</p>
+        <p style="font-size:18px;line-height:1.6;color:#52567a;max-width:520px;margin:18px 0 0">Getting a question right once isn't the same as remembering it in November. ProjectMath runs a proven <b>SM-2</b> spaced-repetition schedule: every question you slip on comes back at <b>expanding intervals</b>, just before you'd forget it, until the trick and the concept behind it are locked in.</p>
         <ul style="list-style:none;padding:0;margin:26px 0 0;display:flex;flex-direction:column;gap:13px">
           <li style="display:flex;gap:11px;font-size:15.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Wrong answers are automatically queued for review</li>
           <li style="display:flex;gap:11px;font-size:15.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Each correct recall pushes the next review further out</li>
@@ -236,7 +234,7 @@ const MARKUP = `
           <div style="display:flex;flex-direction:column;gap:11px">
             <div style="display:flex;align-items:center;gap:13px;background:#fff;border:1px solid #ebedf6;border-radius:13px;padding:13px 15px">
               <div style="width:40px;height:40px;border-radius:11px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;font-size:15px">1d</div>
-              <div style="font-size:14.5px;color:#2c3050;font-weight:600">First recall &mdash; the day after you got it wrong</div>
+              <div style="font-size:14.5px;color:#2c3050;font-weight:600">First recall, the day after you got it wrong</div>
             </div>
             <div style="display:flex;align-items:center;gap:13px;background:#fff;border:1px solid #ebedf6;border-radius:13px;padding:13px 15px">
               <div style="width:40px;height:40px;border-radius:11px;background:#6366f1;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;font-size:15px">3d</div>
@@ -280,14 +278,14 @@ const MARKUP = `
           </div>
         </div>
         <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;gap:11px;align-items:flex-start;background:#fff5f5;border:1px solid #fad9d9;border-radius:12px;padding:12px 14px"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#ef4444;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">1</span><div style="font-size:13.5px;color:#7a1f1f;line-height:1.45"><b>Method error</b> &mdash; sign slip when differentiating; you wrote &minus;2x instead of +2x.</div></div>
-          <div style="display:flex;gap:11px;align-items:flex-start;background:#fffaf0;border:1px solid #f7e4bd;border-radius:12px;padding:12px 14px"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#f59e0b;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span><div style="font-size:13.5px;color:#7a5210;line-height:1.45"><b>Presentation</b> &mdash; state the domain before giving the range to secure the A1 mark.</div></div>
+          <div style="display:flex;gap:11px;align-items:flex-start;background:#fff5f5;border:1px solid #fad9d9;border-radius:12px;padding:12px 14px"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#ef4444;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">1</span><div style="font-size:13.5px;color:#7a1f1f;line-height:1.45"><b>Method error:</b> sign slip when differentiating; you wrote &minus;2x instead of +2x.</div></div>
+          <div style="display:flex;gap:11px;align-items:flex-start;background:#fffaf0;border:1px solid #f7e4bd;border-radius:12px;padding:12px 14px"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#f59e0b;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span><div style="font-size:13.5px;color:#7a5210;line-height:1.45"><b>Presentation:</b> state the domain before giving the range to secure the A1 mark.</div></div>
         </div>
       </div>
       <div>
         <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;background:#fff7ed;color:#c2410c;font-weight:700;font-size:13px">AI Scan</div>
         <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:1.12;letter-spacing:-.02em;margin:16px 0 0">Snap your working. Get it marked.</h3>
-        <p style="font-size:17px;line-height:1.6;color:#52567a;margin:16px 0 0">Take a photo of your handwritten solution and AI Scan checks it line by line &mdash; catching sign slips, lost method marks, and the presentation details examiners love to dock.</p>
+        <p style="font-size:17px;line-height:1.6;color:#52567a;margin:16px 0 0">Take a photo of your handwritten solution and AI Scan checks it line by line, catching sign slips, lost method marks, and the presentation details examiners love to dock.</p>
         <ul style="list-style:none;padding:0;margin:22px 0 0;display:flex;flex-direction:column;gap:13px">
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Spots method &amp; sign errors in your working</li>
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Flags presentation marks you'd otherwise lose</li>
@@ -303,12 +301,12 @@ const MARKUP = `
           <div style="display:flex;align-items:center;gap:9px;padding-bottom:13px;border-bottom:1px solid #f0f1f8">
             <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">&#10022;</div>
             <span style="font-weight:700;font-size:14.5px">AI Tutor</span>
-            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#10b981;font-weight:700"><span style="width:7px;height:7px;border-radius:50%;background:#10b981"></span>online</span>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#10b981;font-weight:700">online</span>
           </div>
           <div style="align-self:flex-end;max-width:78%;background:var(--accent);color:#fff;border-radius:16px 16px 4px 16px;padding:11px 15px;font-size:14.5px;line-height:1.5">I'm stuck finding the range of f(x) = x&sup2; &minus; 4x + 7.</div>
-          <div style="align-self:flex-start;max-width:82%;background:#f3f4fb;color:#2c3050;border-radius:16px 16px 16px 4px;padding:11px 15px;font-size:14.5px;line-height:1.5">Let's not jump to the answer. Try completing the square first &mdash; what's f(x) in the form (x &minus; a)&sup2; + b?</div>
+          <div style="align-self:flex-start;max-width:82%;background:#f3f4fb;color:#2c3050;border-radius:16px 16px 16px 4px;padding:11px 15px;font-size:14.5px;line-height:1.5">Let's not jump to the answer. Try completing the square first. What's f(x) in the form (x &minus; a)&sup2; + b?</div>
           <div style="align-self:flex-end;max-width:78%;background:var(--accent);color:#fff;border-radius:16px 16px 4px 16px;padding:11px 15px;font-size:14.5px;line-height:1.5">(x &minus; 2)&sup2; + 3</div>
-          <div style="align-self:flex-start;max-width:82%;background:#f3f4fb;color:#2c3050;border-radius:16px 16px 16px 4px;padding:11px 15px;font-size:14.5px;line-height:1.5">Exactly. Since (x &minus; 2)&sup2; &ge; 0, the smallest value is 3 &mdash; so the range is <b>[3, &infin;)</b>. &#10022;</div>
+          <div style="align-self:flex-start;max-width:82%;background:#f3f4fb;color:#2c3050;border-radius:16px 16px 16px 4px;padding:11px 15px;font-size:14.5px;line-height:1.5">Exactly. Since (x &minus; 2)&sup2; &ge; 0, the smallest value is 3, so the range is <b>[3, &infin;)</b>. &#10022;</div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:4px;border:1px solid #eaecf4;border-radius:12px;padding:9px 13px">
             <span style="font-size:14px;color:#a7adc8;flex:1">Ask a follow-up&hellip;</span>
             <span style="width:30px;height:30px;border-radius:9px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px">&uarr;</span>
@@ -317,12 +315,12 @@ const MARKUP = `
       </div>
       <div style="order:1">
         <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;font-size:13px">AI Tutor</div>
-        <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:1.12;letter-spacing:-.02em;margin:16px 0 0">Stuck? Get the next step &mdash; not the answer.</h3>
+        <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:1.12;letter-spacing:-.02em;margin:16px 0 0">Stuck? Get the next step, not the answer.</h3>
         <p style="font-size:17px;line-height:1.6;color:#52567a;margin:16px 0 0">Your AI tutor asks the right questions and walks you through the method, so you actually learn the technique instead of copying a solution.</p>
         <ul style="list-style:none;padding:0;margin:22px 0 0;display:flex;flex-direction:column;gap:13px">
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Socratic hints scaled to where you're stuck</li>
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Knows the H2 9758 syllabus &amp; notation</li>
-          <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Available 24/7 &mdash; the night before a test too</li>
+          <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Available 24/7, the night before a test too</li>
         </ul>
       </div>
     </div>
@@ -339,12 +337,12 @@ const MARKUP = `
         <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:26px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
           <div style="width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:22px">&#128221;</div>
           <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;margin:18px 0 8px">Straight from the exam</h3>
-          <p style="font-size:15px;line-height:1.6;color:#52567a;margin:0">Every question is taken from real A-Level and 2025 JC Prelim papers (9758) &mdash; the exact style and rigour you'll meet on the day.</p>
+          <p style="font-size:15px;line-height:1.6;color:#52567a;margin:0">Every question is taken from real A-Level and JC Prelim papers (9758), the exact style and rigour you'll meet on the day.</p>
         </div>
         <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:26px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
           <div style="width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:22px">&#10003;</div>
-          <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;margin:18px 0 8px">200+, hand-filtered</h3>
-          <p style="font-size:15px;line-height:1.6;color:#52567a;margin:0">A rigorously curated library &mdash; no filler, no AI-generated padding. If a problem doesn't teach something worth knowing, it doesn't make the cut.</p>
+          <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;margin:18px 0 8px">500+, hand-filtered</h3>
+          <p style="font-size:15px;line-height:1.6;color:#52567a;margin:0">A rigorously curated library, no filler, no AI-generated padding. If a problem doesn't teach something worth knowing, it doesn't make the cut.</p>
         </div>
         <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:26px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
           <div style="width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:22px">&#8635;</div>
@@ -412,7 +410,7 @@ const MARKUP = `
       <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:44px 44px;pointer-events:none"></div>
       <div style="position:relative">
         <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:46px;line-height:1.08;letter-spacing:-.02em;margin:0">Your H2 Math A starts<br>at the first node.</h2>
-        <p style="font-size:18px;color:#e6e6ff;margin:18px auto 0;max-width:520px">Work through 200+ exam-grade problems with an AI tutor and spaced review that makes them stick &mdash; free to start, no card needed.</p>
+        <p style="font-size:18px;color:#e6e6ff;margin:18px auto 0;max-width:520px">Work through 500+ exam-grade problems with an AI tutor and spaced review that makes them stick. Free to start, no card needed.</p>
         <a href="/roadmap" class="pm-hov-lift" style="display:inline-flex;align-items:center;gap:9px;margin-top:30px;padding:16px 34px;border-radius:14px;background:#fff;color:var(--accent-ink);font-weight:800;font-size:17px;transition:transform .15s">Start free today &rarr;</a>
       </div>
     </div>
@@ -420,7 +418,7 @@ const MARKUP = `
 
   <!-- FOOTER -->
   <footer style="background:#0b0e20;color:#aab0d6;padding:54px 24px 40px">
-    <div style="max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:32px">
+    <div style="max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1.6fr 1fr 1.2fr;gap:32px">
       <div>
         <div style="display:flex;align-items:center;gap:11px">
           <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;font-family:'Bricolage Grotesque',sans-serif">&#960;</div>
@@ -438,25 +436,18 @@ const MARKUP = `
         </div>
       </div>
       <div>
-        <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:14px">Topics</div>
-        <div style="display:flex;flex-direction:column;gap:10px;font-size:14px">
-          <a href="#roadmap" class="pm-hov-white">Graphing Technique</a>
-          <a href="#roadmap" class="pm-hov-white">Functions</a>
-          <a href="#roadmap" class="pm-hov-white">Transformation</a>
-          <a href="#roadmap" class="pm-hov-white">Inequalities &amp; Conics</a>
-        </div>
-      </div>
-      <div>
-        <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:14px">Company</div>
-        <div style="display:flex;flex-direction:column;gap:10px;font-size:14px">
-          <a href="#" class="pm-hov-white">About</a>
-          <a href="#" class="pm-hov-white">Contact</a>
-          <a href="#" class="pm-hov-white">Privacy</a>
-          <a href="#" class="pm-hov-white">Terms</a>
+        <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:14px">Business enquiries</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:14px">
+          <span style="line-height:1.6">For all enquiries, please contact:</span>
+          <a href="mailto:projectmath9999@gmail.com" class="pm-hov-white" style="color:#fff;font-weight:600">projectmath9999@gmail.com</a>
         </div>
       </div>
     </div>
-    <div style="max-width:1180px;margin:36px auto 0;padding-top:22px;border-top:1px solid #1c2140;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px;color:#6a6f99">
+    <div style="max-width:1180px;margin:36px auto 0;padding-top:22px;border-top:1px solid #1c2140">
+      <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:10px">Disclaimer</div>
+      <p style="font-size:12.5px;line-height:1.7;color:#6a6f99;margin:0">This website was created to help other students, and is provided as a tool without any malicious intent. While the creator has built this website and secured it to the best of their ability, they cannot guarantee that it will be available indefinitely, and they are not responsible for any server failures or malicious intent by others. Furthermore, the solutions and features are created to the best of the creator's ability. The creator reserves the right to modify this disclaimer at any time, and any changes will be effective immediately upon posting. Your continued use of this website after any changes to the disclaimer constitutes acceptance of those changes. If you do not agree to these terms, please do not use this website.</p>
+    </div>
+    <div style="max-width:1180px;margin:24px auto 0;padding-top:22px;border-top:1px solid #1c2140;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px;color:#6a6f99">
       <span>&copy; 2026 ProjectMath. All rights reserved.</span>
       <span>Made for Singapore JC students &#127480;&#127468;</span>
     </div>
