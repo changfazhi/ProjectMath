@@ -7,38 +7,78 @@
 -- Genuinely non-unique answers (indefinite integrals, DE general solutions, vector line/plane
 -- EQUATIONS, probability distributions, worded/justified answers) are deliberately LEFT null.
 -- Idempotent: each statement replaces the whole parts JSONB for the question with the final state.
+-- Vector of given magnitude and direction (cc21d001)
+-- Intersection of two cevians (cc21d00b)
+-- Perpendicularity, reflection and geometric meaning (cc21d008)
+-- Cross-product relation and possible values (cc21d00a)
+-- Intersection of two cevians (line method) (cc21e002)
+-- Angle between two diagonals of a cube (cc21e003)
+-- Equation involving z and its conjugate (cc241002)
+-- Simultaneous equations in complex numbers (cc241004)
+-- Real roots via real/imaginary comparison (cc241008)
+-- Modulus equation and cube roots on a circle (50250007)
+-- Hypothesis testing — one-tailed z-test and minimum sample size (cafe1012)
+-- Complex number — modulus, argument, Argand diagram, rhombus (cafe1006)
+-- Rational inequality & trigonometric application (cc215007)
+-- Inequality by substitution (cc215002)
+-- Modulus inequality with substitution (cc215005)
+-- Rational curve, asymptotes & no-real-roots (surd range) (cc211007)
+-- Rational curve, asymptotes & no-real-roots (cc211006)
+-- Determine a, b from asymptote & stationary point (cc211008)
+-- MCQ: knowing versus guessing (cc222007)
+-- Rational curve & modulus transformations (cc213005)
+-- Vector of given magnitude and direction (cc21d001)
+-- Intersection of two cevians (cc21d00b)
+-- Perpendicularity, reflection and geometric meaning (cc21d008)
+-- Cross-product relation and possible values (cc21d00a)
+-- Intersection of two cevians (line method) (cc21e002)
+-- Angle between two diagonals of a cube (cc21e003)
+-- Equation involving z and its conjugate (cc241002)
+-- Simultaneous equations in complex numbers (cc241004)
+-- Real roots via real/imaginary comparison (cc241008)
+-- Modulus equation and cube roots on a circle (50250007)
+-- Hypothesis testing — one-tailed z-test and minimum sample size (cafe1012)
+-- Complex number — modulus, argument, Argand diagram, rhombus (cafe1006)
+-- Rational inequality & trigonometric application (cc215007)
+-- Inequality by substitution (cc215002)
+-- Modulus inequality with substitution (cc215005)
+-- Rational curve, asymptotes & no-real-roots (surd range) (cc211007)
+-- Rational curve, asymptotes & no-real-roots (cc211006)
+-- Determine a, b from asymptote & stationary point (cc211008)
+-- MCQ: knowing versus guessing (cc222007)
+-- Rational curve & modulus transformations (cc213005)
 
 -- Vector of given magnitude and direction (cc21d001)
 UPDATE questions SET parts = $migr$[
   {
     "label": "a",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Find the vector \\(\\mathbf{p}\\).",
-    "correct_answer": "\\frac{12}{7}\\mathbf{i}-\\frac{18}{7}\\mathbf{j}+\\frac{36}{7}\\mathbf{k}",
     "answers": [
       {
         "key": "i",
-        "label": "\\mathbf{i}",
-        "correct_answer": "\\frac{12}{7}",
+        "label": "\\(\\mathbf{i}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "\\frac{12}{7}"
       },
       {
         "key": "j",
-        "label": "\\mathbf{j}",
-        "correct_answer": "-\\frac{18}{7}",
+        "label": "\\(\\mathbf{j}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "-\\frac{18}{7}"
       },
       {
         "key": "k",
-        "label": "\\mathbf{k}",
-        "correct_answer": "\\frac{36}{7}",
+        "label": "\\(\\mathbf{k}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "\\frac{36}{7}"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Find the vector \\(\\mathbf{p}\\).",
+    "correct_answer": "\\frac{12}{7}\\mathbf{i}-\\frac{18}{7}\\mathbf{j}+\\frac{36}{7}\\mathbf{k}"
   }
 ]$migr$::jsonb
 WHERE id = 'cc21d001-0000-0000-0000-000000000000';
@@ -47,26 +87,26 @@ WHERE id = 'cc21d001-0000-0000-0000-000000000000';
 UPDATE questions SET parts = $migr$[
   {
     "label": "a",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Find \\(\\overrightarrow{OE}\\) in terms of \\(\\mathbf{a}\\) and \\(\\mathbf{b}\\).",
-    "correct_answer": "\\frac{18}{23}\\mathbf{a}+\\frac{20}{23}\\mathbf{b}",
     "answers": [
       {
         "key": "a",
-        "label": "\\text{coeff. of }\\mathbf{a}",
-        "correct_answer": "\\frac{18}{23}",
+        "label": "\\(\\text{coeff. of }\\mathbf{a}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "\\frac{18}{23}"
       },
       {
         "key": "b",
-        "label": "\\text{coeff. of }\\mathbf{b}",
-        "correct_answer": "\\frac{20}{23}",
+        "label": "\\(\\text{coeff. of }\\mathbf{b}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "\\frac{20}{23}"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Find \\(\\overrightarrow{OE}\\) in terms of \\(\\mathbf{a}\\) and \\(\\mathbf{b}\\).",
+    "correct_answer": "\\frac{18}{23}\\mathbf{a}+\\frac{20}{23}\\mathbf{b}"
   }
 ]$migr$::jsonb
 WHERE id = 'cc21d00b-0000-0000-0000-000000000000';
@@ -82,26 +122,26 @@ UPDATE questions SET parts = $migr$[
   },
   {
     "label": "ii",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Determine the position vector of the point \\(D\\) in terms of \\(\\mathbf{a}\\) and \\(\\mathbf{b}\\), where \\(D\\) is the reflection of \\(O\\) about the line \\(AB\\).",
-    "correct_answer": "\\mathbf{a}+\\mathbf{b}",
     "answers": [
       {
         "key": "a",
-        "label": "\\text{coeff. of }\\mathbf{a}",
-        "correct_answer": "1",
+        "label": "\\(\\text{coeff. of }\\mathbf{a}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "1"
       },
       {
         "key": "b",
-        "label": "\\text{coeff. of }\\mathbf{b}",
-        "correct_answer": "1",
+        "label": "\\(\\text{coeff. of }\\mathbf{b}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "1"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Determine the position vector of the point \\(D\\) in terms of \\(\\mathbf{a}\\) and \\(\\mathbf{b}\\), where \\(D\\) is the reflection of \\(O\\) about the line \\(AB\\).",
+    "correct_answer": "\\mathbf{a}+\\mathbf{b}"
   },
   {
     "label": "iii",
@@ -136,26 +176,26 @@ WHERE id = 'cc21d00a-0000-0000-0000-000000000000';
 UPDATE questions SET parts = $migr$[
   {
     "label": "a",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Find \\(\\overrightarrow{OE}\\) in terms of \\(\\mathbf{a}\\) and \\(\\mathbf{b}\\).",
-    "correct_answer": "\\frac{18}{23}\\mathbf{a}+\\frac{20}{23}\\mathbf{b}",
     "answers": [
       {
         "key": "a",
-        "label": "\\text{coeff. of }\\mathbf{a}",
-        "correct_answer": "\\frac{18}{23}",
+        "label": "\\(\\text{coeff. of }\\mathbf{a}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "\\frac{18}{23}"
       },
       {
         "key": "b",
-        "label": "\\text{coeff. of }\\mathbf{b}",
-        "correct_answer": "\\frac{20}{23}",
+        "label": "\\(\\text{coeff. of }\\mathbf{b}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "\\frac{20}{23}"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Find \\(\\overrightarrow{OE}\\) in terms of \\(\\mathbf{a}\\) and \\(\\mathbf{b}\\).",
+    "correct_answer": "\\frac{18}{23}\\mathbf{a}+\\frac{20}{23}\\mathbf{b}"
   }
 ]$migr$::jsonb
 WHERE id = 'cc21e002-0000-0000-0000-000000000000';
@@ -164,63 +204,63 @@ WHERE id = 'cc21e002-0000-0000-0000-000000000000';
 UPDATE questions SET parts = $migr$[
   {
     "label": "a-i",
+    "answers": [
+      {
+        "key": "i",
+        "label": "\\(\\mathbf{i}\\)",
+        "tolerance": null,
+        "answer_type": "exact",
+        "correct_answer": "5"
+      },
+      {
+        "key": "j",
+        "label": "\\(\\mathbf{j}\\)",
+        "tolerance": null,
+        "answer_type": "exact",
+        "correct_answer": "5"
+      },
+      {
+        "key": "k",
+        "label": "\\(\\mathbf{k}\\)",
+        "tolerance": null,
+        "answer_type": "exact",
+        "correct_answer": "5"
+      }
+    ],
     "tolerance": null,
     "answer_type": "exact",
     "prompt_latex": "Find \\(\\overrightarrow{OF}\\) in terms of \\(\\mathbf{i}\\), \\(\\mathbf{j}\\) and \\(\\mathbf{k}\\).",
-    "correct_answer": "5\\mathbf{i}+5\\mathbf{j}+5\\mathbf{k}",
-    "answers": [
-      {
-        "key": "i",
-        "label": "\\mathbf{i}",
-        "correct_answer": "5",
-        "answer_type": "exact",
-        "tolerance": null
-      },
-      {
-        "key": "j",
-        "label": "\\mathbf{j}",
-        "correct_answer": "5",
-        "answer_type": "exact",
-        "tolerance": null
-      },
-      {
-        "key": "k",
-        "label": "\\mathbf{k}",
-        "correct_answer": "5",
-        "answer_type": "exact",
-        "tolerance": null
-      }
-    ]
+    "correct_answer": "5\\mathbf{i}+5\\mathbf{j}+5\\mathbf{k}"
   },
   {
     "label": "a-ii",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Find \\(\\overrightarrow{AG}\\) in terms of \\(\\mathbf{i}\\), \\(\\mathbf{j}\\) and \\(\\mathbf{k}\\).",
-    "correct_answer": "-5\\mathbf{i}+5\\mathbf{j}+5\\mathbf{k}",
     "answers": [
       {
         "key": "i",
-        "label": "\\mathbf{i}",
-        "correct_answer": "-5",
+        "label": "\\(\\mathbf{i}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "-5"
       },
       {
         "key": "j",
-        "label": "\\mathbf{j}",
-        "correct_answer": "5",
+        "label": "\\(\\mathbf{j}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "5"
       },
       {
         "key": "k",
-        "label": "\\mathbf{k}",
-        "correct_answer": "5",
+        "label": "\\(\\mathbf{k}\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "5"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Find \\(\\overrightarrow{AG}\\) in terms of \\(\\mathbf{i}\\), \\(\\mathbf{j}\\) and \\(\\mathbf{k}\\).",
+    "correct_answer": "-5\\mathbf{i}+5\\mathbf{j}+5\\mathbf{k}"
   },
   {
     "label": "b",
@@ -248,26 +288,26 @@ WHERE id = 'cc241002-0000-0000-0000-000000000000';
 UPDATE questions SET parts = $migr$[
   {
     "label": "a",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Solve the simultaneous equations \\(iz+2w=1\\) and \\(4z+(3-i)w^{*}=-6\\), giving \\(z\\) and \\(w\\) in the form \\(a+bi\\) where \\(a\\) and \\(b\\) are real.",
-    "correct_answer": "z=-2+\\mathrm{i},\\ w=1+\\mathrm{i}",
     "answers": [
       {
         "key": "z",
-        "label": "z",
-        "correct_answer": "-2+\\mathrm{i}",
+        "label": "\\(z\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "-2+\\mathrm{i}"
       },
       {
         "key": "w",
-        "label": "w",
-        "correct_answer": "1+\\mathrm{i}",
+        "label": "\\(w\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "1+\\mathrm{i}"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Solve the simultaneous equations \\(iz+2w=1\\) and \\(4z+(3-i)w^{*}=-6\\), giving \\(z\\) and \\(w\\) in the form \\(a+bi\\) where \\(a\\) and \\(b\\) are real.",
+    "correct_answer": "z=-2+\\mathrm{i},\\ w=1+\\mathrm{i}"
   },
   {
     "label": "b",
@@ -335,26 +375,26 @@ UPDATE questions SET parts = $migr$[
   },
   {
     "label": "b",
-    "tolerance": 0.005,
-    "answer_type": "range",
-    "prompt_latex": "Find unbiased estimates of the population mean and variance. \\([2]\\)",
-    "correct_answer": "\\bar{x}=1.508,\\ s^2=0.000781",
     "answers": [
       {
         "key": "mean",
-        "label": "\\text{unbiased mean}",
-        "correct_answer": "1.508",
+        "label": "\\(\\text{unbiased mean}\\)",
+        "tolerance": 0.005,
         "answer_type": "range",
-        "tolerance": 0.005
+        "correct_answer": "1.508"
       },
       {
         "key": "var",
-        "label": "\\text{unbiased variance}",
-        "correct_answer": "0.000781",
+        "label": "\\(\\text{unbiased variance}\\)",
+        "tolerance": 0.00005,
         "answer_type": "range",
-        "tolerance": 0.00005
+        "correct_answer": "0.000781"
       }
-    ]
+    ],
+    "tolerance": 0.005,
+    "answer_type": "range",
+    "prompt_latex": "Find unbiased estimates of the population mean and variance. \\([2]\\)",
+    "correct_answer": "\\bar{x}=1.508,\\ s^2=0.000781"
   },
   {
     "label": "c",
@@ -384,26 +424,26 @@ WHERE id = 'cafe1012-0000-0000-0000-000000000000';
 UPDATE questions SET parts = $migr$[
   {
     "label": "a",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Find \\(|p|\\) and \\(\\arg(p)\\) in exact form. \\([2]\\)",
-    "correct_answer": "|p|=2,\\ \\arg(p)=\\frac{\\pi}{4}",
     "answers": [
       {
         "key": "mod",
-        "label": "|p|",
-        "correct_answer": "2",
+        "label": "\\(|p|\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "2"
       },
       {
         "key": "arg",
-        "label": "\\arg(p)",
-        "correct_answer": "\\frac{\\pi}{4}",
+        "label": "\\(\\arg(p)\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "\\frac{\\pi}{4}"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Find \\(|p|\\) and \\(\\arg(p)\\) in exact form. \\([2]\\)",
+    "correct_answer": "|p|=2,\\ \\arg(p)=\\frac{\\pi}{4}"
   },
   {
     "label": "b",
@@ -557,14 +597,14 @@ UPDATE questions SET parts = $migr$[
     "answers": [
       {
         "key": "obl",
-        "label": "\\text{oblique}",
+        "label": "\\(\\text{oblique}\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "y=x+7"
       },
       {
         "key": "vert",
-        "label": "\\text{vertical}",
+        "label": "\\(\\text{vertical}\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "x=-2"
@@ -670,14 +710,14 @@ UPDATE questions SET parts = $migr$[
     "answers": [
       {
         "key": "obl",
-        "label": "\\text{oblique}",
+        "label": "\\(\\text{oblique}\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "y=x+2"
       },
       {
         "key": "vert",
-        "label": "\\text{vertical}",
+        "label": "\\(\\text{vertical}\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "x=2"
@@ -765,14 +805,14 @@ UPDATE questions SET parts = $migr$[
     "answers": [
       {
         "key": "a",
-        "label": "a",
+        "label": "\\(a\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "-4"
       },
       {
         "key": "b",
-        "label": "b",
+        "label": "\\(b\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "1"
@@ -906,21 +946,21 @@ UPDATE questions SET parts = $migr$[
     "answers": [
       {
         "key": "v1",
-        "label": "\\text{vertical}",
+        "label": "\\(\\text{vertical}\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "x=3"
       },
       {
         "key": "v2",
-        "label": "\\text{vertical}",
+        "label": "\\(\\text{vertical}\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "x=-1"
       },
       {
         "key": "h",
-        "label": "\\text{horizontal}",
+        "label": "\\(\\text{horizontal}\\)",
         "tolerance": null,
         "answer_type": "exact",
         "correct_answer": "y=-1"
@@ -940,26 +980,26 @@ UPDATE questions SET parts = $migr$[
   },
   {
     "label": "iii",
-    "tolerance": null,
-    "answer_type": "exact",
-    "prompt_latex": "Find the stationary point of the curve.",
-    "correct_answer": "\\left(1,\\ -\\frac{1}{4}\\right)",
     "answers": [
       {
         "key": "x",
-        "label": "x",
-        "correct_answer": "1",
+        "label": "\\(x\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "1"
       },
       {
         "key": "y",
-        "label": "y",
-        "correct_answer": "-\\frac{1}{4}",
+        "label": "\\(y\\)",
+        "tolerance": null,
         "answer_type": "exact",
-        "tolerance": null
+        "correct_answer": "-\\frac{1}{4}"
       }
-    ]
+    ],
+    "tolerance": null,
+    "answer_type": "exact",
+    "prompt_latex": "Find the stationary point of the curve.",
+    "correct_answer": "\\left(1,\\ -\\frac{1}{4}\\right)"
   },
   {
     "label": "iv",
