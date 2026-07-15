@@ -5,6 +5,9 @@ node_modules
 **/.env
 **/.env.*
 !**/.env.example
+# Frontend Firebase config is public client config and must be present at Vite
+# build time (baked into the bundle), so allow just this one .env into the build.
+!frontend/.env
 .planning
 .claude
 2025
