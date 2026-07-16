@@ -1,0 +1,25 @@
+# Controls what `gcloud run deploy --source .` uploads to Cloud Build.
+# When this file exists gcloud ignores .gitignore, so everything the build
+# needs must be permitted here. Mirrors .dockerignore.
+.git
+node_modules
+**/node_modules
+**/dist
+.planning
+.claude
+2025
+images
+TUTORIAL
+*.pdf
+dev.js
+.DS_Store
+**/.DS_Store
+# Secrets stay out of the build context...
+**/.env
+**/.env.*
+!**/.env.example
+# ...except the frontend's PUBLIC Firebase web config, which Vite must bake in
+# at build time (same exception as .dockerignore). .env.production is the
+# committed copy CI uses; .env is the local one.
+!frontend/.env
+!frontend/.env.production
