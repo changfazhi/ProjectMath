@@ -19,5 +19,7 @@ dev.js
 **/.env.*
 !**/.env.example
 # ...except the frontend's PUBLIC Firebase web config, which Vite must bake in
-# at build time (same exception as .dockerignore).
+# at build time (same exception as .dockerignore). .env.production is the
+# committed copy CI uses; .env is the local one.
 !frontend/.env
+!frontend/.env.production
