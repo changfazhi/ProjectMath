@@ -68,6 +68,29 @@ Stripe provides live-mode test cards (real card network, no actual charge) for a
 
 ---
 
+## App: Re-enable PayNow (currently card-only)
+
+**When:** PayNow was disabled at the card-only go-live (the operator had no registered Singapore business, which Stripe requires for live PayNow). Re-enable once a Singapore business (UEN) is registered and Stripe approves PayNow.
+
+**How it's disabled today:** a frontend feature flag — `frontend/src/components/UpgradeModal.tsx` reads `const PAYNOW_ENABLED = import.meta.env.VITE_PAYNOW_ENABLED === 'true'`. It's unset in production, so the Card/PayNow toggle and all PayNow copy are hidden and every checkout goes through as `card`. **No PayNow code was removed** — it's all intact behind the flag.
+
+### Steps to turn it back on
+
+1. **Stripe — enable the payment method:** register/verify the Singapore business, then Dashboard (live mode) → **Settings → Payment methods** → enable **PayNow**. Stripe may request business documents before approval.
+2. **Stripe — create the two live PayNow prices** under the "ProjectMath Premium" product (PayNow is a *one-time* payment, not recurring):
+   - PayNow Monthly: **S$5.00 one-time**
+   - PayNow Semesterly: **S$25.00 one-time**
+   Copy the two `price_live_...` IDs.
+3. **Backend (Cloud Run) — set the PayNow price env vars:**
+   ```bash
+   gcloud run services update math-trainer --region asia-southeast1 \
+     --update-env-vars STRIPE_PRICE_MONTHLY_PAYNOW=price_live_...,STRIPE_PRICE_SEMESTERLY_PAYNOW=price_live_...
+   ```
+4. **Frontend — flip the flag:** set `VITE_PAYNOW_ENABLED=true` in `frontend/.env.production`, then rebuild + redeploy (push to `main` → Cloud Build). This un-hides the Card/PayNow toggle.
+5. **Smoke-test:** open the upgrade modal → confirm the **PayNow** toggle appears → run a PayNow test payment end-to-end and confirm the webhook grants access.
+
+---
+
 ## Stripe: Change Subscription Pricing (Test Mode)
 
 **When:** The premium plan's price or billing period changes. Prices in Stripe are immutable — you cannot edit the amount on an existing Price object, only create a new one and swap the ID.
@@ -151,6 +174,96 @@ stripe listen --forward-to localhost:3001/api/billing/webhook
 Copy the printed `whsec_...` into `backend/.env` as `STRIPE_WEBHOOK_SECRET`. Each developer gets their own unique `whsec_...` — the Stripe secret key and price IDs are shared across the team, but `STRIPE_WEBHOOK_SECRET` is per-machine.
 
 `stripe listen` with no `--events` flag forwards every event type, so `invoice.payment_succeeded` (renewal receipts) reaches `localhost` automatically — no extra config needed for local dev.
+
+---
+
+## Cloud Run: Map a Custom Domain
+
+**When:** You want the app served from a real domain (e.g. `app.projectmath.com`) instead of the auto-generated `math-trainer-xxxxx.a.run.app` URL. Do this **before** the Stripe live-mode webhook and before inviting real users, because the Stripe webhook URL, `FRONTEND_URL`/`CORS_ORIGIN`, and Firebase authorized domains all need to point at the final domain.
+
+**Prerequisite:** A deployed, working Cloud Run service (see `.planning/DEPLOYMENT.md`) and access to your domain registrar's DNS. This is unrelated to the Resend email-sending domain — that one only signs outbound mail and can be a completely different domain; this one is where the browser loads the app.
+
+> **The `*.run.app` URL keeps working throughout.** Nothing below breaks it. The cutover is additive until Step 4, where you *choose* to make the custom domain the canonical origin. Do Steps 1–3 first, confirm the domain serves the app over HTTPS, and only then flip env/Firebase/Stripe (Steps 4–6) — so you never point a webhook or an OAuth redirect at a domain whose TLS cert hasn't provisioned yet.
+
+### Step 1 — Verify domain ownership
+
+Cloud Run only maps domains you've proven you own.
+
+```bash
+gcloud domains verify yourdomain.com
+```
+
+This opens Google Search Console; add the TXT record it shows to your registrar and confirm. (Verifying the apex `yourdomain.com` also covers its subdomains like `app.`.)
+
+### Step 2 — Create the domain mapping
+
+Prefer a **subdomain** (`app.yourdomain.com`) over the apex — the apex can only use A/AAAA records, while a subdomain uses a single CNAME and gets a Google-managed TLS cert with no fuss.
+
+```bash
+gcloud beta run domain-mappings create \
+  --service math-trainer \
+  --domain app.yourdomain.com \
+  --region asia-southeast1
+```
+
+> **Region caveat:** Cloud Run domain mappings aren't available in every region. If this command rejects `asia-southeast1`, use the load-balancer fallback in the box at the end of this section instead — the rest of the steps (DNS aside) are identical.
+
+### Step 3 — Add the DNS records and wait for TLS
+
+The command prints the exact record(s) to create at your registrar:
+- **Subdomain (recommended):** one `CNAME` → `ghs.googlehosted.com.`
+- **Apex/naked domain:** the four `A` records + four `AAAA` records Google lists (registrars that don't support ALIAS/ANAME at the apex can't CNAME).
+
+> **Cloudflare (or any proxying CDN) — keep these records "DNS only" (grey cloud), NOT "Proxied" (orange).** Cloudflare will nag that *"proxying is required for most security and performance features"* — ignore it for a Cloud Run domain mapping. Leave every A/AAAA (or CNAME) record unproxied, for three reasons:
+> 1. **Certificate.** Cloud Run provisions and auto-renews its own Google-managed TLS cert, which requires the domain to resolve **directly to Google's IPs**. Proxying puts Cloudflare's own cert/edge in front and Cloud Run's cert issuance stalls indefinitely (`CertificatePending`).
+> 2. **WebSockets.** The Socket.IO "upload via phone" flow relies on the direct connection; routing it through Cloudflare's proxy adds a layer that must be configured for WS or the QR pairing breaks.
+> 3. **Rate limiting.** The app keys its limiters on client IP with `trust proxy = 1` (`TRUST_PROXY_HOPS`), expecting **only** Google's front end in front. Behind Cloudflare's proxy every request arrives from a Cloudflare edge IP, collapsing all users into one bucket unless `TRUST_PROXY_HOPS` is bumped and `CF-Connecting-IP` handling is added.
+>
+> **Security is not reduced by staying grey:** traffic is still end-to-end encrypted by Google's managed cert (and a `.app` domain is HSTS-preloaded, so HTTPS is mandatory browser-side), and the app already enforces app-layer rate limits, per-user cooldowns, daily quotas, and sits behind Google's network-level DDoS protection. Cloudflare's edge WAF/CDN/DDoS is an *optional* future enhancement — enable it only deliberately, together with the `TRUST_PROXY_HOPS`/websocket changes (or by fronting Cloud Run with an external load balancer), never as a casual toggle.
+
+After the records propagate, Google **auto-provisions a managed TLS certificate** — no cert to buy or configure. This takes anywhere from ~15 minutes to a few hours. Track it with:
+
+```bash
+gcloud beta run domain-mappings describe --domain app.yourdomain.com --region asia-southeast1
+```
+
+Wait until it reports the cert as ready and `https://app.yourdomain.com` loads the app before continuing.
+
+### Step 4 — Point the app's own origin at the custom domain
+
+`FRONTEND_URL` and `CORS_ORIGIN` currently hold the `*.run.app` URL (see `.planning/DEPLOYMENT.md`). `CORS_ORIGIN` is a **single** allow-listed origin and `FRONTEND_URL` is what Stripe uses for checkout success/cancel redirects — both must become the custom domain, or the browser will be blocked by CORS and Stripe will bounce users back to the old URL.
+
+```bash
+gcloud run services update math-trainer --region asia-southeast1 \
+  --update-env-vars FRONTEND_URL=https://app.yourdomain.com,CORS_ORIGIN=https://app.yourdomain.com
+```
+
+(This is an env-only change — it doesn't rebuild the image. `scripts/deploy.sh` re-asserts the scaling flags but not env, so this can be done independently of a code deploy.) Because everything is same-origin single-container, the QR-pairing URL (`window.location.origin`), the relative `/api` fetches, and the same-origin `io()` socket all follow the custom domain automatically once users load it there — no frontend rebuild needed.
+
+### Step 5 — Add the domain to Firebase authorized domains
+
+Firebase Authentication rejects sign-in redirects from origins not on its allow-list.
+
+- Firebase Console → **Authentication** → **Settings** → **Authorized domains** → **Add domain** → `app.yourdomain.com`.
+
+Leave the `*.run.app` domain on the list too if you still test against it. (This is the same step listed in `.planning/DEPLOYMENT.md` → Post-deploy one-offs, now pointed at the real domain.)
+
+### Step 6 — Update the Stripe webhook endpoint
+
+The live webhook must target the custom domain so signature verification and event delivery hit the canonical origin.
+
+- Stripe Dashboard → **Developers → Webhooks** → edit the endpoint (or add a new one and delete the old) → URL `https://app.yourdomain.com/api/billing/webhook`.
+- Keep the same subscribed events (`checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.deleted`, `invoice.payment_succeeded`).
+- If you created a **new** endpoint, its signing secret changes — copy the new `whsec_...` into the `STRIPE_WEBHOOK_SECRET` secret and redeploy. Editing the URL on an existing endpoint keeps the secret unchanged.
+
+### Step 7 — Smoke-test on the custom domain
+
+- `https://app.yourdomain.com/health` returns OK.
+- Sign in (proves the Firebase authorized-domain change).
+- Run a QR photo-grade from a phone on mobile data (proves WebSockets survive the new routing).
+- Stripe test-mode (or live-mode test-card) checkout → confirm the success redirect lands on `app.yourdomain.com` and the webhook shows a 2xx in the Stripe delivery log.
+
+> **Fallback — region without domain-mapping support (external Application Load Balancer):** If Step 2 fails on region, put a **Global external Application Load Balancer** in front of the service: reserve a global static IP, create a **serverless NEG** targeting the Cloud Run service, attach it to a backend service, add a Google-managed SSL cert for `app.yourdomain.com`, and point an **A record** at the reserved IP. Enable **session affinity** on the backend service (generated-cookie or client-IP) to preserve the single-instance pairing/socket stickiness. **One extra required change:** an external LB adds a proxy hop, so set `TRUST_PROXY_HOPS=2` (see `CLAUDE.md` → *Authentication & Tiers* → `trust proxy`) or every IP-keyed rate limiter collapses to one bucket. Steps 4–7 are otherwise unchanged.
 
 ---
 

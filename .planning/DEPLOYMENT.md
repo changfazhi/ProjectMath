@@ -28,6 +28,7 @@ gcloud run deploy math-trainer \
   --max-instances=1 \
   --min-instances=1 \
   --session-affinity \
+  --no-cpu-throttling \
   --timeout=3600 \
   --concurrency=250 \
   --memory=512Mi
@@ -35,6 +36,7 @@ gcloud run deploy math-trainer \
 
 - `--max-instances=1` — required (see above). Never raise without the escape-hatch migration.
 - `--min-instances=1` — avoids multi-second cold starts for real users (~$10–15/mo).
+- `--no-cpu-throttling` — **load-bearing:** the daily 09:00 SGT PayNow-expiry-reminder cron is in-process `node-cron` (`startPayNowExpiryReminderCron()` in `index.ts`). With default request-scoped CPU throttling, the instance's CPU is throttled to near-zero between requests, so the timer can be starved and the reminder never fires. `scripts/deploy.sh` and `cloudbuild.yaml` re-assert this every deploy — the initial deploy must set it too.
 - `--timeout=3600` — max; sockets dropped at the limit auto-reconnect (socket.io-client). Pairings are 10-min TTL so this never bites.
 - `--session-affinity` — belt-and-braces with websocket-only transport.
 
@@ -60,6 +62,28 @@ Local dev can get away with Resend's shared `onboarding@resend.dev` sender (see 
 1. Stripe dashboard → add webhook endpoint at the deployed `/api/billing` webhook path; subscribe to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.deleted`, **and `invoice.payment_succeeded`** (drives the renewal-charge receipt email); store its signing secret as `STRIPE_WEBHOOK_SECRET` and redeploy.
 2. Firebase console → Auth → add the Cloud Run domain to authorized domains.
 3. Smoke test: `/health`; sign in (check the welcome email lands); full photo-grade via QR from a phone on **mobile data** (proves WebSockets through Cloud Run's frontend); Stripe test-mode checkout + check webhook delivery log (check the first-purchase congrats + receipt emails land). **Sign in with an account whose email is NOT the Resend account owner's address** — this is the only step that actually proves the domain-verified path works for real users, since every other test in this project (including local dev) was run against the Resend account's own inbox. See `.planning/codebase/RUNBOOKS.md` → Transactional Emails: Resend Setup, Step 5.
+
+### Go-live checklist
+
+Not everything below is in the `gcloud run deploy` command — some are one-time console/dashboard setup that a fresh environment needs. Items marked **(one-time, likely already done if the service is live)** were prerequisites for the very first successful deploy; verify rather than redo.
+
+**Infrastructure prerequisites**
+- [ ] **Supabase** — every migration in `backend/supabase/migrations/` run in numeric order in the SQL Editor, and the `solution-uploads` storage bucket (migration `013`) exists. A fresh prod project starts empty.
+- [ ] **GCP APIs enabled** *(one-time)* — Cloud Run, Cloud Build, Artifact Registry, Secret Manager.
+- [ ] **Secret Manager** *(one-time)* — the six secrets created (`SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `FIREBASE_PRIVATE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`) **and the Cloud Run runtime service account granted Secret Accessor** on each — else the container can't boot.
+- [ ] **Cloud Build trigger** *(one-time)* — GitHub repo connected, trigger points at `cloudbuild.yaml`, fires on push to `main`; the Cloud Build service account has run.deploy + secret access. (`cloudbuild.yaml` is the recipe; the trigger is created in the console.)
+
+**Firebase**
+- [ ] Frontend config committed in `frontend/.env.production` matches the **production** Firebase project (public values, safe to commit; baked into the image at `vite build`).
+- [ ] Backend `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` set on the service.
+- [ ] Sign-in providers enabled (Auth → Sign-in method).
+- [ ] Custom domain added to Auth → Settings → Authorized domains (see RUNBOOKS → *Cloud Run: Map a Custom Domain*, Step 5).
+
+**Go-live cutover**
+- [ ] **Stripe → live mode** — see `.planning/codebase/RUNBOOKS.md` → *Stripe: Sandbox → Live Mode*. Update the `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` **secret versions** to live values and the plaintext `STRIPE_PRICE_*` env vars to the live price IDs.
+- [ ] **Custom domain mapped** — RUNBOOKS → *Cloud Run: Map a Custom Domain* (also flips `FRONTEND_URL`/`CORS_ORIGIN`, Firebase authorized domains, and the Stripe webhook URL to the real domain).
+- [ ] **Resend sending domain verified** and `EMAIL_FROM` pointed at it — see the *Domain + Resend* section above and RUNBOOKS → *Transactional Emails: Resend Setup*.
+- [ ] Post-deploy smoke tests (see *Post-deploy one-offs* above) pass on the final domain.
 
 ### Local container test (machine with Docker)
 
