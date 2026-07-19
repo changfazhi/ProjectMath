@@ -13,6 +13,14 @@ const BENEFITS = [
 
 type Method = 'card' | 'paynow'
 
+// PayNow is hidden at launch — accepting card only until a Singapore business is
+// registered (Stripe requires one for live PayNow). To re-enable: set
+// VITE_PAYNOW_ENABLED=true in frontend/.env.production, add the live
+// STRIPE_PRICE_MONTHLY_PAYNOW / STRIPE_PRICE_SEMESTERLY_PAYNOW env vars on the
+// backend service, enable PayNow in the Stripe Dashboard, then redeploy. All the
+// PayNow code below stays intact behind this flag.
+const PAYNOW_ENABLED = import.meta.env.VITE_PAYNOW_ENABLED === 'true'
+
 interface PlanCardProps {
   label: string
   price: string
@@ -142,7 +150,9 @@ export function UpgradeModal({ onClose }: Props) {
             {isPaid ? 'Manage Premium' : 'Upgrade to Premium'}
           </h2>
           <p className="mt-2 text-sm text-[#aab0d6]">
-            Unlock AI-powered tools to practise smarter. Switch between Card and PayNow anytime — your access carries over.
+            {PAYNOW_ENABLED
+              ? 'Unlock AI-powered tools to practise smarter. Switch between Card and PayNow anytime — your access carries over.'
+              : 'Unlock AI-powered tools to practise smarter. Cancel anytime.'}
           </p>
         </div>
 
@@ -151,41 +161,47 @@ export function UpgradeModal({ onClose }: Props) {
             className="mb-6 rounded-xl px-4 py-3 text-sm text-[#c7cbff]"
             style={{ background: 'rgba(79,70,229,0.12)', border: '1px solid #2a2f5a' }}
           >
-            {accessExpiresAt ? (
-              <>
-                You're on <strong>PayNow</strong>, active until{' '}
-                <strong>{accessExpiresAt.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
-                Buy another period below to extend it, or switch to Card — billing only starts once this period ends.
-              </>
+            {PAYNOW_ENABLED ? (
+              accessExpiresAt ? (
+                <>
+                  You're on <strong>PayNow</strong>, active until{' '}
+                  <strong>{accessExpiresAt.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+                  Buy another period below to extend it, or switch to Card — billing only starts once this period ends.
+                </>
+              ) : (
+                <>
+                  You have an active <strong>Card</strong> subscription. Buy a PayNow period below to switch —
+                  your card will stop billing at the end of the current period.
+                </>
+              )
             ) : (
-              <>
-                You have an active <strong>Card</strong> subscription. Buy a PayNow period below to switch —
-                your card will stop billing at the end of the current period.
-              </>
+              <>You have an active <strong>Premium</strong> subscription. Manage or cancel it anytime below.</>
             )}
           </div>
         )}
 
-        {/* Payment method toggle */}
-        <div
-          className="flex rounded-xl p-1 mb-6"
-          style={{ background: 'rgba(255,255,255,0.05)' }}
-        >
-          {(['card', 'paynow'] as Method[]).map(m => (
-            <button
-              key={m}
-              onClick={() => { setMethod(m); setError(null) }}
-              className="flex-1 rounded-lg py-2 text-sm font-semibold transition-all"
-              style={
-                method === m
-                  ? { background: '#4f46e5', color: '#fff' }
-                  : { color: '#aab0d6' }
-              }
-            >
-              {m === 'card' ? '💳  Card' : 'PayNow'}
-            </button>
-          ))}
-        </div>
+        {/* Payment method toggle (hidden while card-only; see PAYNOW_ENABLED) */}
+        {PAYNOW_ENABLED && (
+          <div
+            className="flex rounded-xl p-1 mb-6"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          >
+            {(['card', 'paynow'] as Method[]).map(m => (
+              <button
+                key={m}
+                onClick={() => { setMethod(m); setError(null) }}
+                className="flex-1 rounded-lg py-2 text-sm font-semibold transition-all"
+                style={
+                  method === m
+                    ? { background: '#4f46e5', color: '#fff' }
+                    : { color: '#aab0d6' }
+                }
+              >
+                {m === 'card' ? '💳  Card' : 'PayNow'}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Plan cards */}
         <div className="grid grid-cols-2 gap-4">
