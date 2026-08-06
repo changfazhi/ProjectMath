@@ -1,6 +1,13 @@
 import { useEffect, useRef, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useDesktopViewport } from '../hooks/useDesktopViewport'
+
+// The width the design actually needs: 1180px content columns plus the 24px gutters the
+// outermost sections add around them. `.pm-landing` is pinned to it so the layout never
+// squeezes below the width it was drawn for — narrower screens scroll sideways instead of
+// collapsing the two-column grids into one-word-per-line columns.
+const DESIGN_WIDTH = 1240
 
 // Marketing landing page, ported faithfully from the Claude Design artifact
 // "ProjectMath Landing.dc.html". The design is bespoke, fully inline-styled
@@ -13,6 +20,10 @@ import { useAuth } from '../contexts/AuthContext'
 const STYLES = `
 .pm-landing *{margin:0;box-sizing:border-box}
 .pm-landing{font-family:'Plus Jakarta Sans',sans-serif;-webkit-font-smoothing:antialiased;color:#11142b;scroll-behavior:smooth}
+/* The page is laid out in a wide viewport and scaled down to fit, which is exactly the shape
+   mobile text-autosizing looks for — left on, it inflates body copy inside the narrow columns
+   and breaks the design it's meant to help. */
+.pm-landing{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .pm-landing a{color:inherit;text-decoration:none}
 .pm-landing ::selection{background:rgba(99,102,241,.18)}
 @keyframes pm-floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
@@ -38,7 +49,7 @@ const STYLES = `
 `
 
 const MARKUP = `
-<div data-screen-label="Landing" style="--accent:#4f46e5;--accent-2:#7c3aed;--accent-soft:#eef0fe;--accent-ink:#3730a3;font-family:'Plus Jakarta Sans',sans-serif;color:#11142b;background:#ffffff;overflow-x:hidden">
+<div data-screen-label="Landing" style="--accent:#4f46e5;--accent-2:#7c3aed;--accent-soft:#eef0fe;--accent-ink:#3730a3;font-family:'Plus Jakarta Sans',sans-serif;color:#11142b;background:#ffffff">
 
   <!-- NAV -->
   <header style="position:sticky;top:0;z-index:50;backdrop-filter:saturate(180%) blur(14px);background:rgba(255,255,255,.82);border-bottom:1px solid #eceef6">
@@ -458,7 +469,13 @@ const MARKUP = `
 
 export function LandingPage() {
   const navigate = useNavigate()
-  const { user, tier, loading, openLoginModal, openUpgradeModal } = useAuth()
+  const { user, tier, loading, openLoginModal, openUpgradeModal, modalOpen } = useAuth()
+
+  // Lay the page out at its real design width and let the browser shrink-to-fit it, so a phone
+  // gets the desktop composition (zoomable, scrollable sideways) rather than a collapsed one.
+  // Suspended while an auth/upgrade modal is up — those are responsive components built for
+  // the device viewport and would otherwise be drawn at the same reduced scale as the page.
+  const fixedViewport = useDesktopViewport(modalOpen ? null : DESIGN_WIDTH)
 
   // Marks "the login now in progress was triggered by a 'Go Pro' click" so the transition
   // effect below knows to auto-open the upgrade modal instead of redirecting to /roadmap.
@@ -549,7 +566,22 @@ export function LandingPage() {
       : ''
 
   return (
-    <div className="pm-landing">
+    // The floor on the design's width is tied to the fixed viewport being in force. On a phone
+    // the viewport already supplies the width; the rule earns its keep on desktop windows
+    // narrower than the design, which scroll sideways instead of collapsing.
+    //
+    // With a modal up the page is clipped back to the screen instead. Its nav alone is ~600px
+    // of unwrappable flex row, so even at the device viewport it would leave the document
+    // wider than the screen — and on mobile a `fixed` element's containing block is the layout
+    // viewport, not the screen, so the modal would be laid out across the full width of the
+    // page behind it and centre itself half off-screen.
+    <div
+      className="pm-landing"
+      style={{
+        minWidth: fixedViewport ? DESIGN_WIDTH : undefined,
+        overflowX: modalOpen ? 'hidden' : undefined,
+      }}
+    >
       <style>{STYLES}</style>
       <div
         onClick={handleClick}

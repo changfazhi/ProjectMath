@@ -31,6 +31,10 @@ interface AuthContextValue {
   openLoginModal: (options?: { mode?: AuthMode; message?: string }) => void
   openUpgradeModal: () => void
   openFeedbackModal: () => void
+  // True while any of the three modals below is on screen. They're laid out for the device
+  // viewport, so a route rendering itself into a fixed-width one (see `useDesktopViewport`)
+  // has to hand the viewport back while one is open or the modal is drawn shrunk to fit.
+  modalOpen: boolean
   // Re-reads the server's tier and returns it, so callers can poll until a
   // webhook-granted upgrade lands.
   refreshTier: () => Promise<Tier | null>
@@ -134,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, tier, accessExpiresAt, loading, signInWithGoogle, signInWithEmail, signUp, signOut, openLoginModal, openUpgradeModal, openFeedbackModal, refreshTier }}
+      value={{ user, tier, accessExpiresAt, loading, signInWithGoogle, signInWithEmail, signUp, signOut, openLoginModal, openUpgradeModal, openFeedbackModal, modalOpen: showLogin || showUpgrade || showFeedback, refreshTier }}
     >
       {children}
       {showLogin && (

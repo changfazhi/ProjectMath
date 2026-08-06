@@ -87,23 +87,24 @@ export function HomePage() {
         </div>
       )}
       {/* Title bar */}
-      <div className="max-w-5xl mx-auto px-6 pt-9 pb-5 w-full shrink-0">
-        <div className="text-[13px] font-bold uppercase tracking-[0.1em] text-[#a5abe0]">
+      {/* Title bar — trimmed hard on phones so the fitted map below isn't left a letterbox */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-4 sm:pt-9 pb-3 sm:pb-5 w-full shrink-0">
+        <div className="text-[11px] sm:text-[13px] font-bold uppercase tracking-[0.1em] text-[#a5abe0]">
           Your roadmap
         </div>
         <h1
-          className="mt-3 text-4xl font-extrabold tracking-tight text-white"
+          className="mt-1.5 sm:mt-3 text-2xl sm:text-4xl font-extrabold tracking-tight text-white"
           style={{ fontFamily: BRICOLAGE }}
         >
           <Link to="/" className="hover:text-[#c7cbff] transition-colors">
             Project<span className="text-[#7c83ff]">Math</span>
           </Link>
         </h1>
-        <p className="mt-3 text-[#aab0d6] max-w-2xl">
+        <p className="hidden sm:block mt-3 text-[#aab0d6] max-w-2xl">
           A clear path through the whole syllabus. Follow the nodes, unlock topics as you go,
           and watch the map fill in.
         </p>
-        <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="mt-2.5 sm:mt-5 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2">
           <LegendDot color="#38bdf8" label="Pure Mathematics" />
           <LegendDot color="#34d399" label="Statistics" />
           <LegendDot color="#3a4170" label="Up next" />
