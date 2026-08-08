@@ -1,13 +1,6 @@
 import { useEffect, useRef, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useDesktopViewport } from '../hooks/useDesktopViewport'
-
-// The width the design actually needs: 1180px content columns plus the 24px gutters the
-// outermost sections add around them. `.pm-landing` is pinned to it so the layout never
-// squeezes below the width it was drawn for — narrower screens scroll sideways instead of
-// collapsing the two-column grids into one-word-per-line columns.
-const DESIGN_WIDTH = 1240
 
 // Marketing landing page, ported faithfully from the Claude Design artifact
 // "ProjectMath Landing.dc.html". The design is bespoke, fully inline-styled
@@ -20,9 +13,8 @@ const DESIGN_WIDTH = 1240
 const STYLES = `
 .pm-landing *{margin:0;box-sizing:border-box}
 .pm-landing{font-family:'Plus Jakarta Sans',sans-serif;-webkit-font-smoothing:antialiased;color:#11142b;scroll-behavior:smooth}
-/* The page is laid out in a wide viewport and scaled down to fit, which is exactly the shape
-   mobile text-autosizing looks for — left on, it inflates body copy inside the narrow columns
-   and breaks the design it's meant to help. */
+/* The page now has real breakpoints, so the type sizes below are deliberate at every width.
+   Leave mobile text-autosizing off rather than let Safari inflate body copy on top of them. */
 .pm-landing{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .pm-landing a{color:inherit;text-decoration:none}
 .pm-landing ::selection{background:rgba(99,102,241,.18)}
@@ -46,6 +38,86 @@ const STYLES = `
 .pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-sub-semesterly{display:none}
 .pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-price-monthly,
 .pm-landing #pm-monthly:checked ~ .pm-pricing-grid .pm-sub-monthly{display:inline}
+
+/* CSS-only mobile menu, same shape as the pricing toggle above: the checkbox
+   holds the open state and its label does the toggling, so no script has to run
+   inside the injected markup. The input stays 1px-and-transparent rather than
+   display:none so it remains keyboard-focusable and Space still opens the menu.
+   Closing on link click is handled in handleClick — CSS can't uncheck itself. */
+.pm-landing .pm-menu-toggle{position:absolute;width:1px;height:1px;opacity:0;margin:0}
+.pm-landing .pm-burger{display:none;margin-left:auto;flex-direction:column;justify-content:center;gap:5px;width:42px;height:42px;padding:11px 9px;border-radius:11px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pm-landing .pm-burger span{display:block;height:2px;border-radius:2px;background:#3d4264;transition:transform .2s,opacity .2s}
+.pm-landing .pm-menu-toggle:focus-visible ~ .pm-nav .pm-burger{outline:2px solid var(--accent);outline-offset:2px}
+.pm-landing #pm-menu:checked ~ .pm-nav .pm-burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.pm-landing #pm-menu:checked ~ .pm-nav .pm-burger span:nth-child(2){opacity:0}
+.pm-landing #pm-menu:checked ~ .pm-nav .pm-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+
+/* ── Mobile ────────────────────────────────────────────────────────────────
+   Everything above is the desktop composition, ported verbatim with its styles
+   inline; everything below adapts it for phones and small tablets. Inline
+   styles outrank stylesheet rules, so every override here needs !important —
+   that is the price of leaving the working desktop markup untouched. Keep all
+   responsive rules in this one block so they stay auditable: a later edit to an
+   inline style will silently win on desktop and lose here.
+
+   860px stacks the multi-column grids; 560px is where the type, spacing and the
+   hero's floating cards need their own treatment. */
+@media (max-width:860px){
+  .pm-landing .pm-hero-grid,
+  .pm-landing .pm-sr-grid,
+  .pm-landing .pm-scan-grid,
+  .pm-landing .pm-tutor-grid,
+  .pm-landing .pm-why-grid,
+  .pm-landing .pm-pricing-grid,
+  .pm-landing .pm-footer-grid{grid-template-columns:1fr!important}
+  .pm-landing .pm-hero-grid,
+  .pm-landing .pm-sr-grid,
+  .pm-landing .pm-scan-grid,
+  .pm-landing .pm-tutor-grid{gap:36px!important}
+  .pm-landing .pm-why-grid{gap:16px!important}
+  .pm-landing .pm-footer-grid{gap:30px!important}
+  .pm-landing .pm-stats-grid{grid-template-columns:repeat(2,1fr)!important;gap:26px!important}
+  /* Lead with the copy in both feature blocks. The tutor block already does via
+     its desktop 'order'; the scan block only needs it once stacked, so that the
+     heading introduces its illustration rather than trailing it. */
+  .pm-landing .pm-scan-copy{order:1!important}
+  .pm-landing .pm-scan-visual{order:2!important}
+  /* Nav collapses to a burger. The panel pushes the header down rather than
+     floating over the page: the header is sticky with a backdrop-filter, which
+     would make an absolutely-positioned panel a z-index and stacking-context
+     fight for no benefit at this size. */
+  .pm-landing .pm-nav{flex-wrap:wrap!important;gap:0!important;padding:10px 18px!important}
+  .pm-landing .pm-burger{display:flex!important}
+  .pm-landing .pm-nav-links,
+  .pm-landing .pm-nav-actions{display:none!important}
+  .pm-landing #pm-menu:checked ~ .pm-nav .pm-nav-links{display:flex!important;flex-direction:column!important;align-items:flex-start!important;width:100%!important;margin-left:0!important;gap:2px!important;margin-top:10px!important;padding-top:10px!important;border-top:1px solid #eceef6!important;font-size:16px!important}
+  .pm-landing #pm-menu:checked ~ .pm-nav .pm-nav-links a{padding:9px 0!important}
+  .pm-landing #pm-menu:checked ~ .pm-nav .pm-nav-actions{display:flex!important;width:100%!important;margin-left:0!important;gap:12px!important;padding:10px 0 6px!important}
+}
+@media (max-width:560px){
+  .pm-landing .pm-h1{font-size:34px!important}
+  .pm-landing .pm-h2{font-size:28px!important}
+  .pm-landing .pm-h3{font-size:23px!important}
+  .pm-landing .pm-lead{font-size:16px!important}
+  .pm-landing .pm-sec{padding:52px 18px!important}
+  .pm-landing .pm-sec-hero{padding:44px 18px 56px!important}
+  .pm-landing .pm-sec-stats{padding:28px 18px!important}
+  .pm-landing .pm-sec-featurehead{padding:52px 18px 20px!important}
+  .pm-landing .pm-sec-scan{padding:28px 18px!important}
+  .pm-landing .pm-sec-tutor{padding:24px 18px 52px!important}
+  .pm-landing .pm-sec-cta{padding:0 18px 56px!important}
+  .pm-landing .pm-cta-card{padding:44px 22px!important}
+  .pm-landing .pm-sec-footer{padding:44px 18px 32px!important}
+  /* The hero's three cards are absolutely positioned inside a fixed 480px box.
+     That composition has no phone-width form — the cards simply overlap — so
+     drop them into normal flow and stack them instead of hiding two of them. */
+  .pm-landing .pm-hero-visual{height:auto!important;display:flex!important;flex-direction:column!important;gap:14px!important}
+  .pm-landing .pm-hero-card,
+  .pm-landing .pm-hero-bubble,
+  .pm-landing .pm-hero-badge{position:static!important;animation:none!important}
+  .pm-landing .pm-hero-bubble{width:auto!important}
+  .pm-landing .pm-hero-badge{align-self:flex-start!important}
+}
 `
 
 const MARKUP = `
@@ -53,17 +125,22 @@ const MARKUP = `
 
   <!-- NAV -->
   <header style="position:sticky;top:0;z-index:50;backdrop-filter:saturate(180%) blur(14px);background:rgba(255,255,255,.82);border-bottom:1px solid #eceef6">
-    <nav style="max-width:1180px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:32px">
+    <input type="checkbox" id="pm-menu" class="pm-menu-toggle">
+    <nav class="pm-nav" style="max-width:1180px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:32px">
       <a href="#top" style="display:flex;align-items:center;gap:11px">
         <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px;font-family:'Bricolage Grotesque',sans-serif">&#960;</div>
         <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:21px;letter-spacing:-.01em">Project<span style="color:var(--accent)">Math</span></span>
       </a>
-      <div style="display:flex;align-items:center;gap:28px;margin-left:14px;font-weight:600;font-size:15px;color:#3d4264">
+      <!-- Shown only below the nav breakpoint; toggles #pm-menu above via its label. Sits here
+           rather than at the end of the row so that when the groups below wrap to their own
+           full-width lines, the burger stays on the first line beside the logo. -->
+      <label for="pm-menu" class="pm-burger" aria-label="Open menu"><span></span><span></span><span></span></label>
+      <div class="pm-nav-links" style="display:flex;align-items:center;gap:28px;margin-left:14px;font-weight:600;font-size:15px;color:#3d4264">
         <a href="#roadmap" class="pm-hov-accent">Roadmap</a>
         <a href="#features" class="pm-hov-accent">AI Tools</a>
         <a href="#pricing" class="pm-hov-accent">Pricing</a>
       </div>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:18px">
+      <div class="pm-nav-actions" style="margin-left:auto;display:flex;align-items:center;gap:18px">
         __AUTH_LINK__
         __CTA_BUTTON__
       </div>
@@ -73,14 +150,14 @@ const MARKUP = `
   <!-- HERO -->
   <section id="top" style="position:relative;background:#f6f7fc;overflow:hidden">
     <div style="position:absolute;inset:0;background:radial-gradient(620px 360px at 78% 8%,rgba(124,58,237,.12),transparent 70%),radial-gradient(560px 420px at 12% 90%,rgba(79,70,229,.10),transparent 70%);pointer-events:none"></div>
-    <div style="position:relative;max-width:1180px;margin:0 auto;padding:72px 24px 90px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center">
+    <div class="pm-hero-grid pm-sec-hero" style="position:relative;max-width:1180px;margin:0 auto;padding:72px 24px 90px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center">
       <!-- left -->
       <div>
         <div style="display:inline-flex;align-items:center;gap:9px;padding:7px 14px;border-radius:999px;background:#fff;border:1px solid #e6e8f4;box-shadow:0 4px 14px -8px rgba(17,20,43,.25);font-weight:600;font-size:13.5px;color:#46496b">
           Built for the Singapore A-Level H2 Mathematics (9758)
         </div>
-        <h1 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:60px;line-height:1.04;letter-spacing:-.025em;margin:22px 0 0">Master H2 Math,<br>one node at a time.</h1>
-        <p style="font-size:19px;line-height:1.55;color:#52567a;max-width:520px;margin:22px 0 0">A guided roadmap that takes you from graphing technique to conics, with an AI tutor that nudges you to the next step and an AI scanner that marks your working <em>and</em> your presentation.</p>
+        <h1 class="pm-h1" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:60px;line-height:1.04;letter-spacing:-.025em;margin:22px 0 0">Master H2 Math,<br>one node at a time.</h1>
+        <p class="pm-lead" style="font-size:19px;line-height:1.55;color:#52567a;max-width:520px;margin:22px 0 0">A guided roadmap that takes you from graphing technique to conics, with an AI tutor that nudges you to the next step and an AI scanner that marks your working <em>and</em> your presentation.</p>
         <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:32px">
           <a href="/roadmap" class="pm-hov-cta" style="display:inline-flex;align-items:center;gap:9px;padding:15px 28px;border-radius:13px;background:var(--accent);color:#fff;font-weight:700;font-size:17px;box-shadow:0 12px 26px -8px var(--accent);transition:transform .15s,box-shadow .15s">Explore the roadmap &rarr;</a>
           <a href="#features" class="pm-hov-ghost" style="display:inline-flex;align-items:center;gap:9px;padding:15px 26px;border-radius:13px;background:#fff;border:1px solid #e1e4f0;color:#1f2342;font-weight:700;font-size:17px;transition:transform .15s,border-color .15s">See the AI tools</a>
@@ -90,9 +167,9 @@ const MARKUP = `
         </div>
       </div>
       <!-- right visual -->
-      <div style="position:relative;height:480px">
+      <div class="pm-hero-visual" style="position:relative;height:480px">
         <!-- main practice card -->
-        <div style="position:absolute;top:26px;left:28px;right:8px;background:#fff;border-radius:22px;border:1px solid #ebedf6;box-shadow:0 30px 60px -24px rgba(28,32,68,.4);padding:24px;animation:pm-floaty 6s ease-in-out infinite">
+        <div class="pm-hero-card" style="position:absolute;top:26px;left:28px;right:8px;background:#fff;border-radius:22px;border:1px solid #ebedf6;box-shadow:0 30px 60px -24px rgba(28,32,68,.4);padding:24px;animation:pm-floaty 6s ease-in-out infinite">
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border-radius:8px;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;font-size:12.5px">Functions &middot; Q3</div>
             <div style="font-size:12.5px;color:#9aa0bf;font-weight:600">02:14</div>
@@ -105,7 +182,7 @@ const MARKUP = `
           </div>
         </div>
         <!-- AI tutor bubble -->
-        <div style="position:absolute;bottom:6px;left:0;width:268px;background:#fff;border-radius:18px;border:1px solid #ebedf6;box-shadow:0 22px 44px -18px rgba(28,32,68,.35);padding:14px 16px;animation:pm-floaty2 5s ease-in-out infinite">
+        <div class="pm-hero-bubble" style="position:absolute;bottom:6px;left:0;width:268px;background:#fff;border-radius:18px;border:1px solid #ebedf6;box-shadow:0 22px 44px -18px rgba(28,32,68,.35);padding:14px 16px;animation:pm-floaty2 5s ease-in-out infinite">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
             <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px">&#10022;</div>
             <span style="font-weight:700;font-size:13px">AI Tutor</span>
@@ -113,7 +190,7 @@ const MARKUP = `
           <p style="font-size:13.5px;line-height:1.5;color:#3d4264;margin:0">Try completing the square first, then tell me what you get for <b>f(x)</b>.</p>
         </div>
         <!-- scan badge -->
-        <div style="position:absolute;top:0;right:0;display:inline-flex;align-items:center;gap:9px;background:#11142b;color:#fff;border-radius:14px;padding:11px 15px;box-shadow:0 18px 36px -14px rgba(17,20,43,.6);animation:pm-floaty 7s ease-in-out infinite">
+        <div class="pm-hero-badge" style="position:absolute;top:0;right:0;display:inline-flex;align-items:center;gap:9px;background:#11142b;color:#fff;border-radius:14px;padding:11px 15px;box-shadow:0 18px 36px -14px rgba(17,20,43,.6);animation:pm-floaty 7s ease-in-out infinite">
           <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#f97316);display:flex;align-items:center;justify-content:center;font-size:14px">&#10531;</div>
           <div style="line-height:1.2"><div style="font-weight:700;font-size:13px">AI Scan</div><div style="font-size:11.5px;color:#aab0d4">2 issues found</div></div>
         </div>
@@ -123,7 +200,7 @@ const MARKUP = `
 
   <!-- STATS -->
   <section style="background:#fff;border-bottom:1px solid #eef0f7">
-    <div style="max-width:1180px;margin:0 auto;padding:34px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center">
+    <div class="pm-stats-grid pm-sec-stats" style="max-width:1180px;margin:0 auto;padding:34px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center">
       <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">500+</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">rigorously filtered problems</div></div>
       <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">24</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">H2 topics covered</div></div>
       <div><div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;color:var(--accent)">9758</div><div style="font-size:14px;color:#6b7194;margin-top:4px;font-weight:600">A-Level H2 syllabus</div></div>
@@ -135,11 +212,11 @@ const MARKUP = `
   <section id="roadmap" style="position:relative;background:#0b0e20;color:#fff;overflow:hidden">
     <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:46px 46px;pointer-events:none"></div>
     <div style="position:absolute;inset:0;background:radial-gradient(700px 420px at 50% -5%,rgba(99,102,241,.22),transparent 70%);pointer-events:none"></div>
-    <div style="position:relative;max-width:1180px;margin:0 auto;padding:80px 24px 88px">
+    <div class="pm-sec" style="position:relative;max-width:1180px;margin:0 auto;padding:80px 24px 88px">
       <div style="text-align:center;max-width:640px;margin:0 auto">
         <div style="color:#a5abe0;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">The roadmap</div>
-        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:44px;line-height:1.08;letter-spacing:-.02em;margin:14px 0 0">A clear path through the whole syllabus</h2>
-        <p style="font-size:18px;line-height:1.55;color:#aab0d6;margin:16px 0 0">No more guessing what to study next. Follow the nodes, unlock topics as you go, and watch the map fill in.</p>
+        <h2 class="pm-h2" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:44px;line-height:1.08;letter-spacing:-.02em;margin:14px 0 0">A clear path through the whole syllabus</h2>
+        <p class="pm-lead" style="font-size:18px;line-height:1.55;color:#aab0d6;margin:16px 0 0">No more guessing what to study next. Follow the nodes, unlock topics as you go, and watch the map fill in.</p>
       </div>
 
       <div style="display:flex;flex-direction:column;align-items:center;margin-top:46px">
@@ -223,12 +300,12 @@ const MARKUP = `
 
   <!-- SPACED REPETITION -->
   <section style="background:#fff">
-    <div style="max-width:1180px;margin:0 auto;padding:88px 24px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
+    <div class="pm-sr-grid pm-sec" style="max-width:1180px;margin:0 auto;padding:88px 24px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
       <!-- left: copy -->
       <div>
         <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Spaced repetition</div>
-        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Remember the gotchas,<br>not just the topic.</h2>
-        <p style="font-size:18px;line-height:1.6;color:#52567a;max-width:520px;margin:18px 0 0">Getting a question right once isn't the same as remembering it in November. ProjectMath runs a proven <b>SM-2</b> spaced-repetition schedule: every question you slip on comes back at <b>expanding intervals</b>, just before you'd forget it, until the trick and the concept behind it are locked in.</p>
+        <h2 class="pm-h2" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Remember the gotchas,<br>not just the topic.</h2>
+        <p class="pm-lead" style="font-size:18px;line-height:1.6;color:#52567a;max-width:520px;margin:18px 0 0">Getting a question right once isn't the same as remembering it in November. ProjectMath runs a proven <b>SM-2</b> spaced-repetition schedule: every question you slip on comes back at <b>expanding intervals</b>, just before you'd forget it, until the trick and the concept behind it are locked in.</p>
         <ul style="list-style:none;padding:0;margin:26px 0 0;display:flex;flex-direction:column;gap:13px">
           <li style="display:flex;gap:11px;font-size:15.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Wrong answers are automatically queued for review</li>
           <li style="display:flex;gap:11px;font-size:15.5px;color:#2c3050"><span style="color:#10b981;font-weight:800">&#10003;</span>Each correct recall pushes the next review further out</li>
@@ -264,15 +341,15 @@ const MARKUP = `
 
   <!-- FEATURES -->
   <section id="features" style="background:#fff;border-top:1px solid #eef0f7">
-    <div style="max-width:1180px;margin:0 auto;padding:88px 24px 30px;text-align:center">
+    <div class="pm-sec-featurehead" style="max-width:1180px;margin:0 auto;padding:88px 24px 30px;text-align:center">
       <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">AI tools</div>
-      <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:44px;line-height:1.08;letter-spacing:-.02em;margin:14px 0 0">Two tools that mark like a tutor</h2>
-      <p style="font-size:18px;line-height:1.55;color:#52567a;max-width:600px;margin:16px auto 0">Method marks, presentation marks, the lot. ProjectMath checks your maths the way a real examiner would.</p>
+      <h2 class="pm-h2" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:44px;line-height:1.08;letter-spacing:-.02em;margin:14px 0 0">Two tools that mark like a tutor</h2>
+      <p class="pm-lead" style="font-size:18px;line-height:1.55;color:#52567a;max-width:600px;margin:16px auto 0">Method marks, presentation marks, the lot. ProjectMath checks your maths the way a real examiner would.</p>
     </div>
 
     <!-- AI Scan -->
-    <div style="max-width:1180px;margin:0 auto;padding:50px 24px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
-      <div style="position:relative">
+    <div class="pm-scan-grid pm-sec-scan" style="max-width:1180px;margin:0 auto;padding:50px 24px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
+      <div class="pm-scan-visual" style="position:relative">
         <div style="background:#fff;border-radius:20px;border:1px solid #ebedf6;box-shadow:0 26px 54px -26px rgba(28,32,68,.4);padding:24px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
             <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#f97316);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">&#10531;</div>
@@ -293,10 +370,10 @@ const MARKUP = `
           <div style="display:flex;gap:11px;align-items:flex-start;background:#fffaf0;border:1px solid #f7e4bd;border-radius:12px;padding:12px 14px"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:#f59e0b;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span><div style="font-size:13.5px;color:#7a5210;line-height:1.45"><b>Presentation:</b> state the domain before giving the range to secure the A1 mark.</div></div>
         </div>
       </div>
-      <div>
+      <div class="pm-scan-copy">
         <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;background:#fff7ed;color:#c2410c;font-weight:700;font-size:13px">AI Scan</div>
-        <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:1.12;letter-spacing:-.02em;margin:16px 0 0">Snap your working. Get it marked.</h3>
-        <p style="font-size:17px;line-height:1.6;color:#52567a;margin:16px 0 0">Take a photo of your handwritten solution and AI Scan checks it line by line, catching sign slips, lost method marks, and the presentation details examiners love to dock.</p>
+        <h3 class="pm-h3" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:1.12;letter-spacing:-.02em;margin:16px 0 0">Snap your working. Get it marked.</h3>
+        <p class="pm-lead" style="font-size:17px;line-height:1.6;color:#52567a;margin:16px 0 0">Take a photo of your handwritten solution and AI Scan checks it line by line, catching sign slips, lost method marks, and the presentation details examiners love to dock.</p>
         <ul style="list-style:none;padding:0;margin:22px 0 0;display:flex;flex-direction:column;gap:13px">
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Spots method &amp; sign errors in your working</li>
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Flags presentation marks you'd otherwise lose</li>
@@ -306,7 +383,7 @@ const MARKUP = `
     </div>
 
     <!-- AI Tutor -->
-    <div style="max-width:1180px;margin:0 auto;padding:30px 24px 70px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
+    <div class="pm-tutor-grid pm-sec-tutor" style="max-width:1180px;margin:0 auto;padding:30px 24px 70px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center">
       <div style="order:2">
         <div style="background:#fff;border-radius:20px;border:1px solid #ebedf6;box-shadow:0 26px 54px -26px rgba(28,32,68,.4);padding:20px;display:flex;flex-direction:column;gap:13px">
           <div style="display:flex;align-items:center;gap:9px;padding-bottom:13px;border-bottom:1px solid #f0f1f8">
@@ -326,8 +403,8 @@ const MARKUP = `
       </div>
       <div style="order:1">
         <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;font-size:13px">AI Tutor</div>
-        <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:1.12;letter-spacing:-.02em;margin:16px 0 0">Stuck? Get the next step, not the answer.</h3>
-        <p style="font-size:17px;line-height:1.6;color:#52567a;margin:16px 0 0">Your AI tutor asks the right questions and walks you through the method, so you actually learn the technique instead of copying a solution.</p>
+        <h3 class="pm-h3" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:1.12;letter-spacing:-.02em;margin:16px 0 0">Stuck? Get the next step, not the answer.</h3>
+        <p class="pm-lead" style="font-size:17px;line-height:1.6;color:#52567a;margin:16px 0 0">Your AI tutor asks the right questions and walks you through the method, so you actually learn the technique instead of copying a solution.</p>
         <ul style="list-style:none;padding:0;margin:22px 0 0;display:flex;flex-direction:column;gap:13px">
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Socratic hints scaled to where you're stuck</li>
           <li style="display:flex;gap:11px;align-items:flex-start;font-size:15.5px;color:#2c3050"><span style="flex:none;color:#10b981;font-weight:800">&#10003;</span>Knows the H2 9758 syllabus &amp; notation</li>
@@ -339,12 +416,12 @@ const MARKUP = `
 
   <!-- WHY PROJECTMATH -->
   <section style="background:#f6f7fc;border-top:1px solid #eef0f7;border-bottom:1px solid #eef0f7">
-    <div style="max-width:1180px;margin:0 auto;padding:80px 24px">
+    <div class="pm-sec" style="max-width:1180px;margin:0 auto;padding:80px 24px">
       <div style="text-align:center;max-width:560px;margin:0 auto">
         <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Why ProjectMath</div>
-        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Quality over quantity</h2>
+        <h2 class="pm-h2" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Quality over quantity</h2>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px">
+      <div class="pm-why-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:46px">
         <div style="background:#fff;border:1px solid #ebedf6;border-radius:18px;padding:26px;box-shadow:0 14px 34px -22px rgba(28,32,68,.4)">
           <div style="width:44px;height:44px;border-radius:12px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:22px">&#128221;</div>
           <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;margin:18px 0 8px">Straight from the exam</h3>
@@ -366,12 +443,12 @@ const MARKUP = `
 
   <!-- PRICING -->
   <section id="pricing" style="background:#fff">
-    <div style="max-width:1180px;margin:0 auto;padding:84px 24px">
+    <div class="pm-sec" style="max-width:1180px;margin:0 auto;padding:84px 24px">
       <input type="radio" name="pmperiod" id="pm-monthly" class="pm-period-radio">
       <input type="radio" name="pmperiod" id="pm-semesterly" class="pm-period-radio" checked>
       <div style="text-align:center;max-width:560px;margin:0 auto">
         <div style="color:var(--accent);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Pricing</div>
-        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Start free. Go Pro when you're ready.</h2>
+        <h2 class="pm-h2" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:42px;line-height:1.1;letter-spacing:-.02em;margin:14px 0 0">Start free. Go Pro when you're ready.</h2>
       </div>
       <!-- toggle -->
       <div class="pm-toggle-wrap" style="display:flex;justify-content:center;margin-top:30px">
@@ -416,20 +493,20 @@ const MARKUP = `
   </section>
 
   <!-- FINAL CTA -->
-  <section style="background:#fff;padding:0 24px 84px">
-    <div style="max-width:1180px;margin:0 auto;position:relative;overflow:hidden;border-radius:28px;background:linear-gradient(135deg,var(--accent),var(--accent-2));padding:66px 40px;text-align:center;color:#fff">
+  <section class="pm-sec-cta" style="background:#fff;padding:0 24px 84px">
+    <div class="pm-cta-card" style="max-width:1180px;margin:0 auto;position:relative;overflow:hidden;border-radius:28px;background:linear-gradient(135deg,var(--accent),var(--accent-2));padding:66px 40px;text-align:center;color:#fff">
       <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:44px 44px;pointer-events:none"></div>
       <div style="position:relative">
-        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:46px;line-height:1.08;letter-spacing:-.02em;margin:0">Your H2 Math A starts<br>at the first node.</h2>
-        <p style="font-size:18px;color:#e6e6ff;margin:18px auto 0;max-width:520px">Work through 500+ exam-grade problems with an AI tutor and spaced review that makes them stick. Free to start, no card needed.</p>
+        <h2 class="pm-h2" style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:46px;line-height:1.08;letter-spacing:-.02em;margin:0">Your H2 Math A starts<br>at the first node.</h2>
+        <p class="pm-lead" style="font-size:18px;color:#e6e6ff;margin:18px auto 0;max-width:520px">Work through 500+ exam-grade problems with an AI tutor and spaced review that makes them stick. Free to start, no card needed.</p>
         <a href="/roadmap" class="pm-hov-lift" style="display:inline-flex;align-items:center;gap:9px;margin-top:30px;padding:16px 34px;border-radius:14px;background:#fff;color:var(--accent-ink);font-weight:800;font-size:17px;transition:transform .15s">Start free today &rarr;</a>
       </div>
     </div>
   </section>
 
   <!-- FOOTER -->
-  <footer style="background:#0b0e20;color:#aab0d6;padding:54px 24px 40px">
-    <div style="max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1.6fr 1fr 1.2fr;gap:32px">
+  <footer class="pm-sec-footer" style="background:#0b0e20;color:#aab0d6;padding:54px 24px 40px">
+    <div class="pm-footer-grid" style="max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1.6fr 1fr 1.2fr;gap:32px">
       <div>
         <div style="display:flex;align-items:center;gap:11px">
           <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px;font-family:'Bricolage Grotesque',sans-serif">&#960;</div>
@@ -469,13 +546,7 @@ const MARKUP = `
 
 export function LandingPage() {
   const navigate = useNavigate()
-  const { user, tier, loading, openLoginModal, openUpgradeModal, modalOpen } = useAuth()
-
-  // Lay the page out at its real design width and let the browser shrink-to-fit it, so a phone
-  // gets the desktop composition (zoomable, scrollable sideways) rather than a collapsed one.
-  // Suspended while an auth/upgrade modal is up — those are responsive components built for
-  // the device viewport and would otherwise be drawn at the same reduced scale as the page.
-  const fixedViewport = useDesktopViewport(modalOpen ? null : DESIGN_WIDTH)
+  const { user, tier, loading, openLoginModal, openUpgradeModal } = useAuth()
 
   // Marks "the login now in progress was triggered by a 'Go Pro' click" so the transition
   // effect below knows to auto-open the upgrade modal instead of redirecting to /roadmap.
@@ -515,6 +586,14 @@ export function LandingPage() {
   function handleClick(e: MouseEvent<HTMLDivElement>) {
     const anchor = (e.target as HTMLElement).closest('a')
     if (!anchor) return
+    // Acting on anything in the open mobile menu closes it. A `:checked` toggle can't
+    // uncheck itself from CSS, and leaving the panel open would cover the section a
+    // link just scrolled to. Scoped to the two menu groups so the burger's own label
+    // — which sits outside them — still toggles normally.
+    if (anchor.closest('.pm-nav-links, .pm-nav-actions')) {
+      const toggle = document.getElementById('pm-menu')
+      if (toggle instanceof HTMLInputElement) toggle.checked = false
+    }
     const href = anchor.getAttribute('href')
     if (anchor.dataset.login !== undefined) {
       e.preventDefault()
@@ -566,22 +645,7 @@ export function LandingPage() {
       : ''
 
   return (
-    // The floor on the design's width is tied to the fixed viewport being in force. On a phone
-    // the viewport already supplies the width; the rule earns its keep on desktop windows
-    // narrower than the design, which scroll sideways instead of collapsing.
-    //
-    // With a modal up the page is clipped back to the screen instead. Its nav alone is ~600px
-    // of unwrappable flex row, so even at the device viewport it would leave the document
-    // wider than the screen — and on mobile a `fixed` element's containing block is the layout
-    // viewport, not the screen, so the modal would be laid out across the full width of the
-    // page behind it and centre itself half off-screen.
-    <div
-      className="pm-landing"
-      style={{
-        minWidth: fixedViewport ? DESIGN_WIDTH : undefined,
-        overflowX: modalOpen ? 'hidden' : undefined,
-      }}
-    >
+    <div className="pm-landing">
       <style>{STYLES}</style>
       <div
         onClick={handleClick}
