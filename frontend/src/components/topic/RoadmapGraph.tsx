@@ -316,27 +316,46 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
   // and the container took the pannable canvas's full 1700px — which stretched the whole page
   // past the window and left a fitted map centred somewhere below the fold.
   const [boxH, setBoxH] = useState<number | null>(null)
+  const lastH = useRef<number | null>(null)
 
   // Opening view: 1:1 centred on the Pure Math trunk where there's room for it, fitted to the
   // whole map where there isn't. A phone opening at 1:1 lands on a canvas five times wider than
-  // the screen, with no indication the rest of the syllabus is out there. Re-runs on resize
-  // (rotation, toolbar show/hide) until the user takes the view over themselves.
+  // the screen, with no indication the rest of the syllabus is out there. Re-measures whenever
+  // anything above us moves, and re-fits until the user takes the view over themselves.
   useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const measure = () =>
-      Math.max(320, window.innerHeight - (el.getBoundingClientRect().top + window.scrollY))
+    // `top` is already viewport-relative, which is the same space as `innerHeight` — adding
+    // `scrollY` would convert it to document space and under-measure by the scroll offset.
+    const measure = () => Math.max(320, window.innerHeight - el.getBoundingClientRect().top)
 
     const apply = (h: number, initial: boolean) => {
+      lastH.current = h
       setBoxH(h)
       if (el.clientWidth < FIT_ON_LOAD_BELOW) applyT(fitTransform(el, h))
       else if (initial) applyT({ x: el.clientWidth / 2 - PURE_MATH_CENTER_X, y: 40, scale: 1 })
     }
 
+    const remeasure = () => {
+      const h = measure()
+      // Writing `boxH` changes the page height, which re-fires the observer below. Our own
+      // height isn't an input to the measurement, so it would settle after one pass anyway;
+      // bailing on an unchanged value stops the loop dead instead of relying on that.
+      if (lastH.current !== null && Math.abs(lastH.current - h) < 1) return
+      if (tookOver.current) { lastH.current = h; setBoxH(h) } else apply(h, false)
+    }
+
     apply(measure(), true)
-    const onResize = () => { if (!tookOver.current) apply(measure(), false); else setBoxH(measure()) }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+
+    // `resize` alone misses everything that moves our top without touching the window:
+    // PremiumExpiryBanner mounting once auth resolves or being dismissed, and the web font
+    // settling under the title bar. Each of those shifts the page height before we
+    // compensate, so the observer sees it. `resize` still earns its keep for viewport
+    // changes at constant page size, like the mobile toolbar sliding away.
+    const ro = new ResizeObserver(remeasure)
+    ro.observe(document.body)
+    window.addEventListener('resize', remeasure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', remeasure) }
   }, [])
 
   // Wheel → zoom toward cursor (must be non-passive to call e.preventDefault())
