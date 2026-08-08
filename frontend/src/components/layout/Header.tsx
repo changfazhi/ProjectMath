@@ -19,10 +19,14 @@ export function Header() {
       className="sticky top-0 z-30 border-b backdrop-blur"
       style={{ background: 'rgba(11,14,32,.82)', borderColor: '#1c2140' }}
     >
-      {/* The row is wider than a phone even after the mobile trims below, so it scrolls itself.
-          Left to overflow the page instead, it stretched every app route to the header's width
-          — which on /roadmap meant the graph sized itself to a canvas wider than the screen. */}
-      <div className="max-w-5xl mx-auto px-3 sm:px-6 h-14 flex items-center gap-3 sm:gap-6 overflow-x-auto">
+      {/* Below `sm` the row wraps and the nav drops to a line of its own. All three groups
+          on one line don't fit a phone: the actions alone are ~320px of a 357px screen, so
+          sharing that line left the nav a 1px sliver. Nothing here may become a scroll
+          container, though — `overflow-x` other than `visible` forces `overflow-y` to
+          compute to `auto` as well, and that clipped AccountMenu's dropdown (which hangs
+          below this 56px box) down to a few pixels, putting Profile and Sign out out of
+          reach. The nav is the one safe place for it: no popovers live inside it. */}
+      <div className="max-w-5xl mx-auto px-3 sm:px-6 py-2 sm:py-0 sm:h-14 flex flex-wrap sm:flex-nowrap items-center gap-x-3 sm:gap-x-6">
         {/* Logo — matches the landing-page wordmark */}
         <Link to="/" className="flex items-center gap-2.5 shrink-0">
           <div
@@ -46,7 +50,7 @@ export function Header() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1 shrink-0">
+        <nav className="order-last sm:order-none w-full sm:w-auto min-w-0 overflow-x-auto mt-1.5 sm:mt-0 flex items-center gap-1">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}

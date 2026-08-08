@@ -16,7 +16,12 @@ import { LandingPage } from './pages/LandingPage'
 function RootLayout() {
   const { openUpgradeModal } = useAuth()
   return (
-    <div className="min-h-screen flex flex-col">
+    // `overflow-x-clip`, not `hidden`: `clip` is the one value that leaves the other axis
+    // `visible`, so the header's account dropdown still escapes downwards, and it doesn't
+    // establish a scrollport, so the header's `position: sticky` keeps working. This is a
+    // backstop — the header contains its own width now — for narrow phones where the action
+    // cluster alone could still outgrow the screen and stretch every route to match.
+    <div className="min-h-screen flex flex-col overflow-x-clip">
       <Header />
       <PremiumExpiryBanner onRenew={openUpgradeModal} />
       <div className="relative flex-1 overflow-hidden">
