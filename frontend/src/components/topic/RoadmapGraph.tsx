@@ -1,5 +1,5 @@
-import { useRef, useState, useEffect } from 'react'
-import type { CSSProperties } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { Topic } from '../../types/api'
 import { cn } from '../../lib/utils'
 
@@ -7,6 +7,15 @@ const NODE_W = 210
 const NODE_H = 100
 const CANVAS_W = 2200
 const CANVAS_H = 1700
+
+// Low enough that the whole 2010x1490 map fits on a phone in portrait; the nodes are unreadable
+// down there by design — it's an overview you pinch into.
+const MIN_SCALE = 0.12
+const MAX_SCALE = 2
+
+// Anything narrower than this can't show a node card at a readable size anyway, so it opens
+// fitted to the whole map instead of at 1:1.
+const FIT_ON_LOAD_BELOW = 1024
 
 // Section accents — nodes are coloured by which tree they belong to (Pure Math
 // vs Statistics), not by status. Status stays legible via icon + label + glow.
@@ -60,6 +69,22 @@ const POSITIONS: Record<string, { cx: number; cy: number; color: string }> = {
   'Hypothesis Testing':                { cx: 2000, cy:  810, color: 'emerald' },
   'Correlation and Linear Regression': { cx: 2000, cy:  930, color: 'emerald' },
 }
+
+// Bounding box of every node card. The canvas is deliberately bigger than the content (it's
+// the pannable surface), so fitting the view has to target the nodes, not CANVAS_W/H.
+const CONTENT = (() => {
+  const cx = Object.values(POSITIONS).map((p) => p.cx)
+  const cy = Object.values(POSITIONS).map((p) => p.cy)
+  const left = Math.min(...cx) - NODE_W / 2
+  // The "Pure Mathematics" / "Statistics" section labels sit above the first row of nodes.
+  const top = Math.min(...cy) - NODE_H / 2 - 40
+  return {
+    left,
+    top,
+    width: Math.max(...cx) + NODE_W / 2 - left,
+    height: Math.max(...cy) + NODE_H / 2 - top,
+  }
+})()
 
 const EDGES: [string, string][] = [
   // Trunk
@@ -203,6 +228,52 @@ function edgePath(sx: number, sy: number, tx: number, ty: number): string {
 
 interface Transform { x: number; y: number; scale: number }
 
+const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s))
+
+// The transform that centres the whole map inside a `width x height` viewport box.
+function fitTransform(el: HTMLElement, height = el.clientHeight): Transform {
+  const pad = 16
+  const w = Math.max(el.clientWidth - pad * 2, 1)
+  const h = Math.max(height - pad * 2, 1)
+  const scale = clampScale(Math.min(w / CONTENT.width, h / CONTENT.height))
+  return {
+    scale,
+    x: pad + (w - CONTENT.width * scale) / 2 - CONTENT.left * scale,
+    y: pad + (h - CONTENT.height * scale) / 2 - CONTENT.top * scale,
+  }
+}
+
+// Scale about a point in container coordinates, keeping whatever sits under it pinned there.
+function zoomAbout(t: Transform, nextScale: number, px: number, py: number): Transform {
+  return {
+    scale: nextScale,
+    x: px - (px - t.x) * (nextScale / t.scale),
+    y: py - (py - t.y) * (nextScale / t.scale),
+  }
+}
+
+type Point = { clientX: number; clientY: number }
+const touchDist = (a: Point, b: Point) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+const touchMid = (a: Point, b: Point, rect: DOMRect) => ({
+  mx: (a.clientX + b.clientX) / 2 - rect.left,
+  my: (a.clientY + b.clientY) / 2 - rect.top,
+})
+
+function ZoomButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="w-10 h-10 flex items-center justify-center rounded-xl text-lg font-bold leading-none text-[#aab0d6] hover:text-white transition-colors"
+      style={{ background: 'rgba(22,26,51,.9)', border: '1px solid #2a3160' }}
+    >
+      {children}
+    </button>
+  )
+}
+
 interface Props {
   topics: Topic[]
   progress: Map<string, { correct: number; attempted: number; total: number }>
@@ -220,12 +291,71 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
   const [isPanning, setIsPanning] = useState(false)
   const panStart = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null)
   const didPan = useRef(false)
+  // Two-finger gesture in progress: the pinch's opening distance and midpoint, plus the
+  // transform it started from, so every move is measured against the start rather than
+  // accumulated frame by frame.
+  const pinch = useRef<{ dist: number; mx: number; my: number; x: number; y: number; scale: number } | null>(null)
+  // Set once the user drives the view themselves, which stops the auto-fit below from
+  // yanking it back on the next resize.
+  const tookOver = useRef(false)
 
-  // Centre the canvas on first render
-  useEffect(() => {
+  const fitView = () => {
+    const el = containerRef.current
+    if (el) applyT(fitTransform(el))
+  }
+
+  const zoomBy = (factor: number) => {
     const el = containerRef.current
     if (!el) return
-    applyT({ x: el.clientWidth / 2 - PURE_MATH_CENTER_X, y: 40, scale: 1 })
+    tookOver.current = true
+    applyT(zoomAbout(tRef.current, clampScale(tRef.current.scale * factor), el.clientWidth / 2, el.clientHeight / 2))
+  }
+
+  // Height of the visible viewport box, measured rather than inherited. The app shell grows to
+  // fit its content instead of capping at the window, so `h-full` here resolved against nothing
+  // and the container took the pannable canvas's full 1700px — which stretched the whole page
+  // past the window and left a fitted map centred somewhere below the fold.
+  const [boxH, setBoxH] = useState<number | null>(null)
+  const lastH = useRef<number | null>(null)
+
+  // Opening view: 1:1 centred on the Pure Math trunk where there's room for it, fitted to the
+  // whole map where there isn't. A phone opening at 1:1 lands on a canvas five times wider than
+  // the screen, with no indication the rest of the syllabus is out there. Re-measures whenever
+  // anything above us moves, and re-fits until the user takes the view over themselves.
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    // `top` is already viewport-relative, which is the same space as `innerHeight` — adding
+    // `scrollY` would convert it to document space and under-measure by the scroll offset.
+    const measure = () => Math.max(320, window.innerHeight - el.getBoundingClientRect().top)
+
+    const apply = (h: number, initial: boolean) => {
+      lastH.current = h
+      setBoxH(h)
+      if (el.clientWidth < FIT_ON_LOAD_BELOW) applyT(fitTransform(el, h))
+      else if (initial) applyT({ x: el.clientWidth / 2 - PURE_MATH_CENTER_X, y: 40, scale: 1 })
+    }
+
+    const remeasure = () => {
+      const h = measure()
+      // Writing `boxH` changes the page height, which re-fires the observer below. Our own
+      // height isn't an input to the measurement, so it would settle after one pass anyway;
+      // bailing on an unchanged value stops the loop dead instead of relying on that.
+      if (lastH.current !== null && Math.abs(lastH.current - h) < 1) return
+      if (tookOver.current) { lastH.current = h; setBoxH(h) } else apply(h, false)
+    }
+
+    apply(measure(), true)
+
+    // `resize` alone misses everything that moves our top without touching the window:
+    // PremiumExpiryBanner mounting once auth resolves or being dismissed, and the web font
+    // settling under the title bar. Each of those shifts the page height before we
+    // compensate, so the observer sees it. `resize` still earns its keep for viewport
+    // changes at constant page size, like the mobile toolbar sliding away.
+    const ro = new ResizeObserver(remeasure)
+    ro.observe(document.body)
+    window.addEventListener('resize', remeasure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', remeasure) }
   }, [])
 
   // Wheel → zoom toward cursor (must be non-passive to call e.preventDefault())
@@ -234,27 +364,20 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const { x, y, scale } = tRef.current
+      tookOver.current = true
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-      const newScale = Math.min(2, Math.max(0.2, scale * factor))
       const rect = el.getBoundingClientRect()
-      const mx = e.clientX - rect.left
-      const my = e.clientY - rect.top
-      applyT({
-        scale: newScale,
-        x: mx - (mx - x) * (newScale / scale),
-        y: my - (my - y) * (newScale / scale),
-      })
+      applyT(zoomAbout(tRef.current, clampScale(tRef.current.scale * factor), e.clientX - rect.left, e.clientY - rect.top))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // Non-passive touchmove → prevent page scroll while panning on mobile
+  // Non-passive touchmove → prevent page scroll while panning/pinching on mobile
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const prevent = (e: TouchEvent) => { if (panStart.current) e.preventDefault() }
+    const prevent = (e: TouchEvent) => { if (panStart.current || pinch.current) e.preventDefault() }
     el.addEventListener('touchmove', prevent, { passive: false })
     return () => el.removeEventListener('touchmove', prevent)
   }, [])
@@ -280,6 +403,8 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
     <div
       ref={containerRef}
       style={{
+        position: 'relative', // containing block for the zoom controls
+        height: boxH ?? '100%',
         touchAction: 'none',
         backgroundColor: '#0b0e20',
         backgroundImage:
@@ -288,7 +413,7 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
           'linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px)',
         backgroundSize: '100% 100%, 46px 46px, 46px 46px',
       }}
-      className={cn('w-full h-full overflow-hidden', isPanning ? 'cursor-grabbing' : 'cursor-grab')}
+      className={cn('w-full overflow-hidden', isPanning ? 'cursor-grabbing' : 'cursor-grab')}
       onMouseDown={(e) => {
         const { x, y } = tRef.current
         panStart.current = { mx: e.clientX, my: e.clientY, ox: x, oy: y }
@@ -299,27 +424,79 @@ export function RoadmapGraph({ topics, progress, onTopicClick }: Props) {
         if (!panStart.current) return
         const dx = e.clientX - panStart.current.mx
         const dy = e.clientY - panStart.current.my
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan.current = true
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { didPan.current = true; tookOver.current = true }
         applyT({ ...tRef.current, x: panStart.current.ox + dx, y: panStart.current.oy + dy })
       }}
       onMouseUp={() => { panStart.current = null; setIsPanning(false) }}
       onMouseLeave={() => { panStart.current = null; setIsPanning(false) }}
       onTouchStart={(e) => {
+        const el = containerRef.current
+        if (!el) return
+        if (e.touches.length >= 2) {
+          // Two fingers → pinch. The container sets `touch-action: none`, so the browser's own
+          // pinch-zoom never fires here and this is the only way to zoom by touch.
+          const [a, b] = [e.touches[0], e.touches[1]]
+          const { mx, my } = touchMid(a, b, el.getBoundingClientRect())
+          panStart.current = null
+          pinch.current = { dist: touchDist(a, b), mx, my, ...tRef.current }
+          didPan.current = true // a pinch must never land as a tap on the node underneath
+          tookOver.current = true
+          return
+        }
         const touch = e.touches[0]
         const { x, y } = tRef.current
         panStart.current = { mx: touch.clientX, my: touch.clientY, ox: x, oy: y }
         didPan.current = false
       }}
       onTouchMove={(e) => {
+        const el = containerRef.current
+        if (!el) return
+        const p = pinch.current
+        if (p && e.touches.length >= 2) {
+          const [a, b] = [e.touches[0], e.touches[1]]
+          const { mx, my } = touchMid(a, b, el.getBoundingClientRect())
+          const next = clampScale((p.scale * touchDist(a, b)) / p.dist)
+          // Pin the canvas point the pinch opened on to wherever the midpoint is now, so the
+          // one gesture zooms and drags together the way it does in a map app.
+          applyT({
+            scale: next,
+            x: mx - (p.mx - p.x) * (next / p.scale),
+            y: my - (p.my - p.y) * (next / p.scale),
+          })
+          return
+        }
         if (!panStart.current) return
         const touch = e.touches[0]
         const dx = touch.clientX - panStart.current.mx
         const dy = touch.clientY - panStart.current.my
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan.current = true
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) { didPan.current = true; tookOver.current = true }
         applyT({ ...tRef.current, x: panStart.current.ox + dx, y: panStart.current.oy + dy })
       }}
-      onTouchEnd={() => { panStart.current = null }}
+      onTouchEnd={(e) => {
+        pinch.current = null
+        if (e.touches.length === 1) {
+          // One finger lifted out of a pinch — re-seed the pan from the finger still down so
+          // the view doesn't jump by the gap between them on the next move.
+          const touch = e.touches[0]
+          const { x, y } = tRef.current
+          panStart.current = { mx: touch.clientX, my: touch.clientY, ox: x, oy: y }
+        } else if (e.touches.length === 0) {
+          panStart.current = null
+        }
+      }}
     >
+      {/* Zoom controls — the touch equivalent of the wheel handler, plus a way back to the
+          whole map once a pan has wandered off it. Stops the pointer events reaching the
+          pan handlers on the container. */}
+      <div
+        className="absolute bottom-4 right-4 z-20 flex flex-col gap-1.5"
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <ZoomButton label="Zoom in" onClick={() => zoomBy(1.25)}>+</ZoomButton>
+        <ZoomButton label="Zoom out" onClick={() => zoomBy(1 / 1.25)}>&minus;</ZoomButton>
+        <ZoomButton label="Fit the whole roadmap on screen" onClick={fitView}>&#10530;</ZoomButton>
+      </div>
       <style>{`.rm-node{transition:transform .15s, box-shadow .15s}.rm-node:hover{transform:translateY(-3px)}`}</style>
       {/* Canvas — translate then scale from its own top-left origin */}
       <div
