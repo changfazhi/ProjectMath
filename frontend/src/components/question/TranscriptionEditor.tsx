@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { Button } from '../ui/Button'
-import { MathField, type MathFieldHandle } from '../math/MathField'
+import { MathField, type FieldInputMode, type MathFieldHandle } from '../math/MathField'
 import { MathKeyboard } from '../math/MathKeyboard'
-import { cn } from '../../lib/utils'
+import { cn, isTouchDevice } from '../../lib/utils'
 
 interface Props {
   // The LaTeX the AI read from the handwriting — seeds the editable line fields.
@@ -52,7 +52,25 @@ export function TranscriptionEditor({ initialLatex, onRegrade }: Props) {
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showSymbols, setShowSymbols] = useState(false)
+  // See ExactInput — on touch the OS keyboard and the LaTeX palette swap, never coexist.
+  const [keyboardMode, setKeyboardMode] = useState<FieldInputMode>('native')
+  const showSymbols = keyboardMode === 'math'
+
+  // Tapping a line makes it the palette's target and hands it to the OS keyboard.
+  function selectLine(id: number) {
+    setActiveId(id)
+    if (!isTouchDevice() || keyboardMode === 'native') return
+    setKeyboardMode('native')
+    refs.current[id]?.setInputMode('native')
+  }
+
+  function toggleSymbols() {
+    const next: FieldInputMode = keyboardMode === 'math' ? 'native' : 'math'
+    setKeyboardMode(next)
+    if (activeId === null) return
+    refs.current[activeId]?.setInputMode(next)
+    if (next === 'math' || isTouchDevice()) refs.current[activeId]?.focus()
+  }
 
   // Authoritative current LaTeX, read straight from the fields.
   function readLatex(): string {
@@ -74,6 +92,9 @@ export function TranscriptionEditor({ initialLatex, onRegrade }: Props) {
     const id = nextId.current++
     setLines((prev) => [...prev, { id, seed: '', value: '' }])
     setActiveId(id)
+    // A fresh field mounts in 'native' mode, so keep the palette from claiming to be open
+    // while the OS keyboard is what actually comes up for the new line.
+    setKeyboardMode('native')
     setTimeout(() => refs.current[id]?.focus(), 50)
   }
 
@@ -109,7 +130,12 @@ export function TranscriptionEditor({ initialLatex, onRegrade }: Props) {
 
       <div className="flex flex-col gap-2">
         {lines.map((line, i) => (
-          <div key={line.id} className="flex items-center gap-2" onFocus={() => setActiveId(line.id)}>
+          <div
+            key={line.id}
+            className="flex items-center gap-2"
+            onFocus={() => selectLine(line.id)}
+            onPointerDown={() => selectLine(line.id)}
+          >
             <span className="w-5 shrink-0 text-right text-xs text-slate-400 dark:text-slate-500">
               {i + 1}
             </span>
@@ -149,10 +175,7 @@ export function TranscriptionEditor({ initialLatex, onRegrade }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => {
-            setShowSymbols((v) => !v)
-            if (!showSymbols && activeId !== null) setTimeout(() => refs.current[activeId]?.focus(), 50)
-          }}
+          onClick={toggleSymbols}
           disabled={loading}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 disabled:opacity-50"
         >
