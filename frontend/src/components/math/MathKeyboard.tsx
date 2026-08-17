@@ -140,8 +140,12 @@ export function MathKeyboard({ onInsert, className }: Props) {
                 key={btn.title}
                 type="button"
                 title={btn.title}
-                onMouseDown={(e) => {
-                  // Prevent the math field from losing focus when a keyboard button is clicked
+                onPointerDown={(e) => {
+                  // Prevent the math field from losing focus when a keyboard button is pressed.
+                  // pointerdown (not mousedown) so touch is covered too: preventDefault here
+                  // suppresses the compatibility mouse events that would move focus, while
+                  // leaving scrolling to touch-action — preventDefault on touchstart would
+                  // block a scroll gesture that starts on a button.
                   e.preventDefault()
                   onInsert(btn.insert)
                 }}

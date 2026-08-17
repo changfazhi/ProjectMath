@@ -2,10 +2,10 @@ import { useRef, useState } from 'react'
 import type { QuestionPart, QuestionPublic } from '../../types/api'
 import type { PartState } from '../../hooks/usePracticeSession'
 import { renderLatex } from '../../lib/renderLatex'
-import { MathField, type MathFieldHandle } from '../math/MathField'
+import { MathField, type FieldInputMode, type MathFieldHandle } from '../math/MathField'
 import { MathKeyboard } from '../math/MathKeyboard'
 import { Button } from '../ui/Button'
-import { cn } from '../../lib/utils'
+import { cn, isTouchDevice } from '../../lib/utils'
 
 interface PartInputProps {
   part: QuestionPart
@@ -20,7 +20,9 @@ function MultiFieldInput({ part, partState, onSubmit }: PartInputProps) {
   const mathRefs = useRef<Record<string, MathFieldHandle | null>>({})
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [activeKey, setActiveKey] = useState<string | null>(null)
-  const [showKeyboard, setShowKeyboard] = useState(false)
+  // See ExactInput — on touch the OS keyboard and the LaTeX palette swap, never coexist.
+  const [keyboardMode, setKeyboardMode] = useState<FieldInputMode>('native')
+  const showKeyboard = keyboardMode === 'math'
 
   const disabled = partState.phase === 'submitting'
   const loading = partState.phase === 'submitting'
@@ -39,6 +41,22 @@ function MultiFieldInput({ part, partState, onSubmit }: PartInputProps) {
     onSubmit(display, fieldAnswers)
   }
 
+  // Tapping any answer box makes it the palette's target and hands it to the OS keyboard.
+  function selectAnswerBox(key: string) {
+    setActiveKey(key)
+    if (!isTouchDevice() || keyboardMode === 'native') return
+    setKeyboardMode('native')
+    mathRefs.current[key]?.setInputMode('native')
+  }
+
+  function toggleMathKeyboard() {
+    const next: FieldInputMode = keyboardMode === 'math' ? 'native' : 'math'
+    setKeyboardMode(next)
+    if (!activeKey) return
+    mathRefs.current[activeKey]?.setInputMode(next)
+    if (next === 'math' || isTouchDevice()) mathRefs.current[activeKey]?.focus()
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {fields.map((f) => (
@@ -52,13 +70,13 @@ function MultiFieldInput({ part, partState, onSubmit }: PartInputProps) {
               type="number"
               step="any"
               disabled={disabled}
-              onFocus={() => setActiveKey(f.key)}
+              onFocus={() => selectAnswerBox(f.key)}
               onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
               placeholder="Enter a number"
               className="flex-1 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
           ) : (
-            <div className="flex-1" onFocus={() => setActiveKey(f.key)}>
+            <div className="flex-1" onFocus={() => selectAnswerBox(f.key)} onPointerDown={() => selectAnswerBox(f.key)}>
               <MathField
                 ref={(el) => { mathRefs.current[f.key] = el }}
                 onChange={() => {}}
@@ -75,10 +93,7 @@ function MultiFieldInput({ part, partState, onSubmit }: PartInputProps) {
       <div className="flex gap-2 flex-wrap">
         <button
           type="button"
-          onClick={() => {
-            setShowKeyboard((v) => !v)
-            if (!showKeyboard && activeKey) setTimeout(() => mathRefs.current[activeKey]?.focus(), 50)
-          }}
+          onClick={toggleMathKeyboard}
           disabled={disabled}
           className={cn(
             'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed',
@@ -102,11 +117,26 @@ function MultiFieldInput({ part, partState, onSubmit }: PartInputProps) {
 
 function PartInput({ part, partState, onSubmit }: PartInputProps) {
   const mathRef = useRef<MathFieldHandle>(null)
-  const [showKeyboard, setShowKeyboard] = useState(false)
+  // See ExactInput — on touch the OS keyboard and the LaTeX palette swap, never coexist.
+  const [keyboardMode, setKeyboardMode] = useState<FieldInputMode>('native')
+  const showKeyboard = keyboardMode === 'math'
   const inputRef = useRef<HTMLInputElement>(null)
 
   const disabled = partState.phase === 'submitting'
   const loading = partState.phase === 'submitting'
+
+  function selectAnswerBox() {
+    if (!isTouchDevice() || keyboardMode === 'native') return
+    setKeyboardMode('native')
+    mathRef.current?.setInputMode('native')
+  }
+
+  function toggleMathKeyboard() {
+    const next: FieldInputMode = keyboardMode === 'math' ? 'native' : 'math'
+    setKeyboardMode(next)
+    mathRef.current?.setInputMode(next)
+    if (next === 'math' || isTouchDevice()) mathRef.current?.focus()
+  }
 
   function submit() {
     if (part.answer_type === 'range') {
@@ -180,22 +210,21 @@ function PartInput({ part, partState, onSubmit }: PartInputProps) {
   // exact input
   return (
     <div className="flex flex-col gap-2">
-      <MathField
-        ref={mathRef}
-        onChange={() => {}}
-        disabled={disabled}
-        className={cn(
-          'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100',
-          'focus-within:ring-2 focus-within:ring-blue-500',
-        )}
-      />
+      <div onPointerDown={selectAnswerBox}>
+        <MathField
+          ref={mathRef}
+          onChange={() => {}}
+          disabled={disabled}
+          className={cn(
+            'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100',
+            'focus-within:ring-2 focus-within:ring-blue-500',
+          )}
+        />
+      </div>
       <div className="flex gap-2 flex-wrap">
         <button
           type="button"
-          onClick={() => {
-            setShowKeyboard((v) => !v)
-            if (!showKeyboard) setTimeout(() => mathRef.current?.focus(), 50)
-          }}
+          onClick={toggleMathKeyboard}
           disabled={disabled}
           className={cn(
             'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed',

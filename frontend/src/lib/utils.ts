@@ -9,6 +9,12 @@ export function formatTime(seconds: number): string {
   return s === 0 ? `${m}m` : `${m}m ${s}s`
 }
 
+// Touch device? Read at call time (not cached) so a hybrid laptop/tablet that switches
+// input modes is handled. Drives the mobile keyboard swap in MathField — see setInputMode.
+export function isTouchDevice(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+}
+
 export function parseOption(opt: string): { letter: string; latex: string } {
   const idx = opt.indexOf(': ')
   if (idx === -1) return { letter: '', latex: opt }

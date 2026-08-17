@@ -1,11 +1,18 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import 'mathlive'
 import type { MathfieldElement } from 'mathlive'
+import { isTouchDevice } from '../../lib/utils'
+
+// Which keyboard a focused field should raise on a touch device.
+//   'native' — the OS keyboard (digits and letters)
+//   'math'   — no OS keyboard; our <MathKeyboard> palette supplies the LaTeX instead
+export type FieldInputMode = 'native' | 'math'
 
 export interface MathFieldHandle {
   insert: (latex: string) => void
   getValue: () => string
   focus: () => void
+  setInputMode: (mode: FieldInputMode) => void
 }
 
 interface Props {
@@ -21,6 +28,21 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
     const elRef = useRef<MathfieldElement>(null)
     // Captured once so the seed only applies on mount and never clobbers later edits.
     const initialValueRef = useRef(initialValue)
+    // Survives re-renders and the shadow root not being ready yet (see applyInputMode).
+    const inputModeRef = useRef<FieldInputMode>('native')
+
+    // MathLive routes keystrokes through a hidden contenteditable in its shadow root and
+    // hard-codes inputmode=none on it, so the OS keyboard never opens — it assumes its own
+    // virtual keyboard (which we disable below) will serve touch devices. Flipping that
+    // attribute is what lets a phone type into the field at all.
+    function sinkEl(): HTMLElement | null {
+      return elRef.current?.shadowRoot?.querySelector<HTMLElement>('.ML__keyboard-sink') ?? null
+    }
+
+    function applyInputMode() {
+      if (!isTouchDevice()) return
+      sinkEl()?.setAttribute('inputmode', inputModeRef.current === 'native' ? 'text' : 'none')
+    }
 
     useImperativeHandle(ref, () => ({
       insert(latex: string) {
@@ -40,6 +62,24 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
       focus() {
         elRef.current?.focus()
       },
+      setInputMode(mode: FieldInputMode) {
+        inputModeRef.current = mode
+        if (!isTouchDevice()) return
+        const mf = elRef.current
+        const sink = sinkEl()
+        if (!mf || !sink) return
+        applyInputMode()
+        // Browsers only read inputmode when an element *takes* focus, so switching it on an
+        // already-focused field needs a blur/refocus to make the OS keyboard appear or drop.
+        // This must stay inside the originating user gesture — a deferred focus() is ignored
+        // by iOS. Focus never actually leaves, so the caret and selection survive the cycle
+        // and a palette insert still lands where the student left off.
+        const isFocused = mf.shadowRoot?.activeElement === sink || document.activeElement === mf
+        if (isFocused) {
+          mf.blur()
+          mf.focus()
+        }
+      },
     }))
 
     // On mount: disable MathLive's own keyboard policy and hide its toolbar icons
@@ -47,7 +87,11 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
       const mf = elRef.current
       if (!mf) return
 
-      ;(mf as unknown as { mathVirtualKeyboardPolicy: string }).mathVirtualKeyboardPolicy = 'off'
+      // 'manual' = never auto-raise MathLive's own virtual keyboard (we drive the OS keyboard
+      // and our <MathKeyboard> palette instead). Was 'off', which isn't one of the accepted
+      // values ('auto' | 'manual' | 'sandboxed') — it happened to behave the same only because
+      // it fails MathLive's `policy === 'auto'` show-on-focus check.
+      ;(mf as unknown as { mathVirtualKeyboardPolicy: string }).mathVirtualKeyboardPolicy = 'manual'
       ;(mf as MathfieldElement & { menuItems: unknown[] }).menuItems = []
 
       // Remove built-in "or" → \lor and "and" → \land shortcuts — they trigger
@@ -85,9 +129,15 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
         mf.value = initialValueRef.current
       }
 
-      // Try immediately, then retry once the element has initialised
-      injectStyles()
-      const raf = requestAnimationFrame(injectStyles)
+      // Try immediately, then retry once the element has initialised — the shadow root is not
+      // reliably populated at ref time. The default mode is 'native', so the very first tap on
+      // a phone raises the OS keyboard without the parent having to say anything.
+      const init = () => {
+        injectStyles()
+        applyInputMode()
+      }
+      init()
+      const raf = requestAnimationFrame(init)
       return () => cancelAnimationFrame(raf)
     }, [])
 
@@ -101,6 +151,28 @@ export const MathField = forwardRef<MathFieldHandle, Props>(
         mf.removeAttribute('read-only')
       }
     }, [disabled])
+
+    // Keep the visible field on screen once the OS keyboard opens. The browser's own
+    // scroll-into-view targets MathLive's hidden `position: fixed` sink rather than this
+    // element, so on touch we scroll the host ourselves after the keyboard has settled.
+    useEffect(() => {
+      const mf = elRef.current
+      if (!mf) return
+      let timer: number | undefined
+      const onFocus = () => {
+        if (!isTouchDevice()) return
+        window.clearTimeout(timer)
+        timer = window.setTimeout(
+          () => mf.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+          300,
+        )
+      }
+      mf.addEventListener('focusin', onFocus)
+      return () => {
+        window.clearTimeout(timer)
+        mf.removeEventListener('focusin', onFocus)
+      }
+    }, [])
 
     // Forward input events to parent onChange
     useEffect(() => {
